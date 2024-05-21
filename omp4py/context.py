@@ -1,5 +1,7 @@
 import os
 import sys
+import ast
+from typing import List, Any, Callable
 import threading
 
 
@@ -12,6 +14,58 @@ class DummyCtx:
         pass
 
 
+class Directive:
+
+    def __init__(self, f: Callable, clauses: List[str], directives: List[str], min_args: int, max_args: int):
+        self.f: Callable = f
+        self.clauses: List[str] = clauses
+        self.directives: List[str] = directives
+        self.min_args: int = min_args
+        self.max_args: int = max_args
+
+    def __call__(self, *args, **kwargs):
+        return self.f(*args, **kwargs)
+
+
+class Clause:
+
+    def __init__(self, f: Callable, min_args: int, max_args: int, repeatable: bool | str):
+        self.f: Callable = f
+        self.min_args: int = min_args
+        self.max_args: int = max_args
+        self.repeatable: bool | str = repeatable
+
+    def __call__(self, *args, **kwargs):
+        return self.f(*args, **kwargs)
+
+
+class BlockContext:
+
+    def __init__(self, with_node: ast.AST, root_node: ast.AST, filename: str, stack: List[ast.AST], global_env: dict,
+                 local_env: dict, renamed_vars: dict[str, str]):
+        self.with_node: ast.AST = with_node
+        self.root_node: ast.AST = root_node
+        self.filename: str = filename
+        self.stack: List[ast.AST] = stack
+        self.global_env: dict = global_env
+        self.local_env: dict = local_env
+        self.renamed_vars: dict[str, str] = renamed_vars
+
+
+class AtomicInt:
+    __slots__ = ('__value', '__lock')
+
+    def __init__(self, value: int):
+        self.__value = value
+        self.__lock = threading.RLock()
+
+    def get_and_inc(self, value: int):
+        with self.__lock:
+            old = self.__value
+            self.__value += value
+            return old
+
+
 class OpenMpLevel:
     def __init__(self, level: int, active_level: int, num_threads: int, thread_num: int,
                  barrier: threading.Barrier | None, lock: threading.RLock):
@@ -20,6 +74,7 @@ class OpenMpLevel:
         self.num_threads: int = num_threads
         self.thread_num: int = thread_num
         self.barrier: threading.Barrier | None = barrier
+        self.shared: dict[str, Any] = {}
         self.lock: threading.RLock = lock
 
 
@@ -28,6 +83,7 @@ class OpenMPContext:
     def __init__(self):
         self.local: threading.local = threading.local()
         self.lock: threading.RLock = threading.RLock()
+        self.counter: AtomicInt = AtomicInt(0)
 
         self.max_num_threads: int = self.num_procs()
         self.nested: bool = False

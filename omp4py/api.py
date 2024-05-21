@@ -40,10 +40,10 @@ def omp(arg: str | T) -> context.DummyCtx | T:
         elif isinstance(arg, (type, types.FunctionType, types.MethodType)):  # Classes, functions, or object methods
             return core.omp_parse(arg)
         else:
-            raise error.PyOmpTypeError("Expected directive string, class, function or object method")
-    except error.PyOmpSyntaxError as ex:
+            raise error.OmpTypeError("Expected directive string, class, function or object method")
+    except error.OmpSyntaxError as ex:
         # Hide the internal stack
-        raise error.PyOmpSyntaxError(ex) from None
+        raise error.OmpSyntaxError(ex) from None
 
 
 openmp = omp
