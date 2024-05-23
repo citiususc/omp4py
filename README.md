@@ -1,6 +1,6 @@
 # OMP4py: An OpenMP Implementation for Python
 
-**OMP4py** is a Python library that provides an implementation of OpenMP, enabling easy and efficient parallel programming for scientific and engineering applications. With omp4py, you can leverage multicore systems to improve the performance of your programs using a familiar and simple interface inspired by OpenMP.
+**OMP4py** is a Python library that provides an implementation of OpenMP, enabling easy and efficient parallel programming for scientific and engineering applications. With OMP4py, you can leverage multicore systems to improve the performance of your programs using a familiar and simple interface inspired by OpenMP.
 
 ## Features
 
@@ -31,3 +31,20 @@ def main():
 
 if __name__ == "__main__":
     main()
+```
+
+## Tests
+
+To run the unit tests and check the coverage, you can use the following commands with Poetry:
+
+1. **Run the unit tests:**
+
+    ```bash
+     poetry run coverage run
+    ```
+
+2. **Generate a coverage report:**
+
+    ```bash
+     poetry run coverage html
+    ```

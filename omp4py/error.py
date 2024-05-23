@@ -2,7 +2,7 @@ import ast
 from typing import Union
 
 
-class OmpTypeError(Exception):
+class OmpError(Exception):
     pass
 
 

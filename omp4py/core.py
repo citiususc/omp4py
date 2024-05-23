@@ -2,13 +2,15 @@ import ast
 import tokenize
 import inspect
 from io import StringIO
-from typing import List, TypeVar, Dict, Any, Tuple
+from typing import List, TypeVar, Dict, Any
 from omp4py.context import OpenMPContext, BlockContext, Directive, Clause
-from omp4py.error import OmpSyntaxError
+from omp4py.error import OmpError, OmpSyntaxError
 
 _omp_directives: Dict[str, Directive] = {}
 _omp_clauses: Dict[str, Clause] = {}
 _omp_context = OpenMPContext()
+debug = False
+
 T = TypeVar("T")
 
 
@@ -18,20 +20,34 @@ def omp_parse(f: T) -> T:
     filename = inspect.getsourcefile(f)
     # create a fake offset to preserve the source code line number
     source_offset = "\n" * (f.__code__.co_firstlineno - 1)
-    source_ast = python_parse(source_offset + sourcecode, location=True)
+    if f.__code__.co_flags & inspect.CO_NESTED:
+        raise OmpError("omp decorator cannot be used with nested code")
+    source_ast = ast.parse(source_offset + sourcecode, "<omp4py>")
 
     # global and local enviroment to compile the ast
     caller_frame = inspect.currentframe().f_back.f_back  # user -> api -> core
 
     transformer = OmpTransformer(source_ast, filename, caller_frame.f_globals, caller_frame.f_locals)
+    # we need an import to reference OMP4py functions
+    source_ast.body.insert(0, ast.ImportFrom(module="omp4py",
+                                          names=[ast.alias(name="runtime", asname="_omp_runtime")],
+                                          level=0))
+    ast.copy_location(source_ast.body[0], source_ast.body[1])
     omp_ast = transformer.visit(source_ast)
-    # we need an import to reference omp4py functions
-    omp_ast.body.insert(0, python_parse('import omp4py as _omp_omp4py').body[0])
-    ast.copy_location(omp_ast.body[0], omp_ast.body[1])
     omp_ast = ast.fix_missing_locations(omp_ast)
+    if debug:  # debug the final code and ast before compile
+        with open(f"debug_{f.__name__}.ast", "w") as file:
+            file.write(ast.dump(omp_ast, indent=4))
+
+        with open(f"debug_{f.__name__}.py", "w") as file:
+            file.write(ast.unparse(omp_ast))
     ompcode = compile(omp_ast, filename=filename, mode="exec")
 
     exec(ompcode, transformer.global_env, transformer.local_env)
+
+    # if omp is used as function instead as decorator
+    if "_omp_runtime" not in transformer.global_env:
+        transformer.global_env["_omp_runtime"] = transformer.local_env["_omp_runtime"]
 
     return transformer.local_env[f.__name__]
 
@@ -65,23 +81,67 @@ def new_name(name: str) -> str:
 # Python expression or variables used as clause arguments must be parsed
 def exp_parse(src: str, ctx: BlockContext) -> ast.Expr:
     try:
-        return python_parse(src).body[0]
-    except Exception as ex:
-        raise OmpSyntaxError(str(ex)).with_ast(ctx.filename, ctx.node)
+        exp = ast.parse(src, "<omp4py>").body[0]
 
-
-# Create ast from string with and without location
-def python_parse(src: str, location=False) -> ast.Module:
-    node = ast.parse(src, "<omp4py>")
-
-    if not location:
-        for child in ast.walk(node):
+        for child in ast.walk(exp):
             if hasattr(child, "lineno"):
                 delattr(child, "lineno")
             if hasattr(child, "end_lineno"):
                 delattr(child, "end_lineno")
 
-    return node
+        return exp
+    except Exception as ex:
+        raise OmpSyntaxError(str(ex), ctx.filename, ctx.with_node)
+
+
+# Check in list of variables which ones are used in a function
+def filter_variables(node: ast.FunctionDef, var_names: list[str]) -> List[str]:
+    # we define all local variables in an outer function and read variables of inner functions are cell vars
+    outer_name = "_omp_" + node.name
+    outer_module = ast.Module(body=[new_function_def(outer_name)], type_ignores=[])
+    outer_f: ast.FunctionDef = outer_module.body[0]
+    # create variables to be referenced in inner function
+    for name in var_names:
+        outer_f.body.append(ast.Assign(targets=[ast.Name(id=name, ctx=ast.Store())], value=ast.Constant(value=None)))
+    ast.fix_missing_locations(outer_module)
+    outer_f.body.append(node)
+
+    env = dict()
+    exec(compile(outer_module, '<omp4py>', mode='exec'), None, env)
+    read_vars = list(env[outer_name].__code__.co_cellvars)
+    # write variables are local variables inside the function
+    inner_func = [f for f in env[outer_name].__code__.co_consts if hasattr(f, "co_name") and f.co_name == node.name][0]
+    write_vars = inner_func.co_varnames
+    # but only must be shares if variable exists before
+    write_vars = [var for var in write_vars if var in var_names]
+    return list(set(read_vars + write_vars))
+
+
+# rename variables to create private variables
+def var_renaming(node: ast.AST, old_to_new: dict[str, str]):
+    for elem in ast.walk(node):
+        if isinstance(elem, ast.Name) and elem.id in old_to_new:
+            elem.id = old_to_new[elem.id]
+        # we need the old name if user has reference to the variable in a clause
+        if isinstance(elem, ast.With):
+            if hasattr(elem, "renamed_vars"):
+                elem.renamed_vars.update(old_to_new)
+            else:
+                elem.renamed_vars = old_to_new.copy()
+
+
+# rename variables in clause arguments
+def args_renaming(body: List[ast.AST], args: List[str], ctx: BlockContext) -> (List[str], List[str]):
+    renamed_args = [name if name not in ctx.renamed_vars else ctx.renamed_vars[name] for name in args]
+
+    new_names = {name: "_omp_" + new_name(name) for name in renamed_args}
+    new_args = [new_names[name] for name in args]
+
+    for node in body:
+        var_renaming(node, new_names)
+
+    return renamed_args, new_args
+
 
 # Basic omp arg tokenizer using python tokenizer
 def omp_arg_tokenizer(s: str) -> list[str]:
@@ -152,6 +212,52 @@ def new_function_call(name: str) -> ast.Call:
         func = ast.Name(id=name, ctx=ast.Load())
 
     return ast.Call(func=func, args=[], keywords=[])
+
+
+# Searches for variables that have been declared at a node point.
+class OmpVariableSearch(ast.NodeVisitor):
+
+    def __init__(self, ctx: BlockContext):
+        self.ctx: BlockContext = ctx
+        self.local_vars = list()
+        self.visit(ctx.root_node)
+
+    def visit_With(self, node: ast.With):
+        if node == self.ctx.with_node:
+            return node
+        return self.generic_visit(node)
+
+    def visit_Attribute(self, node):
+        return node
+
+    def visit_ImportFrom(self, node: ast.Assign):
+        return self.visit_Import(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
+        return self.visit_FunctionDef(node)
+
+    def visit_Assign(self, node: ast.Assign):
+        for target in node.targets:
+            for elem in ast.walk(target):
+                if isinstance(elem, ast.Name) and isinstance(elem.ctx, ast.Store):
+                    self.local_vars.append(elem.id)
+        return node
+
+    def visit_Import(self, node: ast.Assign):
+        for alias in node.names:
+            self.local_vars.append(alias.name)
+        return node
+
+    def visit_FunctionDef(self, node: ast.FunctionDef):
+        self.local_vars.append(node.name)
+        # Only parent function arguments are visible, otherwise can be ignored
+        if any([paren == node for paren in self.ctx.stack]):
+            for arg in node.args.args + [node.args.vararg] + node.args.kwonlyargs + [node.args.kwarg]:
+                if arg is not None:
+                    self.local_vars.append(arg.arg)
+            return self.generic_visit(node)
+        return node
+
 
 # Traverse python ast tree to find 'with omp(...):'
 class OmpTransformer(ast.NodeTransformer):
@@ -263,10 +369,10 @@ class OmpTransformer(ast.NodeTransformer):
                         c_info = _omp_clauses[ac_name]
                         if c_info.min_args != -1 and len(ac_args) < c_info.min_args:
                             raise OmpSyntaxError(f"{ac_name}' clause expects at least {c_info.min_args} arguments, "
-                                                   f"got {len(ac_args)}", self.filename, node)
+                                                 f"got {len(ac_args)}", self.filename, node)
                         if c_info.max_args != -1 and len(ac_args) > c_info.max_args:
                             raise OmpSyntaxError(f"{ac_name}' clause expects at most {c_info.min_args} arguments, "
-                                                   f"got {len(ac_args)}", self.filename, node)
+                                                 f"got {len(ac_args)}", self.filename, node)
                         if ac_name in checked_clauses:
                             if c_info.repeatable != False:  # Check if repeatable (only disable for False)
                                 if c_info.repeatable != True:  # If is not a boolean is a separator
@@ -274,7 +380,7 @@ class OmpTransformer(ast.NodeTransformer):
                                 checked_clauses[ac_name] += ac_args
                             else:
                                 raise OmpSyntaxError(f"{ac_name} clause can only be used once in a directive",
-                                                       self.filename, node)
+                                                     self.filename, node)
                         else:
                             checked_clauses[ac_name] = ac_args
 
@@ -285,10 +391,10 @@ class OmpTransformer(ast.NodeTransformer):
                         d_info = _omp_directives[ac_name]
                         if d_info.min_args != -1 and len(ac_args) < d_info.min_args:
                             raise OmpSyntaxError(f"{ac_name}' expects at least {d_info.min_args} arguments, "
-                                                   f"got {len(ac_args)}", self.filename, node)
+                                                 f"got {len(ac_args)}", self.filename, node)
                         if d_info.max_args != -1 and len(ac_args) > d_info.max_args:
                             raise OmpSyntaxError(f"{ac_name}' expects at most {d_info.min_args} arguments, "
-                                                   f"got {len(ac_args)}", self.filename, node)
+                                                 f"got {len(ac_args)}", self.filename, node)
                         if dir_subdir is None:
                             dir_subdir = ac_name
                         checked_clauses[ac_name] = ac_args
