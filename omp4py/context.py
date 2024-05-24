@@ -1,8 +1,9 @@
 import os
 import sys
 import ast
-from typing import List, Any, Callable
 import threading
+from typing import List, Any, Callable, Generator
+from queue import Queue
 
 
 class DummyCtx:
@@ -41,15 +42,32 @@ class Clause:
 
 class BlockContext:
 
-    def __init__(self, with_node: ast.AST, root_node: ast.AST, filename: str, stack: List[ast.AST], global_env: dict,
+    def __init__(self, with_node: ast.With, root_node: ast.AST, filename: str, stack: List[ast.AST], global_env: dict,
                  local_env: dict, renamed_vars: dict[str, str]):
-        self.with_node: ast.AST = with_node
+        self.with_node: ast.With = with_node
         self.root_node: ast.AST = root_node
         self.filename: str = filename
         self.stack: List[ast.AST] = stack
         self.global_env: dict = global_env
         self.local_env: dict = local_env
         self.renamed_vars: dict[str, str] = renamed_vars
+
+
+class OrderedContext:
+
+    def __init__(self, gen: Generator):
+        self.gen: Generator = gen
+        self.current = next(self.gen)
+        self.condition: threading.Condition = threading.Condition()
+
+    def check(self, i):
+        if i == self.current:
+            try:
+                self.current = next(self.gen)
+            except StopIteration:
+                self.current = None
+            return True
+        return False
 
 
 class AtomicInt:
@@ -75,6 +93,10 @@ class OpenMpLevel:
         self.thread_num: int = thread_num
         self.barrier: threading.Barrier | None = barrier
         self.shared: dict[str, Any] = {}
+        self.last_private: List[int] | None = None
+        self.iter_order: OrderedContext | None = None
+        self.iter_elem: List[int] | None = None
+        self.task_queue: Queue[Callable] = Queue()
         self.lock: threading.RLock = lock
 
 
