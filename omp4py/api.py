@@ -1,3 +1,5 @@
+import threading
+import time
 from typing import TypeVar
 import types
 import enum
@@ -305,3 +307,141 @@ def omp_get_active_level():
     :return: The level of active parallelism.
     """
     return core._omp_context.current_level().active_level
+
+
+def omp_init_lock() -> threading.Lock:
+    """
+    The omp_init_lock function initializes a lock and associates it with the lock variable passed in as a parameter.
+    After the call to omp_init_lock, the initial state of the lock variable is unlocked.
+
+    :return: The lock
+    """
+    return threading.Lock()
+
+
+def omp_init_nest_lock() -> threading.RLock:
+    """
+    The omp_init_nest_lock function allows you to initialize a nestable lock and associate it with the lock variable
+    you specify. The initial state of the lock variable is unlocked.
+
+    :return: The nestable lock
+    """
+    return threading.RLock()
+
+
+def omp_destroy_lock(lock: threading.Lock):
+    """
+    The omp_destroy_lock function should disassociate a given lock variable from all locks but in python it is not
+    necessary.
+
+    :param lock: The lock
+    """
+    pass
+
+
+def omp_destroy_nest_lock(lock: threading.RLock):
+    """
+    The omp_destroy_lock function should disassociate a given nestable lock variable from all locks but in python it is
+    not necessary.
+
+    :param lock: The nestable lock
+    """
+    pass
+
+
+def omp_set_lock(lock: threading.Lock):
+    """
+    The omp_set_lock function forces the calling task region to wait until the specified lock is available before
+    executing subsequent instructions. The calling task region is given ownership of the lock when it becomes available.
+
+    In python is preferable and safer use:
+         with lock:
+            ....
+
+    :param lock: the lock
+    :return:
+    """
+    lock.acquire()
+
+
+def omp_set_nest_lock(lock: threading.RLock):
+    """
+    The omp_set_nest_lock function allows you to set a nestable lock. The task region executing the function will
+     wait until the lock becomes available and then set that lock, incrementing the nesting count. A nestable lock is
+     available if it is owned by the task region executing the subroutine, or is unlocked.
+
+    In python is preferable and safer use:
+         with lock:
+            ....
+
+    :param lock: The nestable lock
+    """
+    lock.acquire()
+
+
+def omp_unset_lock(lock: threading.Lock):
+    """
+    The omp_unset_lock function causes the executing task region to release ownership of the specified lock. The lock
+    can then be set by another task region as required.
+
+    :param lock: The lock
+    """
+    lock.release()
+
+
+def omp_set_unnest_lock(lock: threading.RLock):
+    """
+    The omp_unset_nest_lock function allows you to release ownership of a nestable lock. The function decrements the
+    nesting count and releases the associated task region from ownership of the nestable lock.
+
+    :param lock: The nestable lock
+    """
+    lock.release()
+
+
+def omp_test_lock(lock: threading.Lock) -> True:
+    """
+    The omp_test_lock function attempts to set the lock associated with the specified lock variable. It returns True if
+    it was able to set the lock and False otherwise. In either case, the calling task region will continue to execute
+    subsequent instructions in the program.
+
+    :param lock: The lock
+    :return: True if the function was able to set the lock. False otherwise.
+    """
+    return lock.acquire(blocking=False)
+
+
+def omp_test_nest_lock(lock: threading.RLock) -> True:
+    """
+    The omp_test_nest_lock function allows you to attempt to set a lock using the same method as omp_set_nest_lock,
+    but the executing task region does not wait for confirmation that the lock is available. If the lock is successfully
+    set, the function will increment the nesting count and return the new nesting count. If the lock is unavailable the
+    function returns False.
+
+    :param lock:
+    :return: True if the lock is successfully set; otherwise, it returns False.
+    """
+    return lock.acquire(blocking=False)
+
+
+def omp_get_wtime() -> float:
+    """
+    The omp_get_wtime function returns a double precision value equal to the number of seconds since the initial value
+    of the operating system real-time clock. The initial value is guaranteed not to change during execution of the
+    program.
+
+    The value returned by the omp_get_wtime function is not consistent across all threads in the team.
+
+    :return: The number of seconds since the initial value of the operating system real-time clock.
+    """
+    return time.perf_counter()
+
+
+def omp_get_wtick() -> float:
+    """
+    The omp_get_wtick function returns a double precision value equal to the number of seconds between consecutive clock
+    ticks.
+
+    :return: The number of seconds between consecutive ticks of the operating system real-time clock.
+    """
+    return time.get_clock_info('perf_counter').resolution
