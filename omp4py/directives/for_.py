@@ -54,17 +54,28 @@ def for_(body: List[ast.AST], clauses: Dict[str, List[str]], ctx: BlockContext) 
     if not hasattr(ctx.with_node, "local_vars"):
         ctx.with_node.local_vars = OmpVariableSearch(ctx).local_vars
 
+    # enable lastprivate check at runtime and set the target value
+    if "lastprivate" in clauses:
+        for_stm.iter.keywords.append(ast.keyword(arg="lastprivate", value=ast.Constant(value=True)))
+        # set the variable to use as argument in runtime lastprivate function
+        if isinstance(for_stm.target, ast.Tuple):
+            ctx.with_node.lastprivate = ast.Tuple(
+                elts=[ast.Name(id=arg.id, ctx=ast.Load()) for arg in for_stm.target.elts])
+            init = ast.Tuple(elts=[ast.Constant(value=None) for _ in for_stm.target.elts])
+        else:
+            init = ast.Constant(value=None)
+            ctx.with_node.lastprivate = ast.Name(id=for_stm.target.id, ctx=ast.Load())
+        # set an init value if the loop has no iterations.
+        body.insert(0, ast.copy_location(ast.Assign(targets=[for_stm.target], value=init), ctx.with_node))
+
     # clauses that affect to variables
     for clause in ["private", "lastprivate", "firstprivate", "reduction"]:
         if clause in clauses:
             for var in clauses[clause]:
                 if var in used_vars:
                     raise OmpSyntaxError(f"Variable '{var}' cannot be used in {used_vars[var]} and {clause} "
-                                           "simultaneously", ctx.filename, ctx.with_node)
+                                         "simultaneously", ctx.filename, ctx.with_node)
             vars_in_clause = _omp_clauses[clause](body, clauses[clause], ctx)
-            # enable lastprivate check at runtime
-            if clause == "lastprivate" and len(vars_in_clause) > 0:
-                for_stm.iter.keywords.append(ast.keyword(arg="lastprivate", value=ast.Constant(value=True)))
             used_vars.update({v: clause for v in vars_in_clause})
 
     OmpBreakSearch(ctx, for_stm)
