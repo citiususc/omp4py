@@ -12,5 +12,8 @@ class OmpSyntaxError(SyntaxError):
         if isinstance(msg, OmpSyntaxError):
             SyntaxError.__init__(self, msg.msg, (msg.filename, msg.lineno, 0, msg.text))
         else:
+            if hasattr(node, "fake_with"):
+                node = node.items[0].context_expr
+
             sample = ast.unparse(node).split("\n")[0]
             SyntaxError.__init__(self, msg, (filename, node.lineno, 0, sample))

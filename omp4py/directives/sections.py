@@ -8,16 +8,20 @@ from omp4py.error import OmpSyntaxError
 def sections(body: List[ast.AST], clauses: Dict[str, List[str]], ctx: BlockContext) -> List[ast.AST]:
     new_body = list()
     sections_id = new_name("_omp_sections")
-    section_var = new_name("_omp_section_var")
-    sections_call = new_function_call("_omp_runtime.open_sections")
+
+    sections_call = new_function_call("_omp_runtime.sections")
     sections_call.args.append(ast.Constant(value=sections_id))
 
     with_block = ast.With(items=[ast.withitem(context_expr=sections_call,
                                               optional_vars=ast.Name(id=sections_id, ctx=ast.Store()))])
 
+    # variable to store the last section executed
     if "lastprivate" in clauses:
+        section_var = new_name("_omp_section_var")
         new_body.append(ast.Assign(targets=[ast.Name(id=section_var, ctx=ast.Store())], value=ast.Constant(value=None)))
         ctx.with_node.lastprivate = ast.Name(id=section_var, ctx=ast.Load())
+    else:
+        section_var = None
 
     # check that inner blocks are section blocks and set the sections id for each
     for i, elem in enumerate(body):
@@ -28,8 +32,9 @@ def sections(body: List[ast.AST], clauses: Dict[str, List[str]], ctx: BlockConte
                 if isinstance(elem_arg, ast.Constant) and elem_arg.value.strip() == "section":
                     elem.section_id = sections_id
                     elem.section_i = i
-                    elem.section_var = section_var
                     elem.section_n = len(body)
+                    if section_var is not None:
+                        elem.section_var = section_var
                     continue
         raise OmpSyntaxError("sections can only contains one or more section", ctx.filename, ctx.with_node)
 

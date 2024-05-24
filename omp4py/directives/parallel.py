@@ -6,6 +6,29 @@ from omp4py.core import directive, _omp_clauses, _omp_directives, filter_variabl
     new_name, new_function_call, new_function_def
 
 
+# search for return/yield inside omp parallel to raise error
+class OmpReturnSearch(ast.NodeVisitor):
+
+    def __init__(self, ctx: BlockContext, for_: ast.With):
+        self.ctx: BlockContext = ctx
+        self.visit(for_)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef):
+        return node
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
+        return node
+
+    def visit_Return(self, node: ast.Return):
+        raise OmpSyntaxError("parallel directive block cannot contain return statements", self.ctx.filename, node)
+
+    def visit_Yield(self, node: ast.Yield):
+        raise OmpSyntaxError("parallel directive block cannot contain yield statements", self.ctx.filename, node)
+
+    def visit_YieldFrom(self, node: ast.YieldFrom):
+        raise OmpSyntaxError("parallel directive block cannot contain yield from statements", self.ctx.filename, node)
+
+
 def create_function_block(name: str, runner: str, body: List[ast.AST], clauses: Dict[str, List[str]],
                           ctx: BlockContext) -> List[ast.AST]:
     new_body = list()
@@ -36,7 +59,7 @@ def create_function_block(name: str, runner: str, body: List[ast.AST], clauses: 
             for var in clauses[clause]:
                 if var in used_vars:
                     raise OmpSyntaxError(f"Variable '{var}' cannot be used in {used_vars[var]} and {clause} "
-                                           "simultaneously", ctx.filename, ctx.with_node)
+                                         "simultaneously", ctx.filename, ctx.with_node)
             vars_in_clause = _omp_clauses[clause](body, clauses[clause], ctx)
             used_vars.update({v: clause for v in vars_in_clause})
 
@@ -48,7 +71,7 @@ def create_function_block(name: str, runner: str, body: List[ast.AST], clauses: 
     elif len(free_vars) > 0:
         s = ",".join(free_vars)
         raise OmpSyntaxError(f"Variables ({s}) must be declared shared, private or firstprivate clauses",
-                               ctx.filename, ctx.with_node)
+                             ctx.filename, ctx.with_node)
 
     if "if" in clauses:
         _omp_clauses["if"](omp_parallel_call, clauses["if"], ctx)

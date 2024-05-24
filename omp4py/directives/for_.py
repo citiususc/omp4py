@@ -4,14 +4,17 @@ from omp4py.core import directive, _omp_clauses, new_name, BlockContext, OmpVari
 from omp4py.error import OmpSyntaxError
 
 
-# Searches for breaks inside omp for to raise error
+# search for breaks inside omp for to raise error
 class OmpBreakSearch(ast.NodeVisitor):
 
     def __init__(self, ctx: BlockContext, for_: ast.For):
         self.ctx: BlockContext = ctx
         self.visit(for_)
 
-    def visit_For(self, node: ast.With):
+    def visit_For(self, node: ast.For):
+        return node
+
+    def visit_While(self, node: ast.While):
         return node
 
     def visit_Break(self, node: ast.Break):

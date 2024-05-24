@@ -30,8 +30,8 @@ def omp_parse(f: T) -> T:
     transformer = OmpTransformer(source_ast, filename, caller_frame.f_globals, caller_frame.f_locals)
     # we need an import to reference OMP4py functions
     source_ast.body.insert(0, ast.ImportFrom(module="omp4py",
-                                          names=[ast.alias(name="runtime", asname="_omp_runtime")],
-                                          level=0))
+                                             names=[ast.alias(name="runtime", asname="_omp_runtime")],
+                                             level=0))
     ast.copy_location(source_ast.body[0], source_ast.body[1])
     omp_ast = transformer.visit(source_ast)
     omp_ast = ast.fix_missing_locations(omp_ast)
@@ -277,11 +277,15 @@ class OmpTransformer(ast.NodeTransformer):
 
     # return True if the node is an omp call in the actual enviroment
     def is_omp_function(self, node: ast.AST):
+        from omp4py.api import omp
+        # fast lookup
+        if isinstance(node, ast.Name) and node.id in self.global_env and self.global_env[node.id] == omp:
+            return True
+
+        # eval lookup
         try:
             exp = compile(ast.Expression(node), filename=self.filename, mode='eval')
             omp_candidate = eval(exp, self.global_env, self.local_env)
-
-            from omp4py.api import omp
             if omp_candidate == omp:
                 return True
         except:
@@ -303,6 +307,15 @@ class OmpTransformer(ast.NodeTransformer):
     # @omp decorator con be used in class
     def visit_ClassDef(self, node: ast.ClassDef):
         return self.remove_decorator(node)
+
+    # allow directives like omp("barrier") without an empty with statement
+    def visit_Expr(self, node: ast.Expr):
+        if isinstance(node.value, ast.Call) and self.is_omp_function(node.value.func):
+            omp_with = ast.With(items=[ast.withitem(context_expr=node.value)], body=[ast.Pass()])
+            omp_with.fake_with = True
+            return self.visit_With(omp_with)
+
+        return self.generic_visit(node)
 
     # Perform OpenMP transformations if is a 'with omp(...):'
     def visit_With(self, node: ast.With):
@@ -408,6 +421,6 @@ class OmpTransformer(ast.NodeTransformer):
             raise OmpSyntaxError(f"{arg_clauses[0][0]}' clause unknown", self.filename, node)
 
         node.body = _omp_directives[main_directive](node.body, checked_clauses, block_ctx)
-        self.generic_visit(node)
 
+        self.generic_visit(node)
         return node.body
