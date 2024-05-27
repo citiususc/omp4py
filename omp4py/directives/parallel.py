@@ -9,9 +9,9 @@ from omp4py.core import directive, _omp_clauses, _omp_directives, filter_variabl
 # search for return/yield inside omp parallel to raise error
 class OmpReturnSearch(ast.NodeVisitor):
 
-    def __init__(self, ctx: BlockContext, for_: ast.With):
+    def __init__(self, ctx: BlockContext):
         self.ctx: BlockContext = ctx
-        self.visit(for_)
+        self.visit(ctx.with_node)
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
         return node
@@ -31,6 +31,8 @@ class OmpReturnSearch(ast.NodeVisitor):
 
 def create_function_block(name: str, runner: str, body: List[ast.AST], clauses: Dict[str, List[str]],
                           ctx: BlockContext) -> List[ast.AST]:
+    OmpReturnSearch(ctx)
+
     new_body = list()
     function_name = new_name(name)
 

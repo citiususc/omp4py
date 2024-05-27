@@ -14,7 +14,7 @@ def atomic(body: List[ast.AST], clauses: Dict[str, List[str]], ctx: BlockContext
     tmp_var = new_name("_omp_var")
     # atomic is performed using a temporary var to store the expression result and a lock to the atomic assign
     tmp_assign = ast.Assign(targets=[ast.Name(id=tmp_var, ctx=ast.Store())], value=binop.value)
-    atomic_assign = ast.Assign(targets=[binop.target], value=ast.Name(id=tmp_var, ctx=ast.Load()))
+    atomic_assign = ast.AugAssign(target=binop.target, op=binop.op, value=ast.Name(id=tmp_var, ctx=ast.Load()))
 
     if isinstance(binop.target, ast.Name):
         for child in ast.walk(binop.value):

@@ -30,7 +30,7 @@ directory = "coverage_html_report"
 
 [tool.coverage.report]
 show_missing = true
-exclude_lines = ["import", "from"]
+exclude_also = ["^import", "^from"]
 
 [tool.pytest.ini_options]
 timeout = 10

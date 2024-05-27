@@ -9,7 +9,8 @@ class OmpBreakSearch(ast.NodeVisitor):
 
     def __init__(self, ctx: BlockContext, for_: ast.For):
         self.ctx: BlockContext = ctx
-        self.visit(for_)
+        for node in for_.body:
+            self.visit(node)
 
     def visit_For(self, node: ast.For):
         return node
@@ -24,7 +25,7 @@ class OmpBreakSearch(ast.NodeVisitor):
 @directive(name="for",
            clauses=["private", "firstprivate", "lastprivate", "reduction", "schedule", "collapse", "ordered", "nowait"])
 def for_(body: List[ast.AST], clauses: Dict[str, List[str]], ctx: BlockContext) -> List[ast.AST]:
-    if len(body) > 1 and not isinstance(body[0], ast.For):
+    if len(body) > 1 or not isinstance(body[0], ast.For):
         raise OmpSyntaxError("for directive can only enclose a loop", ctx.filename, ctx.with_node)
 
     for_stm: ast.For = body[0]

@@ -24,6 +24,7 @@ Here's a basic example of how to use omp4py:
 ```python
 from omp4py import *
 
+@omp
 def main():
 
     with omp("parallel num_threads(2)"):

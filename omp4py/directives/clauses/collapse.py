@@ -18,7 +18,7 @@ def unpack(args: List[ast.AST]) -> List[ast.AST]:
 # Check that collapse loops meet the requirements
 def recursive_check(body: List[ast.AST], deep: int, for_stack: List[ast.For], ctx: BlockContext):
     # Same requirements that a for directive
-    if len(body) > 1 and not isinstance(body[0], ast.For):
+    if len(body) > 1 or not isinstance(body[0], ast.For):
         raise OmpSyntaxError("collapse clause requires that all for loops to be nested without additional statements",
                                ctx.filename, ctx.with_node)
 

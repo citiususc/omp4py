@@ -1,6 +1,7 @@
 import ast
 import tokenize
 import inspect
+import os
 from io import StringIO
 from typing import List, TypeVar, Dict, Any
 from omp4py.context import OpenMPContext, BlockContext, Directive, Clause
@@ -9,7 +10,11 @@ from omp4py.error import OmpError, OmpSyntaxError
 _omp_directives: Dict[str, Directive] = {}
 _omp_clauses: Dict[str, Clause] = {}
 _omp_context = OpenMPContext()
-debug = False
+
+_dump_source = False
+_dump_ast = False
+_dump_dir = os.getcwd()
+_dump_prefix = "debug_"
 
 T = TypeVar("T")
 
@@ -35,11 +40,12 @@ def omp_parse(f: T) -> T:
     ast.copy_location(source_ast.body[0], source_ast.body[1])
     omp_ast = transformer.visit(source_ast)
     omp_ast = ast.fix_missing_locations(omp_ast)
-    if debug:  # debug the final code and ast before compile
-        with open(f"debug_{f.__name__}.ast", "w") as file:
+    # debug before compile
+    if _dump_ast:
+        with open(os.path.join(_dump_dir, f"{_dump_prefix}{f.__name__}.ast"), "w") as file:
             file.write(ast.dump(omp_ast, indent=4))
-
-        with open(f"debug_{f.__name__}.py", "w") as file:
+    if _dump_source:
+        with open(os.path.join(_dump_dir, f"{_dump_prefix}{f.__name__}.py"), "w") as file:
             file.write(ast.unparse(omp_ast))
     ompcode = compile(omp_ast, filename=filename, mode="exec")
 

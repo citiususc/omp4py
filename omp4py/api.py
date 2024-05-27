@@ -51,6 +51,28 @@ def omp(arg: str | T) -> context.DummyCtx | T:
 openmp = omp
 
 
+def omp_debug(dump_source=None, dump_ast=None, dump_prefix=None, dump_dir=None):
+    """
+    Enable/disable omp source code or omp source tree dump.
+
+    :param dump_source: If true omp source code is dumped in the dump_dir
+    :param dump_ast: If true omp source tree is dumped in the dump_dir
+    :param dump_prefix: Prefix used to create the name of the dump
+    :param dump_dir: Change the target dump_dir
+    """
+    if dump_source is not None:
+        core._dump_source = dump_source
+
+    if dump_ast is not None:
+        core._dump_ast = dump_ast
+
+    if dump_prefix is not None:
+        core._dump_prefix = dump_prefix
+
+    if dump_dir is not None:
+        core._dump_dir = dump_dir
+
+
 # documentation: https://rookiehpc.org/openmp/docs/ and https://www.openmp.org/
 
 def omp_set_num_threads(num_threads: int):
