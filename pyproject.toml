@@ -22,7 +22,7 @@ pytest-timeout = "^2.3"
 [tool.coverage.run]
 branch = true
 include = ["omp4py/*"]
-command_line = "-m pytest"
+command_line = "-m pytest -v"
 
 
 [tool.coverage.html]

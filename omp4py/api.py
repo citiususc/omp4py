@@ -42,7 +42,7 @@ def omp(arg: str | T) -> context.DummyCtx | T:
         elif isinstance(arg, (type, types.FunctionType, types.MethodType)):  # Classes, functions, or object methods
             return core.omp_parse(arg)
         else:
-            raise error.OmpError("Expected directive string, class, function or object method")
+            raise error.OmpError("expected directive string, class, function or object method")
     except error.OmpSyntaxError as ex:
         # Hide the internal ast stack
         raise ex.__class__(ex) from None
@@ -157,7 +157,8 @@ def omp_set_dynamic(dynamic_threads: bool):
 
     :param dynamic_threads: If it evaluates to true dynamic adjustment is allowed, not allowed where appropriate.
     """
-    raise NotImplementedError()  # TODO
+    if dynamic_threads:
+        raise error.OmpError("dynamic threads not supported by current implementation")
 
 
 def omp_get_dynamic() -> bool:
@@ -170,7 +171,7 @@ def omp_get_dynamic() -> bool:
 
     :return: True if dynamic adjustment is enabled, otherwise False.
     """
-    return False  # TODO
+    return False
 
 
 def omp_set_nested(nested: bool):
@@ -211,7 +212,7 @@ omp_sched_guided: omp_sched_t = omp_sched_t.omp_sched_guided
 omp_sched_auto: omp_sched_t = omp_sched_t.omp_sched_auto
 
 
-def omp_set_schedule(kind: omp_sched_t, chunk_size: int):
+def omp_set_schedule(kind: omp_sched_t, chunk_size: int = -1):
     """
     The function omp_set_schedule is one of the two ways to specify the schedule to apply when a runtime clause is
     encountered during execution. The other one is the environment variable OMP_SCHEDULE. The expected format for the

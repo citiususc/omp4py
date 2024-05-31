@@ -75,13 +75,15 @@ def omp_range(*args: int | Tuple[int, ...], id: str = "", ordered: bool = False,
     elif schedule == "dynamic":
         f = omp_range_dynamic
     elif schedule == "guided":
-        f = omp_range_dynamic
+        f = omp_range_guided
     elif schedule == "runtime":
-        return omp_range(*args, id=id, ordered=ordered, nowait=nowait, schedule=schedule, chunk_size=chunk_size)
-    elif schedule == "auto":
-        f = omp_static_range
+        return omp_range(*args, id=id, ordered=ordered, nowait=nowait, schedule=_omp_context.schedule,
+                         chunk_size=chunk_size if chunk_size != -1 else _omp_context.chunk_size)
     else:
-        raise OmpError("schedule must be one of 'static', 'dynamic', 'guided', 'runtime', 'auto'")
+        f = omp_static_range
+
+    if not isinstance(chunk_size, int):
+        raise OmpError("chunk_size must be an integer")
 
     if len(args) == 0:
         raise TypeError("range expected at least 1 argument, got 0")
@@ -97,7 +99,7 @@ def omp_range(*args: int | Tuple[int, ...], id: str = "", ordered: bool = False,
             return []
         gen = f(id, chunk_size, nowait, args[0], args[1], args[2])
         if lastprivate:
-            _omp_context.current_level().last_private = (next(reversed(range(*args))),)
+            _omp_context.current_level().last_private = next(reversed(range(*args)))
     else:  # with collate > 1
         for arg in args:
             if None in arg:  # decorator insert None if found a range() without arguments in any collated range
@@ -107,7 +109,7 @@ def omp_range(*args: int | Tuple[int, ...], id: str = "", ordered: bool = False,
         gen = omp_range_flattener(f, id, chunk_size, nowait, args[0], args[1], args[2])
 
         if lastprivate:
-            _omp_context.current_level().last_private = next(collected_range_reversed(0, args[0], args[1], args[2]))
+            _omp_context.current_level().last_private = tuple(next(collected_range_reversed(0, args[0], args[1], args[2])))
 
     if ordered:
         gen = check_ordered_loop(id, gen, args[0], args[1], args[2])
@@ -177,6 +179,52 @@ def omp_range_dynamic(id: str, chunk_size: int, nowait: bool, start: int, stop: 
                 else:
                     loop = False
                     break
+    if not nowait:
+        _omp_context.current_level().barrier.wait()  # synchronization at the end of for block
+
+
+# guided scheduler
+def omp_range_guided(id: str, chunk_size: int, nowait: bool, start: int, stop: int, step: int):
+    num_threads = _omp_context.current_level().num_threads
+    if chunk_size < 1:
+        chunk_size = 1
+
+    counter = with_shared_obj(id, lambda: AtomicInt(start))
+    start = counter.get()
+
+    while True:
+        if start == stop:
+            break
+
+        n = (stop - start) // step
+        q = (n + num_threads - 1) // num_threads
+
+        if q < chunk_size:
+            q = chunk_size
+        if q <= n:
+            nend = start + q * step
+        else:
+            nend = stop
+
+        tmp = counter.compare_and_swap(start, nend)
+        if tmp == start:
+            local_step = step * chunk_size
+            i = start
+            if local_step > 0:
+                for j in range(0, local_step, step):
+                    if i + j < stop:
+                        yield i + j
+                    else:
+                        break
+            else:
+                for j in range(0, -local_step, -step):
+                    if i - j > stop:
+                        yield i - j
+                    else:
+                        break
+            tmp = nend
+        start = tmp
+
     if not nowait:
         _omp_context.current_level().barrier.wait()  # synchronization at the end of for block
 
@@ -276,13 +324,26 @@ def collected_range_reversed(i: int, *args: Tuple[int, ...]):
 
 
 # Check if this thread has executed the last iteration or last section
-def lastprivate(*args: int):
+def lastprivate(args: int | Tuple[int, ...]):
     return _omp_context.current_level().last_private == args
 
 
 # Open an ordered context
-def ordered():
+def ordered(id: str):
     level = _omp_context.current_level()
+
+    if level.iter_order.id == id:
+        pass
+    elif level.iter_order.id is None:
+        level.iter_order.id = id
+    elif level.iter_order.id != id:
+        level.iter_order.error = OmpError("only a single ordered clause can appear on a loop directive")
+        if level.iter_order.condition._lock.locked():
+            level.iter_order.condition.notify_all()
+        else:
+            with level.iter_order.condition:
+                level.iter_order.condition.notify_all()
+        raise level.iter_order.error
 
     # Blocks until current elem is the next elem in the order
     class Order:
@@ -290,6 +351,8 @@ def ordered():
         def __enter__(self):
             level.iter_order.condition.acquire()
             while not level.iter_order.check(level.iter_elem):
+                if level.iter_order.error:
+                    raise level.iter_order.error
                 level.iter_order.condition.wait()
 
         def __exit__(self, exc_type, exc_value, traceback):
@@ -317,7 +380,7 @@ def sections(id: str, nowait=False):
         # return True if section not executed
         def __call__(self, i: int, n: int):
             with lock:
-                _omp_context.current_level().last_private = (n - 1,)
+                _omp_context.current_level().last_private = n - 1
                 if i in execs:
                     return False
                 execs.add(i)

@@ -1,6 +1,6 @@
 import ast
 from typing import List
-from omp4py.core import clause, BlockContext, OmpSyntaxError, args_renaming, new_function_call
+from omp4py.core import clause, BlockContext, OmpSyntaxError, new_name, new_function_call, var_renaming
 
 
 def basic_op(op):
@@ -31,19 +31,19 @@ operators = {
 @clause(name="reduction", min_args=1, repeatable=None)
 def reduction(body: List[ast.AST], args: List[str],
               ctx: BlockContext) -> List[str]:
+    required_nonlocal = hasattr(ctx.with_node, "new_team")
+    old_local_vars = ctx.with_node.local_vars.copy()
     assign_block = []
-    reduction_block = []
 
-    used_vars = []
+    used_vars = set()
     op_args = args[:]
     # reduction must be done with the lock to avoid races
     with_lock = ast.With(items=[ast.withitem(context_expr=new_function_call("_omp_runtime.level_lock"))], body=[])
-    reduction_block.append(with_lock)
 
     # each iteration is a reduction clause
     while len(op_args) > 0:
         if op_args[0].count(':') != 1:
-            raise OmpSyntaxError(f"Reduction clause must be in the format (op: var,[var,...])", ctx.filename,
+            raise OmpSyntaxError(f"reduction clause must be in the format (op: var,[var,...])", ctx.filename,
                                  ctx.with_node)
         op, op_args[0] = op_args[0].split(":")  # split operator and variable from first argument
         op_value = operators.get(op.strip(), None)
@@ -55,28 +55,35 @@ def reduction(body: List[ast.AST], args: List[str],
             if i < len(op_args) and op_args[i] is None:
                 break
 
-        renamed_args, new_args = args_renaming(body, op_args[:i], ctx)
-        assign_block.append(ast.Assign(targets=[ast.Name(id=name, ctx=ast.Store()) for name in new_args],
-                                       value=ast.Constant(value=op_value[0])))
-        op_vars = set()
-        for j, (old_var, new_var) in enumerate(zip(renamed_args, new_args)):
-            if old_var in op_vars:
-                continue
-            if old_var not in ctx.with_node.local_vars:
-                raise OmpSyntaxError(f"undeclared {args[j]} variable", ctx.filename, ctx.with_node)
+        for arg in set(op_args[:i]):
+            if arg not in ctx.with_node.local_vars:
+                raise OmpSyntaxError(f"undeclared {arg} variable", ctx.filename, ctx.with_node)
 
-            if op_args[j] in used_vars:
-                raise OmpSyntaxError(f"Variable {args[j]} appears in more than one clause reduction",
+            if arg in ctx.with_node.private_vars:
+                raise OmpSyntaxError(
+                    "variable that appears in a reduction clause must be shared in the current parallel",
+                    ctx.filename, ctx.with_node)
+
+            if arg in used_vars:
+                raise OmpSyntaxError(f"variable {arg} appears in more than one clause reduction",
                                      ctx.filename, ctx.with_node)
-            # init variable and reduction in the with
-            assign_block.append(ast.Nonlocal(names=[old_var]))
-            with_lock.body.append(op_value[1](old_var, new_var))
-            op_vars.add(old_var)
 
-        used_vars.extend(op_args[:i])
+            ctx.with_node.local_vars[arg] = "_omp_" + new_name(arg)
+            assign_block.append(ast.copy_location(
+                ast.Assign(targets=[ast.Name(id=ctx.with_node.local_vars[arg], ctx=ast.Store())],
+                           value=ast.Constant(value=op_value[0])), ctx.with_node))
+            # init variable and reduction in the with
+            if required_nonlocal:
+                assign_block.append(ast.Nonlocal(names=[old_local_vars[arg]]))
+
+            with_lock.body.append(op_value[1](old_local_vars[arg], ctx.with_node.local_vars[arg]))
+
+        used_vars.update(op_args[:i])
         op_args = op_args[i + 1:]
+
+    var_renaming(ctx.with_node, old_local_vars)
 
     # assign block must be before the body and reduction at the end
     body[0:0] = assign_block
-    body.extend(reduction_block)
+    body.append(ast.copy_location(with_lock, ctx.with_node))
     return used_vars

@@ -29,6 +29,13 @@ def test_parallel_num_threads():
     assert sorted(q.queue) == [0, 1, 2]
 
 
+def test_parallel_num_threads_error():
+    q = Queue()
+    omp_set_num_threads(2)
+    with pytest.raises(OmpError):
+        omp(parallel_num_threads)(q, 0)
+
+
 ################################################
 def parallel_if(q: Queue, e: bool):
     with omp("parallel if(e)"):
@@ -443,6 +450,7 @@ def test_parallel_yield_error():
     with pytest.raises(OmpSyntaxError):
         omp(parallel_yield_error)()
 
+
 ################################################
 
 
@@ -457,5 +465,20 @@ def test_parallel_yieldfrom_error():
     omp_set_num_threads(2)
     with pytest.raises(OmpSyntaxError):
         omp(parallel_yieldfrom_error)()
+
+
+################################################
+
+
+def parallel_raise_error():
+    with omp("parallel"):
+        x = 0 / 0
+
+
+@pytest.mark.filterwarnings("ignore:Exception in thread")
+def test_parallel_raise_error():
+    omp_set_num_threads(2)
+    with pytest.raises(ArithmeticError):
+        omp(parallel_raise_error)()
 
 ################################################

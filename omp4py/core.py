@@ -3,7 +3,7 @@ import tokenize
 import inspect
 import os
 from io import StringIO
-from typing import List, TypeVar, Dict, Any
+from typing import List, TypeVar, Set, Dict, Any
 from omp4py.context import OpenMPContext, BlockContext, Directive, Clause
 from omp4py.error import OmpError, OmpSyntaxError
 
@@ -101,13 +101,13 @@ def exp_parse(src: str, ctx: BlockContext) -> ast.Expr:
 
 
 # Check in list of variables which ones are used in a function
-def filter_variables(node: ast.FunctionDef, var_names: list[str]) -> List[str]:
+def filter_variables(node: ast.FunctionDef, local_vars: dict[str, str]) -> List[str]:
     # we define all local variables in an outer function and read variables of inner functions are cell vars
     outer_name = "_omp_" + node.name
     outer_module = ast.Module(body=[new_function_def(outer_name)], type_ignores=[])
     outer_f: ast.FunctionDef = outer_module.body[0]
     # create variables to be referenced in inner function
-    for name in var_names:
+    for name in local_vars.values():
         outer_f.body.append(ast.Assign(targets=[ast.Name(id=name, ctx=ast.Store())], value=ast.Constant(value=None)))
     ast.fix_missing_locations(outer_module)
     outer_f.body.append(node)
@@ -119,34 +119,23 @@ def filter_variables(node: ast.FunctionDef, var_names: list[str]) -> List[str]:
     inner_func = [f for f in env[outer_name].__code__.co_consts if hasattr(f, "co_name") and f.co_name == node.name][0]
     write_vars = inner_func.co_varnames
     # but only must be shares if variable exists before
-    write_vars = [var for var in write_vars if var in var_names]
-    return list(set(read_vars + write_vars))
+    write_vars = [var for var in write_vars if var in local_vars]
+    result_vars = list(set(read_vars + write_vars))
+    # return original names instead of renamed names
+    inv_mapping_vars = {v: k for k, v in local_vars.items()}
+    return [inv_mapping_vars[name] for name in result_vars]
 
 
 # rename variables to create private variables
-def var_renaming(node: ast.AST, old_to_new: dict[str, str]):
+def var_renaming(node: ast.With, old_local_vars: dict[str, str]):
+    mapping = dict()
+    for name in old_local_vars:
+        if old_local_vars[name] != node.local_vars[name]:
+            mapping[old_local_vars[name]] = node.local_vars[name]
+
     for elem in ast.walk(node):
-        if isinstance(elem, ast.Name) and elem.id in old_to_new:
-            elem.id = old_to_new[elem.id]
-        # we need the old name if user has reference to the variable in a clause
-        if isinstance(elem, ast.With):
-            if hasattr(elem, "renamed_vars"):
-                elem.renamed_vars.update(old_to_new)
-            else:
-                elem.renamed_vars = old_to_new.copy()
-
-
-# rename variables in clause arguments
-def args_renaming(body: List[ast.AST], args: List[str], ctx: BlockContext) -> (List[str], List[str]):
-    renamed_args = [name if name not in ctx.renamed_vars else ctx.renamed_vars[name] for name in args]
-
-    new_names = {name: "_omp_" + new_name(name) for name in renamed_args}
-    new_args = [new_names[name] for name in args]
-
-    for node in body:
-        var_renaming(node, new_names)
-
-    return renamed_args, new_args
+        if isinstance(elem, ast.Name) and elem.id in mapping:
+            elem.id = mapping[elem.id]
 
 
 # Basic omp arg tokenizer using python tokenizer
@@ -225,44 +214,72 @@ class OmpVariableSearch(ast.NodeVisitor):
 
     def __init__(self, ctx: BlockContext):
         self.ctx: BlockContext = ctx
-        self.local_vars = list()
-        self.visit(ctx.root_node)
+        self.local_vars: Dict[str, str] = dict()  # original_name -> actual_name
+        self.private_vars: Set[str] = set()
+        self.in_function: bool = False
+
+    def apply(self):
+        try:
+            for node in self.ctx.stack[::-1]:
+                if hasattr(node, "local_vars"):
+                    self.in_function = True
+                    self.local_vars = node.local_vars.copy()
+                    self.private_vars = node.private_vars.copy()
+                    self.visit(node)  # will raise StopIteration
+
+            self.visit(self.ctx.root_node)
+        except StopIteration:
+            return self.local_vars, self.private_vars
 
     def visit_With(self, node: ast.With):
         if node == self.ctx.with_node:
-            return node
+            # omp variables must be ignored
+            self.private_vars = {var for var in self.private_vars if not var.startswith("_omp")}
+
+            node.local_vars = self.local_vars
+            node.private_vars = self.private_vars
+            node.local_vars.update({var: var for var in node.private_vars})  # private variables are also locals
+            raise StopIteration()
+
         return self.generic_visit(node)
 
     def visit_Attribute(self, node):
         return node
 
+    def visit_Import(self, node: ast.Assign):
+        for alias in node.names:
+            self.private_vars.add(alias.name)
+        return node
+
     def visit_ImportFrom(self, node: ast.Assign):
         return self.visit_Import(node)
-
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
-        return self.visit_FunctionDef(node)
 
     def visit_Assign(self, node: ast.Assign):
         for target in node.targets:
             for elem in ast.walk(target):
                 if isinstance(elem, ast.Name) and isinstance(elem.ctx, ast.Store):
-                    self.local_vars.append(elem.id)
-        return node
-
-    def visit_Import(self, node: ast.Assign):
-        for alias in node.names:
-            self.local_vars.append(alias.name)
+                    self.private_vars.add(elem.id)
         return node
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
-        self.local_vars.append(node.name)
+        if self.in_function:
+            self.private_vars.add(node.name)
+        else:
+            # everything is global, not local, until the first function is found
+            self.in_function = True
+            self.local_vars.clear()
+            self.private_vars.clear()
+
         # Only parent function arguments are visible, otherwise can be ignored
         if any([paren == node for paren in self.ctx.stack]):
             for arg in node.args.args + [node.args.vararg] + node.args.kwonlyargs + [node.args.kwarg]:
                 if arg is not None:
-                    self.local_vars.append(arg.arg)
+                    self.private_vars.add(arg.arg)
             return self.generic_visit(node)
         return node
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
+        return self.visit_FunctionDef(node)
 
 
 # Traverse python ast tree to find 'with omp(...):'
@@ -329,43 +346,34 @@ class OmpTransformer(ast.NodeTransformer):
         if not any([isinstance(exp.context_expr, ast.Call) and self.is_omp_function(exp.context_expr.func)
                     for exp in node.items]):
             return self.generic_visit(node)
+        node.omp = True
 
         # With will be removed so a single omp call is allowed
         if len(node.items) > 1:
-            raise OmpSyntaxError("Only a omp function is allowed in the with block", self.filename, node)
+            raise OmpSyntaxError("only a omp function is allowed in the with block", self.filename, node)
 
         args = node.items[0].context_expr.args
 
         if len(args) != 1:
-            raise OmpSyntaxError("Only one argument is allowed in the omp function", self.filename, node)
+            raise OmpSyntaxError("only one argument is allowed in the omp function", self.filename, node)
 
         if not isinstance(args[0], ast.Constant):
-            raise OmpSyntaxError("Only a constant is allowed in the omp function", self.filename, node)
+            raise OmpSyntaxError("only a constant is allowed in the omp function", self.filename, node)
 
         omp_arg = args[0].value
 
         if not isinstance(omp_arg, str):
-            raise OmpSyntaxError("Only a constant string is allowed in the omp function", self.filename, node)
+            raise OmpSyntaxError("only a constant string is allowed in the omp function", self.filename, node)
 
         if len(omp_arg.strip()) == 0:
-            raise OmpSyntaxError("Empty string in the omp function", self.filename, node)
+            raise OmpSyntaxError("empty string in the omp function", self.filename, node)
 
         try:
             tokenized_args = omp_arg_tokenizer(omp_arg)
         except:  # Tokenizer only fails is user forget close a string o a paren
-            raise OmpSyntaxError("Malformed omp string", self.filename, node)
+            raise OmpSyntaxError("malformed omp string", self.filename, node)
 
-        renamed_vars = dict()
-        # load new names for renamed variables
-        if hasattr(node, "renamed_vars"):
-            for old_name, new_name in node.renamed_vars.items():
-                # if a variable was renamed more than one, we need to update the original name
-                while new_name in node.renamed_vars:
-                    new_name = node.renamed_vars[new_name]
-                renamed_vars[old_name] = new_name
-
-        block_ctx = BlockContext(node, self.root_node, self.filename, self.stack,
-                                 self.global_env, self.local_env, renamed_vars)
+        block_ctx = BlockContext(node, self.root_node, self.filename, self.stack, self.global_env, self.local_env)
 
         main_directive = tokenized_args[0]
         arg_clauses = omp_arg_parser(tokenized_args[2:])

@@ -44,11 +44,11 @@ def sections(body: List[ast.AST], clauses: Dict[str, List[str]], ctx: BlockConte
         ctx.with_node.local_vars = OmpVariableSearch(ctx).local_vars
 
     # clauses that affect to variables
-    for clause in ["private", "lastprivate", "firstprivate", "reduction"]:
+    for clause in ["reduction", "private", "lastprivate", "firstprivate", ]:
         if clause in clauses:
             for var in clauses[clause]:
                 if var in used_vars:
-                    raise OmpSyntaxError(f"Variable '{var}' cannot be used in {used_vars[var]} and {clause} "
+                    raise OmpSyntaxError(f"variable '{var}' cannot be used in {used_vars[var]} and {clause} "
                                          "simultaneously", ctx.filename, ctx.with_node)
             vars_in_clause = _omp_clauses[clause](body, clauses[clause], ctx)
             used_vars.update({v: clause for v in vars_in_clause})

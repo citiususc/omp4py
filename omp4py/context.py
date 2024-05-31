@@ -43,14 +43,13 @@ class Clause:
 class BlockContext:
 
     def __init__(self, with_node: ast.With, root_node: ast.AST, filename: str, stack: List[ast.AST], global_env: dict,
-                 local_env: dict, renamed_vars: dict[str, str]):
+                 local_env: dict):
         self.with_node: ast.With = with_node
         self.root_node: ast.AST = root_node
         self.filename: str = filename
         self.stack: List[ast.AST] = stack
         self.global_env: dict = global_env
         self.local_env: dict = local_env
-        self.renamed_vars: dict[str, str] = renamed_vars
 
 
 class OrderedContext:
@@ -58,7 +57,9 @@ class OrderedContext:
     def __init__(self, gen: Generator):
         self.gen: Generator = gen
         self.current = next(self.gen)
-        self.condition: threading.Condition = threading.Condition()
+        self.id: str | None = None
+        self.error: Exception | None = None
+        self.condition: threading.Condition = threading.Condition(threading.Lock())
 
     def check(self, i):
         if i == self.current:
@@ -77,7 +78,17 @@ class AtomicInt:
         self.__value = value
         self.__lock = threading.RLock()
 
-    def get_and_inc(self, value: int):
+    def get(self) -> int:
+        return self.__value
+
+    def compare_and_swap(self, old_value: int, new_value: int) -> int:
+        with self.__lock:
+            old = self.__value
+            if self.__value == old_value:
+                self.__value = new_value
+            return old
+
+    def get_and_inc(self, value: int) -> int:
         with self.__lock:
             old = self.__value
             self.__value += value

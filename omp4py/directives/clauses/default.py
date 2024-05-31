@@ -10,4 +10,4 @@ def default(node: None, args: List[str], ctx: BlockContext) -> bool:
         return True
     elif args[0] == "none":
         return False
-    raise OmpSyntaxError("Only shared and none values are supported in default clause", ctx.filename, ctx.with_node)
+    raise OmpSyntaxError("only shared and none values are supported in default clause", ctx.filename, ctx.with_node)

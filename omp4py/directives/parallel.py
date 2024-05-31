@@ -51,28 +51,34 @@ def create_function_block(name: str, runner: str, body: List[ast.AST], clauses: 
 
     # we need to handle variables
     used_vars = dict()
-    ctx.with_node.local_vars = OmpVariableSearch(ctx).local_vars
-    block_local_vars = filter_variables(omp_parallel_block, ctx.with_node.local_vars)
+    OmpVariableSearch(ctx).apply()
+    used_block_local_vars = filter_variables(omp_parallel_block, ctx.with_node.local_vars)
     shared_default = True if "default" not in clauses else _omp_clauses["default"](None, clauses["default"], ctx)
+
+    # assume that all private variables are now shared in new parallel block
+    if hasattr(ctx.with_node,"new_team"):
+        ctx.with_node.private_vars.clear()
 
     # clauses that affect to variables
     for clause in ["shared", "private", "firstprivate", "reduction"]:
         if clause in clauses:
             for var in clauses[clause]:
                 if var in used_vars:
-                    raise OmpSyntaxError(f"Variable '{var}' cannot be used in {used_vars[var]} and {clause} "
+                    raise OmpSyntaxError(f"variable '{var}' cannot be used in {used_vars[var]} and {clause} "
                                          "simultaneously", ctx.filename, ctx.with_node)
             vars_in_clause = _omp_clauses[clause](body, clauses[clause], ctx)
+            if clause != "shared":
+                ctx.with_node.private_vars.update(vars_in_clause)
             used_vars.update({v: clause for v in vars_in_clause})
 
     # we declare remainder variables as shared or raise an error if default is none
-    free_vars = [var for var in block_local_vars if var not in used_vars]
+    free_vars = [var for var in used_block_local_vars if var not in used_vars]
     if shared_default:
         if len(free_vars) > 0:
             _omp_clauses["shared"](body, free_vars, ctx)
     elif len(free_vars) > 0:
         s = ",".join(free_vars)
-        raise OmpSyntaxError(f"Variables ({s}) must be declared shared, private or firstprivate clauses",
+        raise OmpSyntaxError(f"variables ({s}) must be declared in a data-sharing clause",
                              ctx.filename, ctx.with_node)
 
     if "if" in clauses:
@@ -87,6 +93,7 @@ def create_function_block(name: str, runner: str, body: List[ast.AST], clauses: 
 @directive(name="parallel", clauses=["if", "num_threads", "default", "private", "firstprivate", "shared", "reduction"],
            directives=["for", "sections"])
 def parallel(body: List[ast.AST], clauses: Dict[str, List[str]], ctx: BlockContext) -> List[ast.AST]:
+    ctx.with_node.new_team = True
     body_start = body[0]
     body_end = body[-1]
     new_body = create_function_block("_omp_parallel", "_omp_runtime.parallel_run", body, clauses, ctx)
