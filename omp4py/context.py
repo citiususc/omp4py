@@ -123,7 +123,7 @@ class OpenMPContext:
         self.schedule: str = "static"
         self.chunk_size: int = 0
         self.max_active_levels: int = sys.maxsize
-        self.thread_limit: int = sys.maxsize  # TODO
+        self.thread_limit: int = sys.maxsize
 
         schedule = os.getenv("OMP_SCHEDULE")
         if schedule is not None:
@@ -149,7 +149,7 @@ class OpenMPContext:
             except ValueError:
                 pass
 
-        dynamic = os.getenv("OMP_DYNAMIC")  # TODO
+        dynamic = os.getenv("OMP_DYNAMIC")
 
         nested = os.getenv("OMP_NESTED")
         if nested is not None:

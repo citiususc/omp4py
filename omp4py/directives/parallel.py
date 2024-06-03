@@ -70,6 +70,9 @@ def create_function_block(name: str, runner: str, body: List[ast.AST], clauses: 
                 ctx.with_node.private_vars.update(vars_in_clause)
             used_vars.update({v: clause for v in vars_in_clause})
 
+    if "copyin" in clauses:
+        _omp_clauses["copyin"](body, clauses["copyin"], ctx)
+
     # subdirective need used vars
     ctx.with_node.used_vars = used_vars.copy()
 
@@ -88,7 +91,8 @@ def create_function_block(name: str, runner: str, body: List[ast.AST], clauses: 
     return new_body
 
 
-@directive(name="parallel", clauses=["if", "num_threads", "default", "private", "firstprivate", "shared", "reduction"],
+@directive(name="parallel",
+           clauses=["if", "num_threads", "default", "private", "firstprivate", "shared", "reduction", "copyin"],
            directives=["for", "sections"])
 def parallel(body: List[ast.AST], clauses: Dict[str, List[str]], ctx: BlockContext) -> List[ast.AST]:
     shared_default = True if "default" not in clauses else _omp_clauses["default"](None, clauses["default"], ctx)

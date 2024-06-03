@@ -546,4 +546,29 @@ def test_parallel_raise_error():
     with pytest.raises(ArithmeticError):
         omp(parallel_raise_error)()
 
+
+################################################
+
+
+def parallel_copyin_set():
+    omp("threadprivate(x)")
+
+    with omp("parallel num_threads(1)"):
+        x = 2
+
+
+def parallel_copyin_get(q: Queue):
+    omp("threadprivate(x)")
+
+    with omp("parallel num_threads(2) copyin(x)"):
+        q.put(x)
+
+
+def test_parallel_copyin():
+    q = Queue()
+    omp_set_num_threads(2)
+    omp(parallel_copyin_set)()
+    omp(parallel_copyin_get)(q)
+    assert sorted(q.queue) == [2, 2]
+
 ################################################

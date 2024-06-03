@@ -1,4 +1,5 @@
 import omp4py.directives.clauses.collapse
+import omp4py.directives.clauses.copyin
 import omp4py.directives.clauses.copyprivate
 import omp4py.directives.clauses.default
 import omp4py.directives.clauses.firstprivate

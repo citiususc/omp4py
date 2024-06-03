@@ -339,7 +339,10 @@ class OmpTransformer(ast.NodeTransformer):
         if isinstance(node.value, ast.Call) and is_omp_function(node.value.func, self.global_env, self.local_env):
             omp_with = ast.With(items=[ast.withitem(context_expr=node.value)], body=[ast.Pass()])
             omp_with.fake_with = True
-            return self.visit_With(omp_with)
+            self.stack.pop()
+            result = self.visit(omp_with)
+            self.stack.append(node)
+            return result
 
         return self.generic_visit(node)
 
@@ -380,7 +383,7 @@ class OmpTransformer(ast.NodeTransformer):
         block_ctx = BlockContext(node, self.root_node, self.filename, self.stack, self.global_env, self.local_env)
 
         main_directive = tokenized_args[0]
-        arg_clauses = omp_arg_parser(tokenized_args[2:])
+        arg_clauses = omp_arg_parser(tokenized_args)
         checked_clauses = dict()
 
         current_directive = main_directive
@@ -416,7 +419,8 @@ class OmpTransformer(ast.NodeTransformer):
                             checked_clauses[ac_name] = ac_args
 
                     # Instead of a clause it can be a subdirective like for in a parallel
-                    elif ac_name in dir_info.directives and ac_name in _omp_directives:
+                    elif (
+                            ac_name in dir_info.directives or ac_name == current_directive) and ac_name in _omp_directives:
                         if ac_name in checked_clauses:
                             raise OmpSyntaxError(f"{ac_name} directive can only be used once", self.filename, node)
                         d_info = _omp_directives[ac_name]
@@ -426,7 +430,7 @@ class OmpTransformer(ast.NodeTransformer):
                         if d_info.max_args != -1 and len(ac_args) > d_info.max_args:
                             raise OmpSyntaxError(f"{ac_name}' expects at most {d_info.min_args} arguments, "
                                                  f"got {len(ac_args)}", self.filename, node)
-                        if dir_subdir is None:
+                        if dir_subdir is None and ac_name != main_directive:
                             dir_subdir = ac_name
                         checked_clauses[ac_name] = ac_args
                     else:

@@ -9,6 +9,8 @@ from omp4py.core import _omp_context
 from omp4py.context import AtomicInt
 from omp4py.error import OmpError
 
+var = threading.local()
+
 
 # function to execute parallel directive
 def parallel_run(f: Callable, if_=True, num_threads=None):
@@ -109,7 +111,8 @@ def omp_range(*args: int | Tuple[int, ...], id: str = "", ordered: bool = False,
         gen = omp_range_flattener(f, id, chunk_size, nowait, args[0], args[1], args[2])
 
         if lastprivate:
-            _omp_context.current_level().last_private = tuple(next(collected_range_reversed(0, args[0], args[1], args[2])))
+            _omp_context.current_level().last_private = tuple(
+                next(collected_range_reversed(0, args[0], args[1], args[2])))
 
     if ordered:
         gen = check_ordered_loop(id, gen, args[0], args[1], args[2])
@@ -407,8 +410,9 @@ def barrier():
 
 
 # submit a new task to the queue
-def task_submit(f: Callable):
-    _omp_context.current_level().task_queue.put(f)
+def task_submit(f: Callable, if_: bool = True):
+    if if_:
+        _omp_context.current_level().task_queue.put(f)
 
 
 # execute all pending task in queue
@@ -419,9 +423,9 @@ def taskwait():
     while True:
         try:
             task = level.task_queue.get_nowait()
+            task()
         except queue.Empty:
             break
-        task()
 
 
 # return True for the master thread
@@ -464,3 +468,15 @@ def single(id: str, nowait=False):
                 self.copyprivate.get()(*args)
 
     return with_shared_obj(id, lambda: Single())
+
+
+# copy threadprivate variables from master
+def copyin(id: str, *args: str) -> List:
+    values = with_shared_obj(id, lambda: list())
+    if _omp_context.current_level().thread_num == 0:
+        for i, arg in enumerate(args):
+            values.append(getattr(var, arg))
+    barrier()
+    if _omp_context.current_level().thread_num > 0:
+        for i, arg in enumerate(args):
+            setattr(var, arg, values[i])
