@@ -29,8 +29,7 @@ operators = {
 
 
 @clause(name="reduction", min_args=1, repeatable=None)
-def reduction(body: List[ast.AST], args: List[str],
-              ctx: BlockContext) -> List[str]:
+def reduction(body: List[ast.AST], args: List[str], ctx: BlockContext) -> List[str]:
     required_nonlocal = hasattr(ctx.with_node, "new_team")
     old_local_vars = ctx.with_node.local_vars.copy()
     assign_block = []

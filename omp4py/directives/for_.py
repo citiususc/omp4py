@@ -54,7 +54,10 @@ def for_(body: List[ast.AST], clauses: Dict[str, List[str]], ctx: BlockContext) 
         for_stm.iter = _omp_clauses["nowait"](for_stm.iter, clauses["nowait"], ctx)
 
     # we need to handle variables
-    used_vars = dict()
+    if hasattr(ctx.with_node, "used_vars"):
+        used_vars = ctx.with_node.used_vars
+    else:
+        used_vars = dict()
     OmpVariableSearch(ctx).apply()
 
     # enable lastprivate check at runtime and set the target value

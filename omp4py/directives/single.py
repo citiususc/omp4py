@@ -19,7 +19,7 @@ def single(body: List[ast.AST], clauses: Dict[str, List[str]], ctx: BlockContext
 
     # we need to handle variables
     used_vars = dict()
-    ctx.with_node.local_vars = OmpVariableSearch(ctx).local_vars
+    OmpVariableSearch(ctx).apply()
 
     if "copyprivate" in clauses:
         ctx.with_node.single_var = single_var
@@ -38,7 +38,7 @@ def single(body: List[ast.AST], clauses: Dict[str, List[str]], ctx: BlockContext
             used_vars.update({v: clause for v in vars_in_clause})
 
     if "nowait" in clauses:
-        _omp_clauses["nowait"](single_call, clauses["nowait"])
+        _omp_clauses["nowait"](single_call, clauses["nowait"], ctx)
 
     if_block.body = body
 

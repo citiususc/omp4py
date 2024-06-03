@@ -209,6 +209,23 @@ def new_function_call(name: str) -> ast.Call:
     return ast.Call(func=func, args=[], keywords=[])
 
 
+# return True if the node is an omp call in the actual enviroment
+def is_omp_function(node: ast.AST, global_env: dict, local_env: dict) -> bool:
+    from omp4py.api import omp
+    # fast lookup
+    if isinstance(node, ast.Name) and node.id in global_env and global_env[node.id] == omp:
+        return True
+
+    # eval lookup
+    try:
+        exp = compile(ast.Expression(node), filename='<omp4py>', mode='eval')
+        omp_candidate = eval(exp, global_env, local_env)
+        if omp_candidate == omp:
+            return True
+    except:
+        return False  # Ignore if function is not imported
+
+
 # Searches for variables that have been declared at a node point.
 class OmpVariableSearch(ast.NodeVisitor):
 
@@ -238,7 +255,8 @@ class OmpVariableSearch(ast.NodeVisitor):
 
             node.local_vars = self.local_vars
             node.private_vars = self.private_vars
-            node.local_vars.update({var: var for var in node.private_vars})  # private variables are also locals
+            # private variables are also locals
+            node.local_vars.update({var: var for var in node.private_vars if var not in node.local_vars})
             raise StopIteration()
 
         return self.generic_visit(node)
@@ -298,25 +316,10 @@ class OmpTransformer(ast.NodeTransformer):
         self.stack.pop()
         return new_node
 
-    # return True if the node is an omp call in the actual enviroment
-    def is_omp_function(self, node: ast.AST):
-        from omp4py.api import omp
-        # fast lookup
-        if isinstance(node, ast.Name) and node.id in self.global_env and self.global_env[node.id] == omp:
-            return True
-
-        # eval lookup
-        try:
-            exp = compile(ast.Expression(node), filename=self.filename, mode='eval')
-            omp_candidate = eval(exp, self.global_env, self.local_env)
-            if omp_candidate == omp:
-                return True
-        except:
-            return False  # Ignore if function is not imported
-
     # remove @omp decorator from a class or function
     def remove_decorator(self, node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
-        node.decorator_list = [exp for exp in node.decorator_list if not self.is_omp_function(exp)]
+        node.decorator_list = [exp for exp in node.decorator_list if
+                               not is_omp_function(exp, self.global_env, self.local_env)]
         return self.generic_visit(node)
 
     # @omp decorator con be used in functions
@@ -333,7 +336,7 @@ class OmpTransformer(ast.NodeTransformer):
 
     # allow directives like omp("barrier") without an empty with statement
     def visit_Expr(self, node: ast.Expr):
-        if isinstance(node.value, ast.Call) and self.is_omp_function(node.value.func):
+        if isinstance(node.value, ast.Call) and is_omp_function(node.value.func, self.global_env, self.local_env):
             omp_with = ast.With(items=[ast.withitem(context_expr=node.value)], body=[ast.Pass()])
             omp_with.fake_with = True
             return self.visit_With(omp_with)
@@ -343,7 +346,8 @@ class OmpTransformer(ast.NodeTransformer):
     # Perform OpenMP transformations if is a 'with omp(...):'
     def visit_With(self, node: ast.With):
         # Check if the with block uses omp function
-        if not any([isinstance(exp.context_expr, ast.Call) and self.is_omp_function(exp.context_expr.func)
+        if not any([isinstance(exp.context_expr, ast.Call) and is_omp_function(exp.context_expr.func, self.global_env,
+                                                                               self.local_env)
                     for exp in node.items]):
             return self.generic_visit(node)
         node.omp = True

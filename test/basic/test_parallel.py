@@ -4,15 +4,15 @@ from omp4py import *
 from queue import Queue
 
 
-def simple_parallel(q: Queue):
+def parallel(q: Queue):
     with omp("parallel"):
         q.put(omp_get_thread_num())
 
 
-def test_simple_parallel():
+def test_parallel():
     q = Queue()
     omp_set_num_threads(2)
-    omp(simple_parallel)(q)
+    omp(parallel)(q)
     assert sorted(q.queue) == [0, 1]
 
 
@@ -221,6 +221,22 @@ def test_parallel_private_noexist_no_error():
 ################################################
 
 
+def parallel_default_shared():
+    x = 0
+    with omp("parallel default(shared) shared(x)"):
+        x = 1
+    return x
+
+
+def test_parallel_default_shared():
+    omp_set_num_threads(2)
+    x = omp(parallel_default_shared)()
+    assert x == 1
+
+
+################################################
+
+
 def parallel_default_none():
     x = 0
     with omp("parallel default(none) shared(x)"):
@@ -237,6 +253,40 @@ def test_parallel_default_none():
 ################################################
 
 
+def parallel_default_none2():
+    x = 0
+    with omp("parallel for default(none) lastprivate(x)"):
+        for i in range(10):
+            x = 1
+    return x
+
+
+def test_parallel_default_none2():
+    omp_set_num_threads(2)
+    x = omp(parallel_default_none2)()
+    assert x == 1
+
+
+################################################
+
+
+def parallel_default_none3():
+    x = 0
+    with omp("parallel sections default(none) lastprivate(x)"):
+        with omp("section"):
+            x = 1
+    return x
+
+
+def test_parallel_default_none3():
+    omp_set_num_threads(2)
+    x = omp(parallel_default_none3)()
+    assert x == 1
+
+
+################################################
+
+
 def parallel_default_error():
     x = 0
     with omp("parallel default(none)"):
@@ -247,6 +297,21 @@ def parallel_default_error():
 def test_parallel_default_error():
     with pytest.raises(OmpSyntaxError):
         omp(parallel_default_error)()
+
+
+################################################
+
+
+def parallel_default_private_error():
+    x = 0
+    with omp("parallel default(private)"):
+        x = 1
+    return x
+
+
+def test_parallel_default_private_error():
+    with pytest.raises(OmpSyntaxError):
+        omp(parallel_default_private_error)()
 
 
 ################################################

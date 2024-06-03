@@ -8,17 +8,17 @@ from queue import Queue
 from typing import Callable
 
 
-def simple_for(q: Queue):
+def for_(q: Queue):
     with omp("parallel"):
         with omp("for"):
             for i in range(10):
                 q.put(i)
 
 
-def test_simple_for():
+def test_for():
     q = Queue()
     omp_set_num_threads(2)
-    omp(simple_for)(q)
+    omp(for_)(q)
     assert sorted(q.queue) == list(range(10))
 
 
@@ -361,7 +361,7 @@ def for_ordered_multiple_error(q: Queue):
                 print(i)
 
 
-def test_for_multiple_error():
+def test_for_ordered_multiple_error():
     q = Queue()
     omp_set_num_threads(1)
     with pytest.raises(OmpSyntaxError):
@@ -386,7 +386,7 @@ def for_ordered_multiple_hidden_error(q: Queue, f: Callable):
 
 
 @pytest.mark.filterwarnings("ignore:Exception in thread")
-def test_for_multiple_hidden_error():
+def test_for_ordered_multiple_hidden_error():
     q = Queue()
     omp_set_num_threads(2)
     with pytest.raises(OmpError):
@@ -410,7 +410,7 @@ def for_ordered_multiple_nested_hidden_error(q: Queue, f: Callable):
 
 
 @pytest.mark.filterwarnings("ignore:Exception in thread")
-def test_for_multiple_nested_hidden_error():
+def test_for_ordered_multiple_nested_hidden_error():
     q = Queue()
     omp_set_num_threads(2)
     with pytest.raises(OmpError):
@@ -459,6 +459,82 @@ def test_for_reduction():
 ################################################
 
 
+def for_private():
+    x = 0
+    with omp("parallel"):
+        x = 1
+        with omp("for private(x)"):
+            for i in range(10):
+                x = i
+    return x
+
+
+def test_for_private():
+    omp_set_num_threads(2)
+    assert omp(for_private)() == 1
+
+
+################################################
+
+
+def for_private_private():
+    x = 0
+    y = 0
+    with omp("parallel private(x)"):
+        x = 1
+        with omp("for private(x)"):
+            for i in range(10):
+                x = i
+        y = x
+    return x, y
+
+
+def test_for_private_private():
+    omp_set_num_threads(2)
+    assert omp(for_private_private)() == (0, 1)
+
+
+################################################
+
+
+def for_firstprivate():
+    x = 0
+    with omp("parallel"):
+        x = 1
+        with omp("for firstprivate(x)"):
+            for i in range(10):
+                x += i
+    return x
+
+
+def test_for_firstprivate():
+    omp_set_num_threads(2)
+    assert omp(for_firstprivate)() == 1
+
+
+################################################
+
+
+def for_firstprivate_firstprivate():
+    x = 1
+    y = 0
+    with omp("parallel firstprivate(x)"):
+        x += 1
+        with omp("for firstprivate(x)"):
+            for i in range(10):
+                x += i
+        y = x
+    return x, y
+
+
+def test_for_firstprivate_firstprivate():
+    omp_set_num_threads(2)
+    assert omp(for_firstprivate_firstprivate)() == (1, 2)
+
+
+################################################
+
+
 def for_reduction_private_error():
     x = 0
     with omp("parallel private(x)"):
@@ -473,25 +549,6 @@ def test_for_reduction_private_error():
 
     with pytest.raises(OmpSyntaxError):
         omp(for_reduction_private_error)()
-
-
-################################################
-
-
-def for_var_dup():
-    x = 0
-    with omp("parallel for shared(x) reduction(+:x)"):
-        for i in range(10):
-            x += i
-    return x
-
-
-def test_for_var_dup():
-    omp_set_num_threads(2)
-    assert omp(for_var_dup)() == sum(range(10))
-
-
-################################################
 
 
 def for_var_dup_error():
@@ -513,6 +570,24 @@ def test_for_var_dup_error():
 ################################################
 
 
+def for_var_dup_error2():
+    x = 0
+    with omp("parallel for private(x) lastprivate(x)"):
+        for i in range(10):
+            x += i
+    return x
+
+
+def test_for_var_dup_error2():
+    omp_set_num_threads(2)
+
+    with pytest.raises(OmpSyntaxError):
+        omp(for_var_dup_error2)()
+
+
+################################################
+
+
 def for_lastprivate():
     x = 0
     with omp("parallel for lastprivate(x)"):
@@ -524,6 +599,23 @@ def for_lastprivate():
 def test_for_lastprivate():
     omp_set_num_threads(2)
     assert omp(for_lastprivate)() == 9
+
+
+################################################
+
+
+def for_lastprivate_var_error():
+    x = 0
+    with omp("parallel for lastprivate(y)"):
+        for i in range(10):
+            x = i
+    return x
+
+
+def test_for_lastprivate_var_error():
+    omp_set_num_threads(2)
+    with pytest.raises(OmpSyntaxError):
+        assert omp(for_lastprivate_var_error)()
 
 
 ################################################
