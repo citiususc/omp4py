@@ -413,6 +413,8 @@ def barrier():
 def task_submit(f: Callable, if_: bool = True):
     if if_:
         _omp_context.current_level().task_queue.put(f)
+    else:
+        f()
 
 
 # execute all pending task in queue

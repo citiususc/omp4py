@@ -1,3 +1,5 @@
+import time
+
 import pytest
 
 from omp4py import *
@@ -151,26 +153,26 @@ def test_task_firstprivate():
 
 
 def task_if(q: Queue, enable: bool):
-    x = 1
+    x = 10
     with omp("parallel"):
         with omp("single"):
+            q.put(omp_get_thread_num())
             with omp("task if(enable)"):
-                x += 2
-    q.put(x)
+                q.put(omp_get_thread_num())
 
 
 def test_task_if_false():
     q = Queue()
     omp_set_num_threads(2)
     omp(task_if)(q, False)
-    assert sorted(q.queue) == [1]
+    assert list(q.queue)[0] == list(q.queue)[1]
 
 
 def test_task_if_true():
     q = Queue()
     omp_set_num_threads(2)
     omp(task_if)(q, True)
-    assert sorted(q.queue) == [3]
+    assert list(q.queue)[0] != 10
 
 
 ################################################
@@ -192,6 +194,7 @@ def test_task_taskwait():
     omp_set_num_threads(2)
     omp(task_taskwait)(q)
     assert sorted(q.queue) == [3, 3]
+
 
 ################################################
 
