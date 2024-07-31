@@ -276,7 +276,8 @@ class OmpVariableSearch(ast.NodeVisitor):
         for target in node.targets:
             for elem in ast.walk(target):
                 if isinstance(elem, ast.Name) and isinstance(elem.ctx, ast.Store):
-                    self.private_vars.add(elem.id)
+                    if elem.id not in self.local_vars:
+                        self.private_vars.add(elem.id)
         return node
 
     def visit_FunctionDef(self, node: ast.FunctionDef):

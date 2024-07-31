@@ -153,9 +153,6 @@ def omp_static_range(id: str, chunk_size: int, nowait: bool, start: int, stop: i
                 if i - j > stop:
                     yield i - j
 
-    if not nowait:  # synchronization at the end of for block
-        _omp_context.current_level().barrier.wait()
-
 
 # dynamic scheduler
 def omp_range_dynamic(id: str, chunk_size: int, nowait: bool, start: int, stop: int, step: int):
@@ -182,8 +179,6 @@ def omp_range_dynamic(id: str, chunk_size: int, nowait: bool, start: int, stop: 
                 else:
                     loop = False
                     break
-    if not nowait:
-        _omp_context.current_level().barrier.wait()  # synchronization at the end of for block
 
 
 # guided scheduler
@@ -227,9 +222,6 @@ def omp_range_guided(id: str, chunk_size: int, nowait: bool, start: int, stop: i
                         break
             tmp = nend
         start = tmp
-
-    if not nowait:
-        _omp_context.current_level().barrier.wait()  # synchronization at the end of for block
 
 
 S = TypeVar("S")

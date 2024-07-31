@@ -1,6 +1,6 @@
 import ast
 from typing import List, Dict
-from omp4py.core import directive, _omp_clauses, new_name, BlockContext, OmpVariableSearch
+from omp4py.core import directive, _omp_clauses, new_name, BlockContext, OmpVariableSearch, new_function_call
 from omp4py.error import OmpSyntaxError
 
 
@@ -50,9 +50,6 @@ def for_(body: List[ast.AST], clauses: Dict[str, List[str]], ctx: BlockContext) 
     if "ordered" in clauses:
         for_stm.iter = _omp_clauses["ordered"](for_stm.iter, clauses["ordered"], ctx)
 
-    if "nowait" in clauses:
-        for_stm.iter = _omp_clauses["nowait"](for_stm.iter, clauses["nowait"], ctx)
-
     # we need to handle variables
     if hasattr(ctx.with_node, "used_vars"):
         used_vars = ctx.with_node.used_vars
@@ -86,5 +83,8 @@ def for_(body: List[ast.AST], clauses: Dict[str, List[str]], ctx: BlockContext) 
             used_vars.update({v: clause for v in vars_in_clause})
 
     OmpBreakSearch(ctx, for_stm)
+
+    if "nowait" not in clauses:
+        body.append(ast.copy_location(ast.Expr(value=new_function_call("_omp_runtime.barrier")), ctx.with_node))
 
     return body
