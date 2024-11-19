@@ -1,6 +1,6 @@
-# OMP4py: An OpenMP Implementation for Python
+# OMP4Py: a pure Python implementation of OpenMP
 
-**OMP4py** is a Python library that provides an implementation of OpenMP, enabling easy and efficient parallel programming for scientific and engineering applications. With OMP4py, you can leverage multicore systems to improve the performance of your programs using a familiar and simple interface inspired by OpenMP.
+**OMP4Py** is a Python library that provides an implementation of OpenMP, which is widely recognized as the standard programming model for exploiting multithreading parallelism in HPC. OMP4Py brings OpenMP’s familiar directive-based parallelization paradigm to Python, allowing developers to write parallel code with the same level of control and flexibility as in C, C++, or Fortran.
 
 ## Features
 
