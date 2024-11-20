@@ -63,9 +63,9 @@ def _omp4py_wordcount(lines):
     return count
 
 
-def wordcount(b_size=1e11, seed=0, numba=False):
-    print(f"wordcount: {b_size}, seed: {seed}, numba: {numba}")
-    text = generate_text(b_size, seed)
+def wordcount(n=1000000, seed=0, numba=False):
+    print(f"wordcount: {n}, seed: {seed}, numba: {numba}")
+    text = generate_text(n, seed)
     lines = text.splitlines()
 
     wtime = time.perf_counter()
