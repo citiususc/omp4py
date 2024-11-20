@@ -7,7 +7,7 @@
 - Native Python library
 - Simplified parallelization of loops and code sections
 - Efficient thread management and synchronization
-- API compliant with OpenMP 3.0 standard
+- API compliant with [OpenMP 3.0 standard](https://www.openmp.org/wp-content/uploads/spec30.pdf)
 
 ## Installation
 
