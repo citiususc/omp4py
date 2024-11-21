@@ -2,6 +2,8 @@
 
 **OMP4Py** is a Python library that provides an implementation of OpenMP, which is widely recognized as the standard programming model for exploiting multithreading parallelism in HPC. OMP4Py brings OpenMP’s familiar directive-based parallelization paradigm to Python, allowing developers to write parallel code with the same level of control and flexibility as in C, C++, or Fortran.
 
+OMP4Py, as a pure Python implementation, provides greater flexibility compared to the Numba-based [PyOMP](https://github.com/Python-for-HPC/PyOMP) solution. Unlike PyOMP, it does not impose restrictions on using functions from non-Numba-optimized libraries or certain Python objects and data structures. Additionally, OMP4Py code can be combined with [mpi4py](https://github.com/mpi4py/mpi4py) to develop parallel applications that exploit both intra-node and inter-node parallelism.
+
 ## Features
 
 - Native Python library
