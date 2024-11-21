@@ -51,7 +51,7 @@ def _omp4py_wordcount(lines):
         local_count = {}
         with omp("for"):
             for i in range(len(lines)):
-                for word in lines.split():
+                for word in lines[i].split():
                     if word in local_count:
                         local_count[word] += 1
                     else:
