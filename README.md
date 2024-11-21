@@ -16,12 +16,11 @@ You can install omp4py via pip:
 ```bash
 pip install omp4py
 ```
-**Note**: OMP4Py is compatible with Python versions that include the Global Interpreter Lock (GIL). However, to fully exploit multithreading for scaling applications, it is necessary to use Python 3.13 or later, which offers a no-GIL option.
+**Note**: OMP4Py is compatible with Python versions 3.12 and later, which include the Global Interpreter Lock (GIL). However, to fully exploit multithreading for scaling applications, it is necessary to use Python 3.13 or later, which offers a no-GIL option.
 
 ## Usage
 
-OMP4Py defines a function `omp` that operates similarly to OpenMP directives in C/C++, maintaining the same syntax and functionality. The function itself has no effect when executed; it serves solely as a container for the OpenMP directives. Note that when a OpenMP directive must be used within structured blocks, the `omp` function is used together as part of a `with` block; otherwise, it is used as a standalone function call. Note that we must
-decorate a function or class containing the OpenMP directives with the `@omp` decorator.
+OMP4Py defines a function `omp` that operates similarly to OpenMP directives in C/C++, maintaining the same syntax and functionality. The function itself has no effect when executed; it serves solely as a container for the OpenMP directives. Note that when a OpenMP directive must be used within structured blocks, the `omp` function is used together as part of a `with` block; otherwise, it is used as a standalone function call. Note that functions or classes containing the OpenMP directives must be decorated with the `@omp` decorator.
 
 Here's a basic example of how to use OMP4Py to calculate $\pi$:
 
