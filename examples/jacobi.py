@@ -5,12 +5,10 @@ import numpy as np
 from omputils import njit, pyomp, omp
 
 try:
-    if True:
-        raise RuntimeError()
     import mpi4py.MPI
     has_mpi4py = True
+    print("mpi4py found", file=sys.stderr)
 except:
-    print("mpi4py not found", file=sys.stderr)
     has_mpi4py = False
 
 

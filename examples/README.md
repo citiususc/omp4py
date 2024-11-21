@@ -24,6 +24,8 @@ The Jacobi method is an iterative algorithm used for solving systems of linear e
 
 ``poetry run python3 main.py jacobi [n=1000] [max_iter=1000] [tol=1e-6] [seed=0]``
 
+MPI: ``poetry install mpi4py`` and use ``mpirun -n <procs> poetry run python3 main.py jacobi [args...]``.
+
 ### 5. **LU Decomposition**
 LU decomposition is a method for factorizing a matrix `A` into the product of a lower triangular matrix `L` and an upper triangular matrix `U`, such that `A = L · U`. This factorization simplifies solving systems of linear equations, matrix inversion, and determinant computation. For the experiment, LU decomposition was applied to a square matrix of size `1k × 1k`.
 

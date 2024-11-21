@@ -9,9 +9,9 @@ authors = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.10"
 numpy = "^2.0.1"
-mpi4py = "^4.0.0"
+#mpi4py = "^4.0.0"
 networkx = "^3.3"
 numba = "^0.60.0"
 omp4py = {path = ".."}

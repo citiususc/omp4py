@@ -7,7 +7,6 @@ try:
     has_pyomp = True
     print("pyomp found", file=sys.stderr)
 except:
-    print("pyomp not found", file=sys.stderr)
     has_pyomp = False
     pyomp = None
     njit = lambda x: x
@@ -18,7 +17,6 @@ try:
     has_omp4py = True
     print("omp4py found", file=sys.stderr)
 except:
-    print("omp4py not found", file=sys.stderr)
     has_omp4py = False
     omp = lambda *a, **k: None
 

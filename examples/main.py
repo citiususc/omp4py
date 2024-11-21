@@ -1,15 +1,20 @@
 import sys
+
 from omputils import set_omp_threads
 
 
 def main():
     if len(sys.argv) < 3 or (len(sys.argv) < 4 and sys.argv[1] == "numba"):
-        print("required: [numba] <test> <threads> [args...]")
-        print("available tests: fft, graphc, jacobi, lud, md, pi, qsort, wordcount")
+        print("required: [numba] <test> <threads> [args...]", file=sys.stderr)
+        print("available tests: fft, graphc, jacobi, lud, md, pi, qsort, wordcount", file=sys.stderr)
         exit(-1)
     numba = sys.argv[1] == "numba"
     test = sys.argv[1] if not numba else sys.argv[2]
-    threads = int(sys.argv[2] if not numba else sys.argv[3])
+    try:
+        threads = int(sys.argv[2] if not numba else sys.argv[3])
+    except ValueError:
+        print("threads must be a number", file=sys.stderr)
+        exit(-1)
     args = list(map(eval, sys.argv[3:] if not numba else sys.argv[4:]))
 
     set_omp_threads(threads)
