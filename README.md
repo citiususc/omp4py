@@ -16,22 +16,32 @@ You can install omp4py via pip:
 ```bash
 pip install omp4py
 ```
+**Note**: OMP4Py is compatible with Python versions that include the Global Interpreter Lock (GIL). However, to fully exploit multithreading for scaling applications, it is necessary to use Python 3.13 or later, which offers a no-GIL option.
 
 ## Usage
 
-Here's a basic example of how to use omp4py:
+OMP4Py defines a function `omp` that operates similarly to OpenMP directives in C/C++, maintaining the same syntax and functionality. The function itself has no effect when executed; it serves solely as a container for the OpenMP directives. Note that when a OpenMP directive must be used within structured blocks, the `omp` function is used together as part of a `with` block; otherwise, it is used as a standalone function call. Note that we must
+decorate a function or class containing the OpenMP directives with the `@omp` decorator.
+
+Here's a basic example of how to use OMP4Py to calculate $\pi$:
 
 ```python
 from omp4py import *
-
+import random 
+    
 @omp
-def main():
+def pi(num_points):
+    count = 0
+    with omp("parallel for reduction(+:count)"):
+        for i in range(num_points):
+            x = random.random()
+            y = random.random()
+            if x * x + y * y <= 1.0:
+                count += 1
+    pi = count / num_points
+    return pi
 
-    with omp("parallel num_threads(2)"):
-        print(f"Hello, World from thread {omp_get_thread_num()}")
-
-if __name__ == "__main__":
-    main()
+print(pi(10000000))  
 ```
 
 ## Tests
