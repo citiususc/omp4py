@@ -51,7 +51,7 @@ def pi(num_points):
             y = random.random()
             if x * x + y * y <= 1.0:
                 count += 1
-    pi = count / num_points
+    pi = 4 * (count / num_points)
     return pi
 
 print(pi(10000000))  
