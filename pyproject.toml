@@ -1,0 +1,52 @@
+[project]
+name = "omp4py"
+version = "1.0"
+description = "An OpenMP Implementation for Python"
+license = { text = "LGPL-3.0-only" }
+authors = [
+    { name = "César Pomar", email = "cesaralfredo.pineiro@usc.es" },
+    { name = "Juan C. Pichel", email = "juancarlos.pichel@usc.es" },
+]
+keywords = ["HPC", "OpenMP", "Programming models"]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+
+[tool.poetry.dev-dependencies]
+coverage = { extras = ["toml"], version = "^7.5" }
+pytest = "^8.2"
+pytest-timeout = "^2.3"
+
+
+[tool.coverage.run]
+branch = true
+include = ["omp4py/*"]
+command_line = "-m pytest -v"
+
+
+[tool.coverage.html]
+directory = "coverage_html_report"
+
+
+[tool.coverage.report]
+show_missing = true
+exclude_also = ["^import", "^from"]
+
+
+[tool.pytest.ini_options]
+timeout = 10
+
+[tool.poetry]
+requires-poetry = ">=2.0"
+include = [
+    { path = "build/omp4py/**/*.so", format = "wheel" },
+]
+
+[tool.poetry.build]
+script = "scripts/compile.py"
+
+
+[build-system]
+requires = ["poetry-core", "setuptools", "Cython>=3.1.0a1"]
+build-backend = "poetry.core.masonry.api"
