@@ -40,7 +40,11 @@ timeout = 10
 [tool.poetry]
 requires-poetry = ">=2.0"
 include = [
-    { path = "build/omp4py/**/*.so", format = "wheel" },
+    { path = "omp4py/**/*.so", format = "wheel" },
+]
+
+exclude = [
+    "omp4py/**/*.so"
 ]
 
 [tool.poetry.build]

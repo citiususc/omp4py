@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "omp4py-examples"
+version = "0.1"
+description = "OMP4Py examples"
+license = "LGPL-3.0-only"
+authors = [
+    "César Pomar <cesaralfredo.pineiro@usc.es>",
+    "Juan C. Pichel <juancarlos.pichel@usc.es>"
+]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+numpy = "^2.0.1"
+#mpi4py = "^4.0.0"
+networkx = "^3.3"
+numba = "^0.60.0"
+omp4py = {path = ".."}
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

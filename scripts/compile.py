@@ -86,4 +86,4 @@ if __name__ == "__main__":
     cmd.run()
 
     for output in cmd.get_outputs():
-        copyfile(output, os.path.join('build', os.path.relpath(output, cmd.build_lib)))
+        copyfile(output, os.path.relpath(output, cmd.build_lib))
