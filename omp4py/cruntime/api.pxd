@@ -1,5 +1,5 @@
-from omp4py.cruntime.common.enums cimport omp_sched_t
-from omp4py.cruntime.basics.types cimport pyint
+from omp4py.cruntime.common.enums cimport *
+from omp4py.cruntime.basics.types cimport *
 
 #######################################################################################################################
 ########################################## Parallel Region Support Routines ###########################################

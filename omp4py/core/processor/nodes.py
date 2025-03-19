@@ -6,7 +6,21 @@ import copy
 from omp4py.core.directive import OmpDirective, OmpClause, tokenizer, parse_line
 
 
-@dataclasses.dataclass()
+@dataclasses.dataclass(frozen=True)
+class ParserArgs:
+    alias: str
+    cache: bool
+    dump: bool
+    debug: bool
+    pure: bool
+    compile: bool
+    compiler_args: dict
+    compiler_modules: list
+    force: bool
+    cache_dir: str
+
+
+@dataclasses.dataclass
 class Variables:
     names: set[str] = dataclasses.field(default_factory=set)
     globals: set[str] = dataclasses.field(default_factory=set)
@@ -51,7 +65,8 @@ class Variables:
 class NodeContext:
     filename: str
     src_lines: list[str]
-    omp_alias: str
+    parser_args: ParserArgs
+    runtime: str
     directive_callback: typing.Callable[['NodeContext', OmpDirective], None] | None = None
     directive: ast.Constant | None = None
     stack: list[ast.AST] = dataclasses.field(default_factory=list)
@@ -68,11 +83,15 @@ class NodeContext:
             msg, (self.filename, node.lineno, node.col_offset + 1, lines[0], node.end_lineno, node.end_col_offset + 1)
         )
 
+    @property
+    def r(self):
+        return self.runtime
+
     def is_omp(self, node: ast.expr) -> bool:
         if isinstance(node, ast.Call):
             return self.is_omp(node.func)
         elif isinstance(node, ast.Name):
-            return node.id in ("omp", self.omp_alias)
+            return node.id in ("omp", self.parser_args.alias)
         elif isinstance(node, ast.Attribute):
             return self.is_omp(node.value)
         return False
@@ -104,8 +123,8 @@ class NodeContext:
                                                                 kw_defaults=[], defaults=[])
                                              ))
 
-    def array_pos(self, id:str, pos:int, ctx:ast.expr_context):
-        return  self.copy_pos(ast.Subscript(value=ast.Name(id=id, ctx=ast.Load()), slice=ast.Constant(pos), ctx=ctx))
+    def array_pos(self, id: str, pos: int, ctx: ast.expr_context):
+        return self.copy_pos(ast.Subscript(value=ast.Name(id=id, ctx=ast.Load()), slice=ast.Constant(pos), ctx=ctx))
 
     def new_call(self, name: str) -> ast.Call:
         func: ast.Name | ast.Attribute

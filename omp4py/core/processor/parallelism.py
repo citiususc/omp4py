@@ -33,11 +33,11 @@ def parallel(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | Non
             case names.C_PRIVATE:
                 common.data_add(ctx, data_scope, clause.args.array)
                 new_vars: list[str] = common.name_array(clause.args.array)
-                body_header.extend(common.data_rename(ctx, parallel_func.body, new_vars, '__omp.new'))
+                body_header.extend(common.data_rename(ctx, parallel_func.body, new_vars, f'{ctx.r}.new'))
             case names.C_FIRSTPRIVATE:
                 common.data_add(ctx, data_scope, clause.args.array)
                 new_vars: list[str] = common.name_array(clause.args.array)
-                body_header.extend(common.data_rename(ctx, parallel_func.body, new_vars, '__omp.copy'))
+                body_header.extend(common.data_rename(ctx, parallel_func.body, new_vars, f'{ctx.r}.copy'))
             case names.C_REDUCTION:
                 common.data_add(ctx, data_scope, clause.args.array)
                 op: OmpItem = common.get_item(clause.args.modifiers, names.M_REDUCTION_ID)
@@ -46,8 +46,8 @@ def parallel(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | Non
                 for item in clause.args.array:
                     if isinstance(item.value, ast.Subscript):
                         raise ctx.error('Array reduction not yet supported', item.value)
-                body_header.extend(common.data_rename(ctx, parallel_func.body, new_vars, f"__omp.r_{op_name}_init"))
-                parallel_func.body.extend(common.data_update(ctx, clause.args.array, f"__omp.r_{op_name}_comb"))
+                body_header.extend(common.data_rename(ctx, parallel_func.body, new_vars, f'{ctx.r}.r_{op_name}_init'))
+                parallel_func.body.extend(common.data_update(ctx, clause.args.array, f'{ctx.r}.r_{op_name}_comb'))
             case names.C_DEFAULT:
                 default_scope = clause.args.array[0].value
             case names.C_NUM_THREADS:
@@ -76,14 +76,14 @@ def parallel(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | Non
             body_header[0].names = [var for var in body_header[0].names if var in data_scope]
         case names.K_FIRSTPRIVATE:
             others: list[str] = [var for var in body_header[0].names if var not in data_scope]
-            body_header.extend(common.data_rename(ctx, parallel_func.body, others, '__omp.new'))
+            body_header.extend(common.data_rename(ctx, parallel_func.body, others, f'{ctx.r}.new'))
         case names.K_PRIVATE:
             others: list[str] = [var for var in body_header[0].names if var not in data_scope]
-            body_header.extend(common.data_rename(ctx, parallel_func.body, others, '__omp.copy'))
+            body_header.extend(common.data_rename(ctx, parallel_func.body, others, f'{ctx.r}.copy'))
 
     parallel_func.body = body_header + parallel_func.body
 
-    parallel_call: ast.Call = ctx.new_call("__omp.parallel_run")
+    parallel_call: ast.Call = ctx.new_call(f'{ctx.r}.parallel_run')
     parallel_call.args.append(ast.Name(id=parallel_name, ctx=ast.Load()))
     parallel_call.args.append(c_if)
     parallel_call.args.append(c_message)
@@ -129,11 +129,11 @@ def teams(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, 
             case names.C_PRIVATE:
                 common.data_add(ctx, data_scope, clause.args.array)
                 new_vars: list[str] = common.name_array(clause.args.array)
-                body_header.extend(common.data_rename(ctx, teams_func.body, new_vars, '__omp.new'))
+                body_header.extend(common.data_rename(ctx, teams_func.body, new_vars, f'{ctx.r}.new'))
             case names.C_FIRSTPRIVATE:
                 common.data_add(ctx, data_scope, clause.args.array)
                 new_vars: list[str] = common.name_array(clause.args.array)
-                body_header.extend(common.data_rename(ctx, teams_func.body, new_vars, '__omp.copy'))
+                body_header.extend(common.data_rename(ctx, teams_func.body, new_vars, f'{ctx.r}.copy'))
             case names.C_REDUCTION:
                 common.data_add(ctx, data_scope, clause.args.array)
                 op: OmpItem = common.get_item(clause.args.modifiers, names.M_REDUCTION_ID)
@@ -143,8 +143,8 @@ def teams(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, 
                 for item in clause.args.array:
                     if isinstance(item.value, ast.Subscript):
                         raise ctx.error('Array reduction not yet supported', item.value)
-                body_header.extend(common.data_rename(ctx, teams_func.body, new_vars, f"__omp.r_{op_name}_init"))
-                teams_func.body.extend(common.data_update(ctx, clause.args.array, f"__omp.r_{op_name}_comb"))
+                body_header.extend(common.data_rename(ctx, teams_func.body, new_vars, f'{ctx.r}.r_{op_name}_init'))
+                teams_func.body.extend(common.data_update(ctx, clause.args.array, f'{ctx.r}.r_{op_name}_comb'))
             case names.C_DEFAULT:
                 default_scope = clause.args.array[0].value
             case names.C_IF:
@@ -167,14 +167,14 @@ def teams(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, 
             body_header[0].names = [var for var in body_header[0].names if var in data_scope]
         case names.K_FIRSTPRIVATE:
             others: list[str] = [var for var in body_header[0].names if var not in data_scope]
-            body_header.extend(common.data_rename(ctx, teams_func.body, others, '__omp.new'))
+            body_header.extend(common.data_rename(ctx, teams_func.body, others, f'{ctx.r}.new'))
         case names.K_PRIVATE:
             others: list[str] = [var for var in body_header[0].names if var not in data_scope]
-            body_header.extend(common.data_rename(ctx, teams_func.body, others, '__omp.copy'))
+            body_header.extend(common.data_rename(ctx, teams_func.body, others, f'{ctx.r}.copy'))
 
     teams_func.body = body_header + teams_func.body
 
-    teams_call: ast.Call = ctx.new_call("__omp.teams_run")
+    teams_call: ast.Call = ctx.new_call(f'{ctx.r}.teams_run')
     teams_call.args.append(ast.Name(id=teams_name, ctx=ast.Load()))
     teams_call.args.append(c_if)
     teams_call.args.append(c_nteams)

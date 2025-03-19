@@ -2,8 +2,9 @@ import os
 import re
 import typing
 import omp4py.runtime.basics.array as array
-from  omp4py.runtime.common.enums import omp_sched_names
+import omp4py.runtime.common.enums as enums
 from omp4py.runtime.basics.types import *
+from omp4py.runtime.basics.casting import *
 
 __all__ = ['ScheduleVar', 'GlobalVars', 'DataEnvVars', 'DeviceVars', 'ITaskVars', 'ControlVars']
 
@@ -60,7 +61,7 @@ class ScheduleVar:
 
     @staticmethod
     def kind_int(kind: str) -> pyint:
-        return omp_sched_names.get(kind)
+        return int(enums.omp_enum_names.get(f'omp_sched_{kind}'))
 
     def __copy__(self):
         return ScheduleVar().set(self.monotonic, self.kind, self.chunk)

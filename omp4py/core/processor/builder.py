@@ -10,10 +10,16 @@ import tempfile
 
 import importlib.util
 import importlib.machinery
+import importlib.metadata
 
-from omp4py import runtime as __omp
+from omp4py.core.processor.nodes import ParserArgs
 
-__all__ = ['build', 'search_cache', 'get_cache_dir', 'gen_cache_key']
+__all__ = ['build', 'search_cache', 'get_cache_dir', 'gen_cache_key', '__version__']
+
+try:
+    __version__ = importlib.metadata.version(__package__ or __name__)
+except importlib.metadata.PackageNotFoundError:
+    __version__ = "0.0.0"
 
 try:
     import Cython.Build.Inline as cython_inline
@@ -26,12 +32,12 @@ except ImportError as ex:
         raise RuntimeError("compile error: cython and setuptools are required to compile") from ex
 
 
-def gen_cache_key(code: str, optimize: bool, _compile: bool):
+def gen_cache_key(code: str, _compile: bool, compiler_args: dict):
     value: str
     if _compile:
-        value = str((code, optimize, _compile, sys.version_info, cython_inline.Cython.__version__))
+        value = str((code, _compile, compiler_args, __version__, sys.version_info, cython_inline.Cython.__version__))
     else:
-        value = str((code, optimize, _compile))
+        value = str((code, _compile, compiler_args, __version__))
 
     return '__omp4py__' + hashlib.sha256(value.encode('utf-8')).hexdigest()
 
@@ -56,12 +62,17 @@ def get_cache_dir():
     return os.path.expanduser("~/.omp4py")
 
 
+def env(module: types.ModuleType):
+    import omp4py.runtime as __pure_omp
+    from omp4py import _runtime as __omp
+    module.__dict__['__ompp'] = __pure_omp
+    module.__dict__['__omp'] = __omp
+
+
 def load_dynamic(name: str, path: str) -> typing.Any:
     spec = importlib.util.spec_from_file_location(name, location=path)
     new_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(new_module)
-
-    new_module.__dict__['__omp'] = __omp
 
     return new_module.__dict__[new_module.__dict__['__omp4py__']]
 
@@ -77,22 +88,20 @@ def search_cache(module: types.ModuleType, cache_dir: str, cache_key: str) -> ty
             return None
         _fast_cache[cache_dir] = set(os.listdir(cache_dir))
 
-    module.__dict__['__omp'] = __omp
     for ext in importlib.machinery.SOURCE_SUFFIXES + importlib.machinery.EXTENSION_SUFFIXES:
         if cache_key + ext in _fast_cache[cache_dir]:
             return load_dynamic(cache_key, os.path.join(cache_dir, os.path.join(cache_key) + ext))
 
 
-def build(name: str, module: types.ModuleType, omp_ast: ast.Module, _compile: bool, compiler_args: dict, cache: bool,
-          cache_dir: str, debug: bool, cache_key: str) -> typing.Any:
-    if cache or _compile:
-        os.makedirs(cache_dir, exist_ok=True)
+def build(name: str, module: types.ModuleType, omp_ast: ast.Module, cache_key: str, args: ParserArgs) -> typing.Any:
+    if args.cache or args.compile:
+        os.makedirs(args.cache_dir, exist_ok=True)
         omp_ast.body.append(ast.Assign(targets=[ast.Name(id='__omp4py__', ctx=ast.Store())], value=ast.Constant(name)))
         ast.fix_missing_locations(omp_ast.body[-1])
 
-    if not _compile:
-        if cache:
-            py_file: str = os.path.join(cache_dir, cache_key) + '.py'
+    if not args.compile:
+        if args.cache:
+            py_file: str = os.path.join(args.cache_dir, cache_key) + '.py'
             with open(py_file, "w") as f:
                 f.write(ast.unparse(omp_ast))
             py_compile.compile(py_file)
@@ -100,7 +109,7 @@ def build(name: str, module: types.ModuleType, omp_ast: ast.Module, _compile: bo
         omp_object = compile(omp_ast, filename=module.__file__, mode="exec")
         result: dict[str, typing.Any] = {}
         exec(omp_object, module.__dict__, result)
-        module.__dict__['__omp'] = __omp
+        env(module)
 
         return result[name]
 
@@ -112,7 +121,7 @@ def build(name: str, module: types.ModuleType, omp_ast: ast.Module, _compile: bo
     with tempfile.TemporaryDirectory(prefix='omp4py') as build_dir:
         pyx_file: str = os.path.join(build_dir, cache_key) + '.pyx'
         with open(pyx_file, "w") as f:
-            f.write('cimport omp4py.runtime as __omp\n')
+            f.write('cimport omp4py.cruntime as __omp\n')
             f.write('import cython\n')
             f.write(f'__omp4py__="{name}"\n')
             f.write(ast.unparse(node))
@@ -131,19 +140,18 @@ def build(name: str, module: types.ModuleType, omp_ast: ast.Module, _compile: bo
             include_dirs=c_include_dirs or None,
             define_macros=define_macros or None,
         )
-        compiler_args = compiler_args.copy()
+        compiler_args = args.compiler_args.copy()
         compiler_args['freethreading_compatible'] = True
 
         build_extension = cython_inline._get_build_extension()
         build_extension.extensions = cython_inline.cythonize(
             [extension],
-            include_path=['.', os.path.join(cache_dir, 'include')],
+            include_path=['.', os.path.join(args.cache_dir, 'include')],
             compiler_directives=compiler_args,
-            quiet=not debug)
+            quiet=not args.debug)
         build_extension.build_temp = os.path.dirname(pyx_file)
-        build_extension.build_lib = cache_dir
+        build_extension.build_lib = args.cache_dir
         build_extension.run()
 
-    module.__dict__['__omp'] = __omp
-
-    return load_dynamic(cache_key, os.path.join(cache_dir, cache_key) + build_extension.get_ext_filename(''))
+    env(module)
+    return load_dynamic(cache_key, os.path.join(args.cache_dir, cache_key) + build_extension.get_ext_filename(''))

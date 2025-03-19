@@ -1,6 +1,7 @@
 import ast
 import typing
 import symtable
+import dataclasses
 
 from omp4py.core.processor.processor import NodeContext
 from omp4py.core.directive import OmpItem
@@ -26,6 +27,7 @@ def is_constant(expr: ast.expr) -> bool:
         if isinstance(node, (ast.Name, ast.NamedExpr, ast.Call)):
             return False
     return True
+
 
 def code_to_function(ctx: NodeContext, fname: str, body: list[ast.stmt]) -> (ast.FunctionDef, list[str]):
     maybe_ref: list[str] = list(ctx.variables.names)
@@ -108,6 +110,7 @@ def data_update(ctx: NodeContext, new_vars: typing.Iterable[OmpItem], op: str) -
 
     return result
 
+
 def data_delete(ctx: NodeContext, old_variables: Variables) -> list[ast.stmt]:
     name: str
     del_vars: ast.Delete = ctx.copy_pos(ast.Delete(targets=[]))
@@ -120,7 +123,7 @@ def data_delete(ctx: NodeContext, old_variables: Variables) -> list[ast.stmt]:
 
 
 def barrier(ctx: NodeContext) -> ast.stmt:
-    return ctx.copy_pos(ast.Expr(ctx.new_call("__omp.barrier")))
+    return ctx.copy_pos(ast.Expr(ctx.new_call(f'{ctx.r}.barrier')))
 
 
 def no_wait(ctx: NodeContext, expr: ast.expr) -> ast.stmt:

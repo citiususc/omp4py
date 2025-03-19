@@ -12,8 +12,8 @@ def critical(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | Non
     check_body(body)
     new_body: list[ast.stmt] = list()
 
-    lock: ast.Call = ctx.new_call("__omp.mutex_lock")
-    unlock: ast.Call = ctx.new_call("__omp.mutex_unlock")
+    lock: ast.Call = ctx.new_call(f'{ctx.r}.mutex_lock')
+    unlock: ast.Call = ctx.new_call(f'{ctx.r}.mutex_unlock')
 
     new_body.append(ctx.copy_pos(ast.Expr(lock)))
     new_body.extend(body)

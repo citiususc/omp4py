@@ -7,7 +7,8 @@ __all__ = ['omp_sched_t',
            'omp_sched_dynamic',
            'omp_sched_guided',
            'omp_sched_auto',
-           'omp_sched_monotonic']
+           'omp_sched_monotonic',
+           'omp_enum_names']
 
 
 class BaseEnum:
@@ -58,4 +59,12 @@ omp_sched_dynamic: omp_sched_t = omp_sched_t(0x2)
 omp_sched_guided: omp_sched_t = omp_sched_t(0x3)
 omp_sched_auto: omp_sched_t = omp_sched_t(0x4)
 omp_sched_monotonic: omp_sched_t = omp_sched_t(0x80000000)
-omp_sched_names: dict[str, int] = {key.split('_')[-1]: val for key, val in globals().items() if isinstance(val, int)}
+
+globals()['omp_sched_static'] = omp_sched_static
+globals()['omp_sched_dynamic'] = omp_sched_dynamic
+globals()['omp_sched_guided'] = omp_sched_guided
+globals()['omp_sched_auto'] = omp_sched_auto
+globals()['omp_sched_monotonic'] = omp_sched_monotonic
+
+omp_enum_names: dict[str, BaseEnum] = {name: value for name, value in globals().items() if isinstance(value, BaseEnum)}
+globals()['omp_enum_names'] = omp_enum_names

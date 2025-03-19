@@ -1,7 +1,8 @@
 import typing
 from omp4py.runtime.common import controlvars, thread
-from omp4py.runtime.common.enums import *
-from omp4py.runtime.basics.types import *
+from omp4py.runtime.common.enums import * #pyexport
+from omp4py.runtime.basics.types import * #pyexport
+from omp4py.runtime.basics.casting import *
 
 __all__ = [  # Parallel Region Support Routines
     'omp_set_num_threads',
@@ -71,6 +72,10 @@ __all__ = [  # Parallel Region Support Routines
     # Thread Affinity Routines
 
     # Execution Control Routines
+
+    # Typing
+    'pyint',
+    'pyfloat'
 ]
 
 

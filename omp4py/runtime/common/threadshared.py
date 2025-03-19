@@ -2,6 +2,7 @@ import typing
 from omp4py.runtime.basics import atomic, lock
 from omp4py.runtime.common import controlvars
 from omp4py.runtime.basics.types import *
+from omp4py.runtime.basics.casting import *
 
 
 class _SharedEntry:

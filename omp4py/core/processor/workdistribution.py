@@ -14,7 +14,7 @@ from omp4py.core.processor.nodes import (NodeContext, Variables, node_name, dire
 def single(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, ctx: NodeContext) -> list[ast.stmt]:
     check_body(body)
     old_variables: Variables = ctx.variables.new_scope()
-    single_call: ast.Call = ctx.new_call("__omp.single")
+    single_call: ast.Call = ctx.new_call(f'{ctx.r}.single')
     single_call.args.append(ast.Name(id='__name__', ctx=ast.Load()))
     single_call.args.append(ast.Constant(value=ctx.directive.lineno))
     single_call.args.append(ast.Constant(value=ctx.directive.col_offset))
@@ -35,11 +35,11 @@ def single(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None,
             case names.C_PRIVATE:
                 common.data_add(ctx, data_scope, clause.args.array)
                 new_vars: list[str] = common.name_array(clause.args.array)
-                body_header.extend(common.data_rename(ctx, body, new_vars, '__omp.new'))
+                body_header.extend(common.data_rename(ctx, body, new_vars, f'{ctx.r}.new'))
             case names.C_FIRSTPRIVATE:
                 common.data_add(ctx, data_scope, clause.args.array)
                 new_vars: list[str] = common.name_array(clause.args.array)
-                body_header.extend(common.data_rename(ctx, body, new_vars, '__omp.copy'))
+                body_header.extend(common.data_rename(ctx, body, new_vars, f'{ctx.r}.copy'))
             case names.C_NOWAIT:
                 if clause.args is None:
                     c_nowait = ast.Constant(value=True)
@@ -52,8 +52,8 @@ def single(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None,
 
     if len(c_pcopy) > 0:
         copyprivate_name: str = ctx.new_id("copyprivate")
-        cp_write: ast.Call = ctx.new_call("__omp.copyprivate_write")
-        cp_read: ast.Call = ctx.new_call("__omp.copyprivate_read")
+        cp_write: ast.Call = ctx.new_call(f'{ctx.r}copyprivate_write')
+        cp_read: ast.Call = ctx.new_call(f'{ctx.r}copyprivate_read')
         cp_write.args.append(c_nowait)
         cp_read.args.append(c_nowait)
 
@@ -108,11 +108,11 @@ def sections(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | Non
             case names.C_PRIVATE:
                 common.data_add(ctx, data_scope, clause.args.array)
                 new_vars: list[str] = common.name_array(clause.args.array)
-                body_header.extend(common.data_rename(ctx, body, new_vars, '__omp.new'))
+                body_header.extend(common.data_rename(ctx, body, new_vars, f'{ctx.r}.new'))
             case names.C_FIRSTPRIVATE:
                 common.data_add(ctx, data_scope, clause.args.array)
                 new_vars: list[str] = common.name_array(clause.args.array)
-                body_header.extend(common.data_rename(ctx, body, new_vars, '__omp.copy'))
+                body_header.extend(common.data_rename(ctx, body, new_vars, f'{ctx.r}.copy'))
             case names.C_REDUCTION:
                 common.data_add(ctx, data_scope, clause.args.array)
                 op: OmpItem = common.get_item(clause.args.modifiers, names.M_REDUCTION_ID)
@@ -121,8 +121,8 @@ def sections(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | Non
                 for item in clause.args.array:
                     if isinstance(item.value, ast.Subscript):
                         raise ctx.error('Array reduction not yet supported', item.value)
-                body_header.extend(common.data_rename(ctx, body, new_vars, f"__omp.r_{op_name}_init"))
-                body_footer.extend(common.data_update(ctx, clause.args.array, f"__omp.r_{op_name}_comb"))
+                body_header.extend(common.data_rename(ctx, body, new_vars, f'{ctx.r}.r_{op_name}_init'))
+                body_footer.extend(common.data_update(ctx, clause.args.array, f'{ctx.r}.r_{op_name}_comb'))
             case names.C_NOWAIT:
                 if clause.args is None:
                     c_nowait = ast.Constant(value=True)
@@ -136,7 +136,7 @@ def sections(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | Non
     stmt: ast.stmt
     i: int
     for i, stmt in enumerate(body):
-        sections_call: ast.Call = ctx.new_call("__omp.section")
+        sections_call: ast.Call = ctx.new_call(f'{ctx.r}.section')
         sections_call.args.append(ast.Constant(value=i))
         sections_call.args.append(ast.Constant(value=len(body) - 1))
 
@@ -176,14 +176,14 @@ def for_(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, c
     body_footer: list[ast.stmt] = []
     new_body: list[ast.stmt] = []
 
-    for_init: ast.Call = ctx.new_call("__omp.for_init")
-    for_bounds: ast.Call = ctx.new_call("__omp.for_bounds")
+    for_init: ast.Call = ctx.new_call(f'{ctx.r}.for_init')
+    for_bounds: ast.Call = ctx.new_call(f'{ctx.r}.for_bounds')
     name_bound: str = ctx.new_id("bounds")
 
     new_body.append(ctx.copy_pos(ast.Assign(targets=[ast.Name(id=name_bound, ctx=ast.Store())], value=for_bounds)))
     new_body.append(ctx.copy_pos(ast.Expr(for_init)))
 
-    for_chunk: ast.Call = ctx.new_call("__omp.for_next")
+    for_chunk: ast.Call = ctx.new_call(f'{ctx.r}.for_next')
     while_chunk: ast.While = ast.While(test=for_chunk, body=[], orelse=[])
     while_chunk.body = body
     for_chunk.args.append(ast.Name(id=name_bound, ctx=ast.Load()))
@@ -227,11 +227,11 @@ def for_(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, c
             case names.C_PRIVATE:
                 common.data_add(ctx, data_scope, clause.args.array)
                 new_vars: list[str] = common.name_array(clause.args.array)
-                body_header.extend(common.data_rename(ctx, body, new_vars, '__omp.new'))
+                body_header.extend(common.data_rename(ctx, body, new_vars, f'{ctx.r}.new'))
             case names.C_FIRSTPRIVATE:
                 common.data_add(ctx, data_scope, clause.args.array)
                 new_vars: list[str] = common.name_array(clause.args.array)
-                body_header.extend(common.data_rename(ctx, body, new_vars, '__omp.copy'))
+                body_header.extend(common.data_rename(ctx, body, new_vars, f'{ctx.r}.copy'))
             case names.C_LASTPRIVATE:
                 raise clause_not_implemented(clause)
             case names.C_REDUCTION:
@@ -242,8 +242,8 @@ def for_(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, c
                 for item in clause.args.array:
                     if isinstance(item.value, ast.Subscript):
                         raise ctx.error('Array reduction not yet supported', item.value)
-                body_header.extend(common.data_rename(ctx, body, new_vars, f"__omp.r_{op_name}_init"))
-                body_footer.extend(common.data_update(ctx, clause.args.array, f"__omp.r_{op_name}_comb"))
+                body_header.extend(common.data_rename(ctx, body, new_vars, f'{ctx.r}.r_{op_name}_init'))
+                body_footer.extend(common.data_update(ctx, clause.args.array, f'{ctx.r}.r_{op_name}_comb'))
             case names.C_INDUCTION:
                 raise clause_not_implemented(clause)
             case names.C_LINEAR:

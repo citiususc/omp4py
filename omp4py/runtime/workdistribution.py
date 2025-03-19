@@ -1,6 +1,7 @@
 from omp4py.runtime.basics.types import *
 from omp4py.runtime.basics import array, math, atomic
 from omp4py.runtime.common import controlvars, thread, tasks, enums
+from omp4py.runtime.basics.casting import *
 
 _static: pyint = cast(pyint, enums.omp_sched_static)
 _dynamic: pyint = cast(pyint, enums.omp_sched_dynamic)

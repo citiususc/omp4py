@@ -19,32 +19,34 @@ def copy(src: str, target: str, update: typing.Callable[[str], str]) -> str:
 
 
 def import_update(ifaces: list[str]) -> typing.Callable[[str], str]:
-    p: re.Pattern[str] = re.compile(r'(from|import)\s+(\S+)\s+(import\s)?')
+    p: re.Pattern[str] = re.compile(r'(from|import)\s+(\S+)[^\n;]+')
 
-    names: dict[str, str] = {}
+    modules: dict[str, str] = {}
+
     iface: str
     for iface in ifaces:
         name: str = iface.replace('/', '.')[:-4]
         if name.endswith('.__init__'):
             name = name[:-len('.__init__')]
 
-        names[name.replace('.cruntime', '.runtime')] = f'cython.cimports.{name}'
+        modules[name.replace('.cruntime', '.runtime')] = f'cython.cimports.{name}'
 
-    def update(m: re.Match[str]) -> str:
-        if m.group(2) not in names:
-            return m.group(0)
+    def wrap(m: re.Match[str]) -> str:
+        if m.group(2) == 'omp4py.runtime.basics.casting':
+            if m.group(1) == 'import':
+                return m.group(0).replace(m.group(2), 'cython')
+            return 'from cython import cast'
 
-        head: str = ''
-        if m.group(2) == 'omp4py.runtime.basics.types':
-            head = 'from cython import cast;'
+        if m.group(2) in modules:
+            head: str = ''
+            if '#pyexport' in m.group(0):
+                code: str = m.group(0).replace('.runtime', '.cruntime')
+                head = f'exec("{code}");'
+            return head + m.group().replace(m.group(2), modules[m.group(2)])
+        return m.group(0)
 
-        return head + m.group().replace(m.group(2), names[m.group(2)])
-
-    return lambda s: p.sub(update, s)
-
-
-def enable_cruntime(txt: str) -> str:
-    return txt.replace('runtime', 'cruntime') + '\nomp4py_compiled=True\n'
+    txt: str
+    return lambda txt: p.sub(wrap, txt)
 
 
 if __name__ == "__main__":
@@ -62,20 +64,22 @@ if __name__ == "__main__":
     extensions: list[str] = []
     file: str
     for file in ifaces:
-        if file.endswith('/__init__.pxd'):
-            continue
-
         if file[:-3] + 'pyx' in cfiles:
             extensions.append(os.path.join('build', file[:-3] + 'pyx'))
         else:
             pyfile: str = file[:-3].replace('/cruntime', '/runtime') + 'py'
+            if file.endswith('/__init__.pxd'):
+                copy(pyfile, os.path.join('build', file[:-3] + 'py'), lambda txt: txt.replace('.runtime', '.cruntime'))
+                continue
+
             if pyfile not in pyfiles:
                 continue
             extensions.append(copy(pyfile, os.path.join('build', file[:-3] + 'py'), update))
 
-    copy('build/omp4py/runtime/__init__.py', 'build/omp4py/cruntime/__init__.py', enable_cruntime)
+    with open('build/omp4py/cruntime/__init__.py', 'a') as out:
+        out.write('\nomp4py_compiled = True\n')
 
-    compiler_directives: dict = {'freethreading_compatible': True}
+    compiler_directives: dict = {'freethreading_compatible': True, 'annotation_typing': True}
     ext_modules = cythonize(extensions, language_level="3", annotate=True, compiler_directives=compiler_directives)
 
     cmd = build_ext(Distribution({
@@ -86,4 +90,4 @@ if __name__ == "__main__":
     cmd.run()
 
     for output in cmd.get_outputs():
-        copyfile(output, os.path.relpath(output, cmd.build_lib))
+        copyfile(output, os.path.join('build', os.path.relpath(output, cmd.build_lib)))

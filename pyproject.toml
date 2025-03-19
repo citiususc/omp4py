@@ -39,12 +39,19 @@ timeout = 10
 
 [tool.poetry]
 requires-poetry = ">=2.0"
+packages = [
+    { include = "omp4py" },
+    { include = "omp4py", from = "build", format = "wheel" },
+]
+
 include = [
-    { path = "omp4py/**/*.so", format = "wheel" },
+    { path = "build/omp4py/**/*.so", format = "wheel" },
+    { path = "omp4py/cruntime/__init__.py", format = "sdist" },
+    { path = "build/omp4py/cruntime/__init__.py", format = "wheel" },
 ]
 
 exclude = [
-    "omp4py/**/*.so"
+    "omp4py/cruntime/__init__.py",
 ]
 
 [tool.poetry.build]

@@ -11,4 +11,4 @@ cdef omp_sched_t omp_sched_dynamic
 cdef omp_sched_t omp_sched_guided
 cdef omp_sched_t omp_sched_auto
 cdef omp_sched_t omp_sched_monotonic
-cdef dict[str, str] omp_sched_names
+cdef dict[str, BaseEnum] omp_enum_names

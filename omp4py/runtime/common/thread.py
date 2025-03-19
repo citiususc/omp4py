@@ -2,7 +2,7 @@ import omp4py.runtime.common.tasks as tasks
 import omp4py.runtime.basics.threadlocal as threadlocal
 import omp4py.runtime.common.controlvars as controlvars
 import omp4py.runtime.common.threadshared as threadshared
-from omp4py.runtime.basics.types import *
+from omp4py.runtime.basics.casting import *
 
 __all__ = ['OmpThread', 'init', 'current', 'cvars']
 
