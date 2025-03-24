@@ -124,9 +124,18 @@ def omp(arg: Any = None, /, *, alias: str = "", cache: bool = _cache, dump: bool
         pure: bool = _pure, compile: bool = _compile, compiler_args: dict = _compiler_args, compiler_modules: list = [],
         force: bool = _force, cache_dir: str = _cache_dir) -> Any:
     def wrap(arg):
-        return omp_parse(arg,
-                         ParserArgs(alias, cache, dump, debug, pure and not compile, compile,
-                                    _compiler_args_default | compiler_args, list(compiler_modules), force, cache_dir))
+        try:
+            return omp_parse(arg,
+                             ParserArgs(alias, cache, dump, debug, pure, compile,
+                                        _compiler_args_default | compiler_args,
+                                        list(compiler_modules), force, cache_dir))
+        except SyntaxError as ex:
+            if not debug:
+                try:
+                    raise SyntaxError()
+                except SyntaxError as ex2:
+                    ex.__traceback__ = ex2.__traceback__
+            raise
 
     if arg is None:
         return wrap
@@ -135,11 +144,6 @@ def omp(arg: Any = None, /, *, alias: str = "", cache: bool = _cache, dump: bool
         return contextmanager(lambda: (yield))()
 
     return wrap(arg)
-
-
-@dataclasses.dataclass
-class WrapperException(Exception):
-    wrap: Exception
 
 
 def check_func(fm: Any, src_filename: str, src_start: int, src_line: str):
@@ -205,18 +209,12 @@ class OmpTransformer(ast.NodeTransformer):
         self.attibutes = False
 
     def transform(self, node: ast.Module) -> ast.Module:
-        try:
-            return cast(ast.Module, self.visit(node))
-        except WrapperException as ex:
-            raise ex.wrap from None
+        return cast(ast.Module, self.visit(node))
 
     def visit(self, node: ast.AST) -> ast.AST:
         self.ctx.stack.append(node)
         directive_callback_old: typing.Any = self.ctx.directive_callback
-        try:
-            new_node: ast.AST = super().visit(node)
-        except SyntaxError as ex:
-            raise WrapperException(ex)
+        new_node: ast.AST = super().visit(node)
         self.ctx.directive_callback = directive_callback_old
         self.ctx.stack.pop()
         return new_node

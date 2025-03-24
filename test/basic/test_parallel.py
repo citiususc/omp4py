@@ -116,7 +116,7 @@ def parallel_var_dup_error():
 
 def test_parallel_var_dup_error():
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(parallel_var_dup_error)()
 
 
@@ -181,7 +181,7 @@ def parallel_shared_noexist_error():
 
 def test_parallel_shared_noexist_error():
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(parallel_shared_noexist_error)()
 
 
@@ -197,7 +197,7 @@ def parallel_firstprivate_noexist_error():
 
 def test_parallel_firstprivate_noexist_error():
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(parallel_firstprivate_noexist_error)()
 
 
@@ -295,7 +295,7 @@ def parallel_default_error():
 
 
 def test_parallel_default_error():
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(parallel_default_error)()
 
 
@@ -310,7 +310,7 @@ def parallel_default_private_error():
 
 
 def test_parallel_default_private_error():
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(parallel_default_private_error)()
 
 
@@ -394,7 +394,7 @@ def parallel_reduction_error():
 
 def test_parallel_reduction_error():
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(parallel_reduction_error)()
 
 
@@ -410,7 +410,7 @@ def parallel_reduction_format_error():
 
 def test_parallel_reduction_format_error():
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(parallel_reduction_format_error)()
 
 
@@ -426,7 +426,7 @@ def parallel_reduction_op_error():
 
 def test_parallel_reduction_op_error():
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(parallel_reduction_op_error)()
 
 
@@ -458,7 +458,7 @@ def parallel_reduction_dup_error():
 
 def test_parallel_reduction_dup_error():
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(parallel_reduction_dup_error)()
 
 
@@ -496,7 +496,7 @@ def parallel_return_error():
 
 def test_parallel_return_error():
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(parallel_return_error)()
 
 
@@ -512,7 +512,7 @@ def parallel_yield_error():
 
 def test_parallel_yield_error():
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(parallel_yield_error)()
 
 
@@ -528,7 +528,7 @@ def parallel_yieldfrom_error():
 
 def test_parallel_yieldfrom_error():
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(parallel_yieldfrom_error)()
 
 

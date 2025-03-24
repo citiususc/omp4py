@@ -107,7 +107,7 @@ def single_var_dup_error():
 def test_var_dup_error():
     q = Queue()
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(single_var_dup_error)(q)
 
 

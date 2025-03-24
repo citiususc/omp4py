@@ -49,7 +49,7 @@ def atomic_error():
 
 def test_atomic_error():
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(atomic_error)()
 
 
@@ -67,7 +67,7 @@ def atomic_error2():
 
 def test_atomic_error2():
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(atomic_error2)()
 
 

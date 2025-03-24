@@ -121,7 +121,10 @@ def build(name: str, module: types.ModuleType, omp_ast: ast.Module, cache_key: s
     with tempfile.TemporaryDirectory(prefix='omp4py') as build_dir:
         pyx_file: str = os.path.join(build_dir, cache_key) + '.pyx'
         with open(pyx_file, "w") as f:
-            f.write('cimport omp4py.cruntime as __omp\n')
+            if not args.pure:
+                f.write('cimport omp4py.cruntime as __omp\n')
+            else:
+                f.write('import omp4py.runtime as __ompp\n')
             f.write('import cython\n')
             f.write(f'__omp4py__="{name}"\n')
             f.write(ast.unparse(node))

@@ -13,16 +13,21 @@ requires-python = ">=3.12"
 dependencies = []
 
 
-[tool.poetry.dev-dependencies]
-coverage = { extras = ["toml"], version = "^7.5" }
-pytest = "^8.2"
-pytest-timeout = "^2.3"
+[tool.poetry.group.test.dependencies]
+pytest = "^8.3.5"
+pytest-cov = "^6.0.0"
+tblib = "^3.0.0"
 
+[tool.pytest.ini_options]
+addopts = "-v --cov --cov-report=html"
+testpaths = [
+    "test",
+]
+timeout = 3
 
 [tool.coverage.run]
 branch = true
 include = ["omp4py/*"]
-command_line = "-m pytest -v"
 
 
 [tool.coverage.html]
@@ -31,11 +36,8 @@ directory = "coverage_html_report"
 
 [tool.coverage.report]
 show_missing = true
-exclude_also = ["^import", "^from"]
+exclude_also = ["^import", "^from", "^\\s*pass"]
 
-
-[tool.pytest.ini_options]
-timeout = 10
 
 [tool.poetry]
 requires-poetry = ">=2.0"

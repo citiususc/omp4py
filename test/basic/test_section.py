@@ -63,7 +63,7 @@ def section_nested_error():
 
 def test_section_nested_error():
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(section_nested_error)()
 
 
@@ -78,7 +78,7 @@ def section_only_error():
 
 def test_section_only_error():
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(section_only_error)()
 
 
@@ -95,7 +95,7 @@ def section_only_error2():
 
 def test_section_only_error2():
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(section_only_error2)()
 
 
@@ -148,7 +148,7 @@ def section_var_dup_error():
 
 def test_section_var_dup_error():
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(section_var_dup_error)()
 
 

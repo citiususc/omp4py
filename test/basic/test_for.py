@@ -32,7 +32,7 @@ def for_no_loop_error(q: Queue):
 
 def test_for_no_loop_error():
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(for_no_loop_error)()
 
 
@@ -64,7 +64,7 @@ def for_no_range_error(q: Queue):
 
 def test_for_no_range_error():
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(for_no_range_error)()
 
 
@@ -130,7 +130,7 @@ def test_for_schedule_runtime_chunk_error():
     q = Queue()
     omp_set_num_threads(2)
     omp_set_schedule(omp_sched_static, -1)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(for_schedule_runtime_chunk_error)(q)
 
 
@@ -146,7 +146,7 @@ def for_schedule_auto_chunk_error(q: Queue):
 def test_for_schedule_auto_chunk_error():
     q = Queue()
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(for_schedule_auto_chunk_error)(q, "1")
 
 
@@ -257,7 +257,7 @@ def for_schedule_as_var_error(q: Queue, var_schedule):
 def test_for_schedule_as_var_error():
     q = Queue()
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(for_schedule_as_var_error)(q, "static")
 
 
@@ -309,7 +309,7 @@ def for_collapse_var_error(q: Queue, n: int):
 def test_for_collapse_var_error():
     q = Queue()
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(for_collapse_var_error)(q, 2)
 
 
@@ -327,7 +327,7 @@ def for_collapse_nested_error(q: Queue):
 def test_for_nested_var_error():
     q = Queue()
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(for_collapse_var_error)(q)
 
 
@@ -364,7 +364,7 @@ def for_ordered_multiple_error(q: Queue):
 def test_for_ordered_multiple_error():
     q = Queue()
     omp_set_num_threads(1)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(for_ordered_multiple_error)(q)
 
 
@@ -547,7 +547,7 @@ def for_reduction_private_error():
 def test_for_reduction_private_error():
     omp_set_num_threads(2)
 
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(for_reduction_private_error)()
 
 
@@ -563,7 +563,7 @@ def for_var_dup_error():
 def test_for_var_dup_error():
     omp_set_num_threads(2)
 
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(for_var_dup_error)()
 
 
@@ -581,7 +581,7 @@ def for_var_dup_error2():
 def test_for_var_dup_error2():
     omp_set_num_threads(2)
 
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(for_var_dup_error2)()
 
 
@@ -614,7 +614,7 @@ def for_lastprivate_var_error():
 
 def test_for_lastprivate_var_error():
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         assert omp(for_lastprivate_var_error)()
 
 
@@ -666,7 +666,7 @@ def for_break_error():
 
 def test_for_break_error():
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(for_break_error)()
 
 ################################################

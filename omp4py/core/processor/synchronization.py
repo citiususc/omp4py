@@ -9,7 +9,7 @@ from omp4py.core.processor import common
 
 @omp_processor(names.D_CRITICAL)
 def critical(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, ctx: NodeContext) -> list[ast.stmt]:
-    check_body(body)
+    check_body(ctx, body)
     new_body: list[ast.stmt] = list()
 
     lock: ast.Call = ctx.new_call(f'{ctx.r}.mutex_lock')
@@ -23,5 +23,5 @@ def critical(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | Non
 
 @omp_processor(names.D_BARRIER)
 def barrier(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, ctx: NodeContext) -> list[ast.stmt]:
-    check_nobody(body)
+    check_nobody(ctx, body)
     return [ctx.copy_pos(common.barrier(ctx))]

@@ -149,14 +149,17 @@ class NodeContext:
         return copy.deepcopy(node)
 
 
-def check_body(body: list[ast.stmt]):
+def check_body(ctx: NodeContext, body: list[ast.stmt]):
     if len(body) == 0:
-        raise ValueError("directive requires statements body")
+        raise ctx.error("directive requires statements body", ctx.directive)
 
 
-def check_nobody(body: list[ast.stmt]):
-    if len(body) > 0:
-        raise ValueError("no statements body allowed")
+def check_nobody(ctx: NodeContext, body: list[ast.stmt]):
+    s: ast.stmt
+    for s in body:
+        if isinstance(s, ast.Pass) or (isinstance(s, ast.Constant) and s.value is ...):
+            continue
+        raise ctx.error("no statements body allowed", body[0])
 
 
 def clause_not_implemented(clause: OmpClause) -> SyntaxError:

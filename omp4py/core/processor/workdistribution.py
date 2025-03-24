@@ -12,7 +12,7 @@ from omp4py.core.processor.nodes import (NodeContext, Variables, node_name, dire
 
 @omp_processor(names.D_SINGLE)
 def single(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, ctx: NodeContext) -> list[ast.stmt]:
-    check_body(body)
+    check_body(ctx, body)
     old_variables: Variables = ctx.variables.new_scope()
     single_call: ast.Call = ctx.new_call(f'{ctx.r}.single')
     single_call.args.append(ast.Name(id='__name__', ctx=ast.Load()))
@@ -93,7 +93,7 @@ def is_section(ctx: NodeContext, stmt: ast.stmt) -> bool:
 
 @omp_processor(names.D_SECTIONS)
 def sections(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, ctx: NodeContext) -> list[ast.stmt]:
-    check_body(body)
+    check_body(ctx, body)
     old_variables: Variables = ctx.variables.new_scope()
     new_body: list[ast.stmt] = list()
     body_header: list[ast.stmt] = list()
@@ -163,7 +163,7 @@ def section(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None
 
 @omp_processor(names.D_FOR)
 def for_(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, ctx: NodeContext) -> list[ast.stmt]:
-    check_body(body)
+    check_body(ctx, body)
 
     if not isinstance(body[0], ast.For):
         raise ctx.error("for statement expected", body[0])

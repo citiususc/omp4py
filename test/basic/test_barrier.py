@@ -52,7 +52,7 @@ def barrier_no_with_error(q: Queue):
 def test_barrier_no_with_error():
     q = Queue()
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(barrier_no_with_error)(q)
 
 
@@ -70,7 +70,7 @@ def barrier_body_error(q: Queue):
 def test_barrier_body_error():
     q = Queue()
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(barrier_body_error)(q)
 
 ################################################

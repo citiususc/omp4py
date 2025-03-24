@@ -90,7 +90,7 @@ def task_default_none_error():
 
 def test_task_default_none_error():
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(task_default_none_error)()
 
 
@@ -107,7 +107,7 @@ def task_private_shared_error():
 
 def test_task_private_shared_error():
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(task_private_shared_error)()
 
 
@@ -212,7 +212,7 @@ def task_taskwait_body_error(q: Queue):
 def test_task_taskwait_body_error():
     q = Queue()
     omp_set_num_threads(2)
-    with pytest.raises(OmpSyntaxError):
+    with pytest.raises(SyntaxError):
         omp(task_taskwait_body_error)(q)
 
 

@@ -9,7 +9,7 @@ from omp4py.core.processor import common
 
 @omp_processor(names.D_PARALLEL)
 def parallel(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, ctx: NodeContext) -> list[ast.stmt]:
-    check_body(body)
+    check_body(ctx, body)
     parallel_name: str = ctx.new_id(names.D_PARALLEL)
     parallel_func: ast.FunctionDef
     parallel_func, _ = common.code_to_function(ctx, parallel_name, body)
@@ -108,7 +108,7 @@ def teams_callback(ctx: NodeContext, child: OmpDirective) -> None:
 @omp_processor(names.D_TEAMS)
 def teams(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, ctx: NodeContext) -> list[ast.stmt]:
     ctx.directive_callback = teams_callback
-    check_body(body)
+    check_body(ctx, body)
     teams_name: str = ctx.new_id(names.D_TEAMS)
     teams_func: ast.FunctionDef
     teams_func, _ = common.code_to_function(ctx, teams_name, body)
