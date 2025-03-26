@@ -3,15 +3,16 @@ import sys
 import time
 import types
 import pickle
-import inspect
 import threading
 from threading import Thread
 from typing import Any, Callable
-from multiprocessing import Process, SimpleQueue as Queue
+from multiprocessing import get_context
 
 from tblib import Traceback, pickling_support
 
 __all__ = ['proctest', 'proctest10']
+
+mp = get_context("spawn")
 
 
 def _end__coverage() -> None:
@@ -37,7 +38,7 @@ def _thread_trace(frame: types.FrameType, next: types.TracebackType | None = Non
                                                            tb_lineno=frame.f_lineno))
 
 
-def _timeout(n: float, q: Queue) -> None:
+def _timeout(n: float, q: mp.Queue) -> None:
     time.sleep(n)
     try:
         thread_frame: types.FrameType = sys._current_frames()[threading.main_thread().ident]
@@ -51,7 +52,7 @@ def _timeout(n: float, q: Queue) -> None:
         os._exit(1)
 
 
-def _run_subproc_child(bf: bytes, timeout: float | None, q: Queue, args, kwargs) -> None:
+def _run_subproc_child(bf: bytes, timeout: float | None, q: mp.Queue, args, kwargs) -> None:
     _coverage()
     f: Callable = pickle.loads(bf)
     if timeout is not None:
@@ -60,14 +61,22 @@ def _run_subproc_child(bf: bytes, timeout: float | None, q: Queue, args, kwargs)
         result: Any = f(*args, **kwargs)
         q.put((True, result))
     except BaseException as ex:
+        if ex.__class__.__module__ == 'builtins' and not hasattr(sys.modules['builtins'], ex.__class__.__name__):
+            if ex.__class__.__base__ is not None and \
+                    ex.__class__.__base__.__module__ != 'builtins' and \
+                    hasattr(sys.modules[ex.__class__.__base__.__module__], ex.__class__.__name__):
+                ex.__class__.__module__ = ex.__class__.__base__.__module__
+            else:
+                ex = RuntimeError(f'builtin <{ex.__class__.__name__}> exception: {ex}').with_traceback(ex.__traceback__)
+
         pickling_support.install()
         q.put((False, ex))
 
 
 def _run_subproc_parent(bf: bytes, timeout: float | None, args, kwargs) -> (bool, Any):
-    q: Queue = Queue()
+    q: mp.Queue = mp.Queue()
 
-    p: Process = Process(target=_run_subproc_child, args=(bf, timeout, q, args, kwargs))
+    p: mp.Process = mp.Process(target=_run_subproc_child, args=(bf, timeout, q, args, kwargs))
     p.start()
     p.join()
     if q.empty():
@@ -77,12 +86,6 @@ def _run_subproc_parent(bf: bytes, timeout: float | None, args, kwargs) -> (bool
 
 def proctest(f0: Callable | None = None, /, *, timeout: float | None = None) -> Any:
     def wrapper(f: Callable):
-        module: types.ModuleType = inspect.getmodule(f)
-        new_name: str = '__' + f.__name__
-        f.__qualname__ = f.__qualname__.replace(f.__name__, new_name)
-        f.__name__ = new_name
-        module.__dict__[f.__name__] = f
-
         bf: bytes = pickle.dumps(f)
 
         def test(*args, **kwargs):
@@ -95,7 +98,7 @@ def proctest(f0: Callable | None = None, /, *, timeout: float | None = None) -> 
             bt: types.TracebackType = Traceback(result.__traceback__).tb_next.as_traceback()
             try:
                 raise result
-            except Exception as ex:
+            except BaseException as ex:
                 ex.__traceback__ = bt
                 raise
 

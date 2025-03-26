@@ -147,7 +147,7 @@ def test_for_schedule_auto_chunk_error():
     q = Queue()
     omp_set_num_threads(2)
     with pytest.raises(SyntaxError):
-        omp(for_schedule_auto_chunk_error)(q, "1")
+        omp(for_schedule_auto_chunk_error)(q)
 
 
 ################################################

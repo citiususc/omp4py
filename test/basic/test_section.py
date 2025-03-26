@@ -45,7 +45,7 @@ def section_parallel(q: Queue):
             q.put(0)
 
 
-def test_section_paralle():
+def test_section_parallel():
     q = Queue()
     omp_set_num_threads(2)
     omp(section_parallel)(q)
