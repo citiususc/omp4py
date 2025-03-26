@@ -6,6 +6,7 @@ from omp4py.core.directive import OmpDirective, OmpClause, OmpArgs
 from omp4py.core.processor.nodes import NodeContext, check_body, clause_not_implemented
 from omp4py.core.processor import common
 
+__all__ = []
 
 @omp_processor(names.D_PARALLEL)
 def parallel(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, ctx: NodeContext) -> list[ast.stmt]:

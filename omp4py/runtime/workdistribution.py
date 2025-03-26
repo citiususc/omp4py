@@ -78,7 +78,7 @@ def for_init(bounds: array.iview, kind: pyint, chunk: pyint, monotonic: bool, or
         task.shared_count = task.parallel.context.push(0, atomic.AtomicInt.new(zero)) #TODO tp code
     else:
         thread_num: pyint = task.cvars.dataenv.thread_num
-        task.count = task.chunk * thread_num
+        task.count = task.chunk * thread_num - task.step
         if task.collapse == 1:
             task.count += bounds[2]
 
@@ -111,18 +111,16 @@ def for_next(bounds: array.iview) -> bool:
             bounds[1] = bounds[0] + task.chunk
     elif task.chunk > 0:
         bounds[0] = count
-        if task.count >= bounds[3]:
+        if task.count > bounds[3]:
             task.count = bounds[3]
-        else:
-            bounds[1] = task.count
+        bounds[1] = task.count
         if count >= bounds[3]:
             return False
     else:
         bounds[0] = count
-        if task.count <= bounds[3]:
+        if task.count < bounds[3]:
             task.count = bounds[3]
-        else:
-            bounds[1] = task.count
+        bounds[1] = task.count
         if count <= bounds[3]:
             return False
 

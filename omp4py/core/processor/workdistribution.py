@@ -9,6 +9,7 @@ from omp4py.core.processor import common
 from omp4py.core.processor.nodes import (NodeContext, Variables, node_name, directive_node, check_body,
                                          clause_not_implemented)
 
+__all__ = []
 
 @omp_processor(names.D_SINGLE)
 def single(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, ctx: NodeContext) -> list[ast.stmt]:
@@ -206,8 +207,12 @@ def for_(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, c
                 c_collapse = int(clause.args.array[0].value)
             case names.C_SCHEDULE:
                 options: list[str] = [names.K_STATIC, names.K_DYNAMIC, names.K_GUIDED, names.K_AUTO, names.K_RUNTIME]
-                c_sch_kind = ast.Constant(value=options.index(clause.args.array[0].value))
+                schedule: str = clause.args.array[0].value
+                c_sch_kind = ast.Constant(value=options.index(schedule))
                 if len(clause.args.array) == 2:
+                    if schedule in [names.K_AUTO, names.K_RUNTIME]:
+                        raise clause.args.array[0].tokens[0].\
+                            make_error(f"schedule '{schedule}' does not take a 'chunk_size' parameter")
                     c_sch_chunk = ctx.cast_expression('int', clause.args.array[1].value)
                 if get_item(clause.args.modifiers, names.K_NONMONOTONIC):
                     ast.expr = ast.Constant(value=False)
