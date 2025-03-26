@@ -43,19 +43,16 @@ exclude_also = ["^import", "^from", "^\\s*pass"]
 requires-poetry = ">=2.0"
 packages = [
     { include = "omp4py" },
-    { include = "omp4py/cruntime", from = "build", format = "wheel" },
+    { include = "omp4py/cruntime", from = "build/libs", format = "wheel" },
 ]
 
 include = [
     { path = "omp4py/cruntime", format = "sdist" },
-    { path = "build/omp4py/cruntime/**/*.so", format = "wheel" },
-    { path = "build/omp4py/cruntime/**/*.pxd", format = "wheel" },
-    { path = "build/omp4py/cruntime/**/__init__.py", format = "wheel" },
+    { path = "build/libs/omp4py/cruntime/**/*", format = "wheel" },
 ]
 
 exclude = [
     "omp4py/cruntime",
-    "build/omp4py/cruntime/**/*.*",
 ]
 
 [tool.poetry.build]
@@ -63,5 +60,5 @@ script = "scripts/compile.py"
 
 
 [build-system]
-requires = ["poetry-core", "setuptools", "Cython>=3.1.0a1"]
+requires = ["poetry-core", "setuptools>=78", "Cython>=3.1.0a1"]
 build-backend = "poetry.core.masonry.api"
