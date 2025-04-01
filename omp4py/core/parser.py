@@ -198,7 +198,7 @@ def omp_parse(fc: Any, args: ParserArgs) -> Any:
         with open(f"{os.path.basename(inspect.getfile(fc))}_{fc.__name__}_omp_d.py", "w") as file:
             file.write(ast.unparse(module))
 
-    return build(src_name, src_module, module, cache_key, args)
+    return build(fc, src_name, src_module, module, cache_key, args)
 
 
 class OmpTransformer(ast.NodeTransformer):

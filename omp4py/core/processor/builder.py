@@ -1,3 +1,4 @@
+import shutil
 import sys
 import types
 import ast
@@ -23,18 +24,24 @@ except importlib.metadata.PackageNotFoundError:
 
 try:
     import Cython.Build.Inline as cython_inline
+    import Cython.Compiler.Options as cython_options
+    import cython
 
 
     def check_cython():
         pass
 except ImportError as ex:
+    exstr = str(ex)
+
+
     def check_cython():
-        raise RuntimeError("compile error: cython and setuptools are required to compile") from ex
+        raise RuntimeError("'cython' and 'setuptools' are required to compile:", exstr)
 
 
 def gen_cache_key(code: str, _compile: bool, compiler_args: dict):
     value: str
     if _compile:
+        check_cython()
         value = str((code, _compile, compiler_args, __version__, sys.version_info, cython_inline.Cython.__version__))
     else:
         value = str((code, _compile, compiler_args, __version__))
@@ -69,12 +76,29 @@ def env(module: types.ModuleType):
     module.__dict__['__omp'] = __omp
 
 
-def load_dynamic(name: str, path: str) -> typing.Any:
+def load_dynamic(module: types.ModuleType, name: str, path: str) -> typing.Any:
+    env(module)
     spec = importlib.util.spec_from_file_location(name, location=path)
     new_module = importlib.util.module_from_spec(spec)
+    new_module.__dict__.update({a: b for a, b in module.__dict__.items() if a not in new_module.__dict__})
     spec.loader.exec_module(new_module)
+    fc: typing.Any = new_module.__dict__[new_module.__dict__['__omp4py__']]
 
-    return new_module.__dict__[new_module.__dict__['__omp4py__']]
+    if '__omp4py_modules' in new_module.__dict__:
+        name: str
+        for name in new_module.__dict__['__omp4py_modules']:
+            new_module.__dict__[name] = module.__dict__[name]
+        if '__omp4py_globals' in new_module.__dict__:
+            new_module.__dict__['__omp4py_globals'] = module.__dict__
+    else:
+        if hasattr(fc, '__globals__'):
+            fc.__globals__ = module.__dict__
+        else:
+            for f in dir(fc):
+                if hasattr(getattr(fc, f), '__globals__'):
+                    f.__globals__ = module.__dict__
+
+    return fc
 
 
 _fast_cache: dict[str, set[str]] = {}
@@ -90,10 +114,11 @@ def search_cache(module: types.ModuleType, cache_dir: str, cache_key: str) -> ty
 
     for ext in importlib.machinery.SOURCE_SUFFIXES + importlib.machinery.EXTENSION_SUFFIXES:
         if cache_key + ext in _fast_cache[cache_dir]:
-            return load_dynamic(cache_key, os.path.join(cache_dir, os.path.join(cache_key) + ext))
+            return load_dynamic(module, cache_key, os.path.join(cache_dir, os.path.join(cache_key) + ext))
 
 
-def build(name: str, module: types.ModuleType, omp_ast: ast.Module, cache_key: str, args: ParserArgs) -> typing.Any:
+def build(fc: typing.Any, name: str, module: types.ModuleType, omp_ast: ast.Module, cache_key: str, args: ParserArgs) \
+        -> typing.Any:
     if args.cache or args.compile:
         os.makedirs(args.cache_dir, exist_ok=True)
         omp_ast.body.append(ast.Assign(targets=[ast.Name(id='__omp4py__', ctx=ast.Store())], value=ast.Constant(name)))
@@ -119,27 +144,17 @@ def build(name: str, module: types.ModuleType, omp_ast: ast.Module, cache_key: s
         node = node.body[0]
 
     with tempfile.TemporaryDirectory(prefix='omp4py') as build_dir:
-        pyx_file: str = os.path.join(build_dir, cache_key) + '.pyx'
-        with open(pyx_file, "w") as f:
-            if not args.pure:
-                f.write('cimport omp4py.cruntime as __omp\n')
-            else:
-                f.write('import omp4py.runtime as __ompp\n')
-            f.write('import cython\n')
+        src_file: str = os.path.join(build_dir, cache_key) + '.py'
+        define_macros = []
+        c_include_dirs = []
+        with open(src_file, "w") as f:
+            _resolve_imports(args, f, module, fc, define_macros, c_include_dirs)
             f.write(f'__omp4py__="{name}"\n')
             f.write(ast.unparse(node))
 
-        define_macros = []
-        c_include_dirs = []
-
-        if 'numpy' in sys.modules:
-            import numpy
-            c_include_dirs.append(numpy.get_include())
-            define_macros.append(("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION"))
-
         extension = cython_inline.Extension(
             name=cache_key,
-            sources=[pyx_file],
+            sources=[src_file],
             include_dirs=c_include_dirs or None,
             define_macros=define_macros or None,
         )
@@ -149,12 +164,62 @@ def build(name: str, module: types.ModuleType, omp_ast: ast.Module, cache_key: s
         build_extension = cython_inline._get_build_extension()
         build_extension.extensions = cython_inline.cythonize(
             [extension],
-            include_path=['.', os.path.join(args.cache_dir, 'include')],
             compiler_directives=compiler_args,
-            quiet=not args.debug)
-        build_extension.build_temp = os.path.dirname(pyx_file)
+            quiet=not args.debug,
+            language_level="3",
+            annotate=args.debug, )
+        build_extension.build_temp = os.path.dirname(src_file)
         build_extension.build_lib = args.cache_dir
         build_extension.run()
 
+        if args.debug:
+            shutil.copy(src_file[:-2] + 'html', os.getcwd())
+
     env(module)
-    return load_dynamic(cache_key, os.path.join(args.cache_dir, cache_key) + build_extension.get_ext_filename(''))
+    return load_dynamic(module, cache_key,
+                        os.path.join(args.cache_dir, cache_key) + build_extension.get_ext_filename(''))
+
+
+def _resolve_imports(args: ParserArgs, f: typing.TextIO, module: types.ModuleType, fc: typing.Any,
+                     define_macros: list[str], c_include_dirs: list[str]) -> None:
+    symbols: set[str]
+    if hasattr(fc, '__code__'):
+        symbols = set(fc.__code__.co_names)
+    else:
+        symbols = set(sum([getattr(fc, f).__code__.co_names for f in dir(fc)
+                           if hasattr(getattr(fc, f), '__code__')], []))
+    shadow_globals: bool = 'globals' in symbols
+    copy_imports: set[types.ModuleType] = {cython}
+    symbols -= set(__builtins__.keys())
+    symbols &= set(module.__dict__.keys())
+
+    if not args.pure:
+        f.write('import cython.cimports.omp4py.cruntime as __omp\n')
+    else:
+        f.write('import omp4py.runtime as __ompp\n')
+
+    if 'numpy' in sys.modules:
+        import numpy
+        copy_imports.add(numpy)
+        c_include_dirs.append(numpy.get_include())
+        define_macros.append(("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION"))
+
+        if 'np_pythran' in args.compiler_args and args.compiler_args['np_pythran']:
+            import pythran
+            c_include_dirs.append(pythran.get_include())
+
+    name: str
+    for name in symbols:
+        import_: typing.Any = module.__dict__[name]
+
+        if import_ in copy_imports:
+            f.write(f'import {import_.__name__} as {name}\n')
+        elif hasattr(import_, '__module__') and import_.__module__ in copy_imports:
+            f.write(f'from {import_.__module__} import {name}\n')
+
+    f.write(f'__omp4py_modules = {sorted(symbols)}\n')
+    for name in sorted(symbols):
+        f.write(f'{name} = ...\n')
+
+    if shadow_globals:
+        f.write(f'__omp4py_globals = ...\nglobals = lambda: __omp4py_globals\n')
