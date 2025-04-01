@@ -4,7 +4,8 @@ from omp4py.core.directive import names, OmpItem, tokenizer
 from omp4py.core.processor.processor import omp_processor
 from omp4py.core.directive import OmpDirective, OmpClause, OmpArgs
 from omp4py.core.processor.nodes import NodeContext, check_body, clause_not_implemented
-from omp4py.core.processor import common
+from omp4py.core.processor.varscope import Variables, var_add, var_rename, var_delete, var_update
+from omp4py.core.processor.common import get_item, code_to_function, name_array
 
 __all__ = []
 
@@ -13,7 +14,7 @@ def parallel(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | Non
     check_body(ctx, body)
     parallel_name: str = ctx.new_id(names.D_PARALLEL)
     parallel_func: ast.FunctionDef
-    parallel_func, _ = common.code_to_function(ctx, parallel_name, body)
+    parallel_func, _ = code_to_function(ctx, parallel_name, body)
 
     body_header: list[ast.stmt] = [parallel_func.body[0]]
     parallel_func.body = parallel_func.body[1:]
@@ -30,25 +31,24 @@ def parallel(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | Non
     for clause in clauses:
         match str(clause):
             case names.C_SHARED:
-                common.data_add(ctx, data_scope, clause.args.array)
+                var_add(ctx, data_scope, clause.args.array)
             case names.C_PRIVATE:
-                common.data_add(ctx, data_scope, clause.args.array)
-                new_vars: list[str] = common.name_array(clause.args.array)
-                body_header.extend(common.data_rename(ctx, parallel_func.body, new_vars, f'{ctx.r}.new'))
+                var_add(ctx, data_scope, clause.args.array)
+                new_vars: list[str] = name_array(clause.args.array)
+                body_header.extend(var_rename(ctx, parallel_func.body, new_vars, '__new__'))
             case names.C_FIRSTPRIVATE:
-                common.data_add(ctx, data_scope, clause.args.array)
-                new_vars: list[str] = common.name_array(clause.args.array)
-                body_header.extend(common.data_rename(ctx, parallel_func.body, new_vars, f'{ctx.r}.copy'))
+                var_add(ctx, data_scope, clause.args.array)
+                new_vars: list[str] = name_array(clause.args.array)
+                body_header.extend(var_rename(ctx, parallel_func.body, new_vars, '__copy__'))
             case names.C_REDUCTION:
-                common.data_add(ctx, data_scope, clause.args.array)
-                op: OmpItem = common.get_item(clause.args.modifiers, names.M_REDUCTION_ID)
-                op_name: str = op.value if op.value.isidentifier() else tokenizer.tok_name[op.tokens[0].type].lower()
-                new_vars: list[str] = common.name_array(clause.args.array)
+                var_add(ctx, data_scope, clause.args.array)
+                op: OmpItem = get_item(clause.args.modifiers, names.M_REDUCTION_ID)
+                new_vars: list[str] = name_array(clause.args.array)
                 for item in clause.args.array:
                     if isinstance(item.value, ast.Subscript):
                         raise ctx.error('Array reduction not yet supported', item.value)
-                body_header.extend(common.data_rename(ctx, parallel_func.body, new_vars, f'{ctx.r}.r_{op_name}_init'))
-                parallel_func.body.extend(common.data_update(ctx, clause.args.array, f'{ctx.r}.r_{op_name}_comb'))
+                body_header.extend(var_rename(ctx, parallel_func.body, new_vars, op))
+                parallel_func.body.extend(var_update(ctx, clause.args.array, op))
             case names.C_DEFAULT:
                 default_scope = clause.args.array[0].value
             case names.C_NUM_THREADS:
@@ -77,10 +77,10 @@ def parallel(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | Non
             body_header[0].names = [var for var in body_header[0].names if var in data_scope]
         case names.K_FIRSTPRIVATE:
             others: list[str] = [var for var in body_header[0].names if var not in data_scope]
-            body_header.extend(common.data_rename(ctx, parallel_func.body, others, f'{ctx.r}.new'))
+            body_header.extend(var_rename(ctx, parallel_func.body, others, '__new__'))
         case names.K_PRIVATE:
             others: list[str] = [var for var in body_header[0].names if var not in data_scope]
-            body_header.extend(common.data_rename(ctx, parallel_func.body, others, f'{ctx.r}.copy'))
+            body_header.extend(var_rename(ctx, parallel_func.body, others, '__copy__'))
 
     parallel_func.body = body_header + parallel_func.body
 
@@ -112,7 +112,7 @@ def teams(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, 
     check_body(ctx, body)
     teams_name: str = ctx.new_id(names.D_TEAMS)
     teams_func: ast.FunctionDef
-    teams_func, _ = common.code_to_function(ctx, teams_name, body)
+    teams_func, _ = code_to_function(ctx, teams_name, body)
 
     body_header: list[ast.stmt] = [teams_func.body[0]]
     teams_func.body = teams_func.body[1:]
@@ -126,26 +126,25 @@ def teams(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, 
     for clause in clauses:
         match str(clause):
             case names.C_SHARED:
-                common.data_add(ctx, data_scope, clause.args.array)
+                var_add(ctx, data_scope, clause.args.array)
             case names.C_PRIVATE:
-                common.data_add(ctx, data_scope, clause.args.array)
-                new_vars: list[str] = common.name_array(clause.args.array)
-                body_header.extend(common.data_rename(ctx, teams_func.body, new_vars, f'{ctx.r}.new'))
+                var_add(ctx, data_scope, clause.args.array)
+                new_vars: list[str] = name_array(clause.args.array)
+                body_header.extend(var_rename(ctx, teams_func.body, new_vars, '__new__'))
             case names.C_FIRSTPRIVATE:
-                common.data_add(ctx, data_scope, clause.args.array)
-                new_vars: list[str] = common.name_array(clause.args.array)
-                body_header.extend(common.data_rename(ctx, teams_func.body, new_vars, f'{ctx.r}.copy'))
+                var_add(ctx, data_scope, clause.args.array)
+                new_vars: list[str] = name_array(clause.args.array)
+                body_header.extend(var_rename(ctx, teams_func.body, new_vars, '__copy__'))
             case names.C_REDUCTION:
-                common.data_add(ctx, data_scope, clause.args.array)
-                op: OmpItem = common.get_item(clause.args.modifiers, names.M_REDUCTION_ID)
-                op_name: str = op.value if op.value.isidentifier() else tokenizer.tok_name[op.tokens[0].type].lower()
-                new_vars: list[str] = common.name_array(clause.args.array)
+                var_add(ctx, data_scope, clause.args.array)
+                op: OmpItem = get_item(clause.args.modifiers, names.M_REDUCTION_ID)
+                new_vars: list[str] = name_array(clause.args.array)
                 item: OmpItem
                 for item in clause.args.array:
                     if isinstance(item.value, ast.Subscript):
                         raise ctx.error('Array reduction not yet supported', item.value)
-                body_header.extend(common.data_rename(ctx, teams_func.body, new_vars, f'{ctx.r}.r_{op_name}_init'))
-                teams_func.body.extend(common.data_update(ctx, clause.args.array, f'{ctx.r}.r_{op_name}_comb'))
+                body_header.extend(var_rename(ctx, teams_func.body, new_vars, op))
+                teams_func.body.extend(var_update(ctx, clause.args.array, op))
             case names.C_DEFAULT:
                 default_scope = clause.args.array[0].value
             case names.C_IF:
@@ -154,7 +153,7 @@ def teams(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, 
                 c_thlimit = ctx.cast_expression("int", clause.args.array[0].value)
             case names.C_NUM_TEAMS:
                 c_nteams.elts[1] = ctx.cast_expression("int", clause.args.array[0].value)
-                lower_bound: OmpItem = common.get_item(clause.args.modifiers, names.M_LOWER_BOUND)
+                lower_bound: OmpItem = get_item(clause.args.modifiers, names.M_LOWER_BOUND)
                 if lower_bound is not None:
                     c_nteams.elts[0] = ctx.cast_expression("int", lower_bound.value)
             case names.C_ALLOCATE:
@@ -168,10 +167,10 @@ def teams(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, 
             body_header[0].names = [var for var in body_header[0].names if var in data_scope]
         case names.K_FIRSTPRIVATE:
             others: list[str] = [var for var in body_header[0].names if var not in data_scope]
-            body_header.extend(common.data_rename(ctx, teams_func.body, others, f'{ctx.r}.new'))
+            body_header.extend(var_rename(ctx, teams_func.body, others, '__new__'))
         case names.K_PRIVATE:
             others: list[str] = [var for var in body_header[0].names if var not in data_scope]
-            body_header.extend(common.data_rename(ctx, teams_func.body, others, f'{ctx.r}.copy'))
+            body_header.extend(var_rename(ctx, teams_func.body, others, '__copy__'))
 
     teams_func.body = body_header + teams_func.body
 

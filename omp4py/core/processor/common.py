@@ -1,11 +1,10 @@
+from __future__ import annotations
 import ast
 import typing
 import symtable
-import dataclasses
 
-from omp4py.core.processor.processor import NodeContext
+import omp4py.core.processor.nodes as nodes
 from omp4py.core.directive import OmpItem
-from omp4py.core.processor.nodes import VariableRenaming, node_name, Variables
 
 
 def get_item(elems: typing.Iterable[OmpItem], name: str) -> OmpItem | None:
@@ -18,7 +17,7 @@ def get_item(elems: typing.Iterable[OmpItem], name: str) -> OmpItem | None:
 
 def name_array(elems: typing.Iterable[OmpItem]) -> list[str]:
     node: OmpItem
-    return [node_name(node.value) for node in elems]
+    return [nodes.node_name(node.value) for node in elems]
 
 
 def is_constant(expr: ast.expr) -> bool:
@@ -29,7 +28,7 @@ def is_constant(expr: ast.expr) -> bool:
     return True
 
 
-def code_to_function(ctx: NodeContext, fname: str, body: list[ast.stmt]) -> (ast.FunctionDef, list[str]):
+def code_to_function(ctx: nodes.NodeContext, fname: str, body: list[ast.stmt]) -> (ast.FunctionDef, list[str]):
     maybe_ref: list[str] = list(ctx.variables.names)
 
     block_func: ast.FunctionDef = ctx.new_function(fname)
@@ -62,71 +61,21 @@ def code_to_function(ctx: NodeContext, fname: str, body: list[ast.stmt]) -> (ast
         block_func.body[0] = ast.Nonlocal(names=be_decl)
     return block_func, be_ref
 
-
-def data_add(ctx: NodeContext, data_scope: set[str], new_vars: typing.Iterable[OmpItem]):
-    item: OmpItem
-    for item in new_vars:
-        var_name: str = node_name(item.value)
-        if ctx.variables.final_name(var_name) not in ctx.variables:
-            raise item.tokens[0].make_error(f"'{var_name}' undeclared (first use in this function)")
-        if var_name in data_scope:
-            raise item.tokens[0].make_error(f"'{var_name}' appears more than once in data clauses")
-
-
-def data_rename(ctx: NodeContext, body: list[ast.stmt], new_vars: list[str], init: str) -> list[ast.stmt]:
-    renaming: dict[str, str] = dict()
-    result: list[ast.stmt] = []
-    var_name: str
-    for var_name in new_vars:
-        old_name: str = ctx.variables.final_name(var_name)
-        new_name: str = ctx.new_variable(var_name)
-        new_value: ast.Call = ctx.new_call(init)
-        new_value.args.append(ast.Name(id=old_name, ctx=ast.Load()))
-        result.append(ctx.copy_pos(
-            ast.Assign(targets=[ast.Name(id=new_name, ctx=ast.Store())], value=new_value)
-        ))
-        renaming[old_name] = new_name
-
-    VariableRenaming.rename(body, renaming)
-
-    return result
-
-
-def data_update(ctx: NodeContext, new_vars: typing.Iterable[OmpItem], op: str) -> list[ast.stmt]:
-    result: list[ast.stmt] = []
-    item: OmpItem
-    for item in new_vars:
-        var_name: str = node_name(item.value)
-        new_name: str = ctx.variables.final_name(var_name)
-        old_name: str = ctx.variables.renaming[new_name]
-
-        reduction_value: ast.Call = ctx.new_call(op)
-        reduction_value.args.append(ast.Name(id=old_name, ctx=ast.Load()))
-        reduction_value.args.append(ast.Name(id=new_name, ctx=ast.Load()))
-
-        result.append(ctx.copy_pos(
-            ast.Assign(targets=[ast.Name(id=old_name, ctx=ast.Store())], value=reduction_value)
-        ))
-
-    return result
-
-
-def data_delete(ctx: NodeContext, old_variables: Variables) -> list[ast.stmt]:
-    name: str
-    del_vars: ast.Delete = ctx.copy_pos(ast.Delete(targets=[]))
-    for name in ctx.variables.renaming:
-        if name not in old_variables.renaming:
-            del_vars.targets.append(ast.Name(id=name, ctx=ast.Del()))
-    if len(del_vars.targets) > 0:
-        return [del_vars]
-    return []
-
-
-def barrier(ctx: NodeContext) -> ast.stmt:
+def barrier(ctx: nodes.NodeContext) -> ast.stmt:
     return ctx.copy_pos(ast.Expr(ctx.new_call(f'{ctx.r}.barrier')))
 
+def mutex(ctx: nodes.NodeContext, body: list[ast.stmt]) -> [ast.stmt]:
+    mutex_body: list[ast.stmt] = list()
 
-def no_wait(ctx: NodeContext, expr: ast.expr) -> ast.stmt:
+    lock: ast.Call = ctx.new_call(f'{ctx.r}.mutex_lock')
+    unlock: ast.Call = ctx.new_call(f'{ctx.r}.mutex_unlock')
+
+    mutex_body.append(ctx.copy_pos(ast.Expr(lock)))
+    mutex_body.extend(body)
+
+    return [ctx.new_try(mutex_body, [ctx.copy_pos(ast.Expr(unlock))])]
+
+def no_wait(ctx: nodes.NodeContext, expr: ast.expr) -> ast.stmt:
     if isinstance(expr, ast.Constant):
         if expr.value:
             return ctx.copy_pos(ast.Pass())

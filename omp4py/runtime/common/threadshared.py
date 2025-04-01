@@ -23,8 +23,9 @@ class SharedContext:
         if not self._tail.next.set(entry):
             entry = cast(_SharedEntry, self._tail.next.get())
             if entry.tp != tp:
-                pass  # Raise error or omp exit??
+                raise ValueError('Each thread will execute the same instruction stream')
         self._tail = entry
+        return entry.obj
 
     def pop(self) -> None:
         self._head = cast(_SharedEntry, self._head.next.get())

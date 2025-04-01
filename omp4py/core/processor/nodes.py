@@ -1,9 +1,11 @@
+from __future__ import annotations
 import ast
 import typing
 import dataclasses
 import copy
 
-from omp4py.core.directive import OmpDirective, OmpClause, tokenizer, parse_line
+from omp4py.core.directive import OmpDirective, OmpClause, parse_line
+from omp4py.core.processor.varscope import Variables
 
 
 @dataclasses.dataclass(frozen=True)
@@ -15,50 +17,8 @@ class ParserArgs:
     pure: bool
     compile: bool
     compiler_args: dict
-    compiler_modules: list
     force: bool
     cache_dir: str
-
-
-@dataclasses.dataclass
-class Variables:
-    names: set[str] = dataclasses.field(default_factory=set)
-    globals: set[str] = dataclasses.field(default_factory=set)
-    renaming: dict[str, str] = dataclasses.field(default_factory=dict)
-    shared: set[str] = dataclasses.field(default_factory=set)
-
-    def final_name(self, name: str) -> str:
-        new_name: str = name
-        while new_name in self.renaming:
-            old_name: str = new_name
-            new_name = self.renaming[new_name]
-            if name == new_name:
-                return old_name
-        return new_name
-
-    def add(self, name: str):
-        if name not in self.globals:
-            self.names.add(name)
-            self.renaming[name] = name
-
-    def gadd(self, name: str):
-        self.globals.add(name)
-
-    def add_multiple(self, names: typing.Iterable[str]):
-        [self.add(name) for name in names]
-
-    def gadd_multiple(self, names: typing.Iterable[str]):
-        [self.gadd(name) for name in names]
-
-    def __contains__(self, item: str) -> bool:
-        return item in self.names
-
-    def new_scope(self) -> 'Variables':
-        copy: Variables = Variables()
-        copy.names = self.names.copy()
-        copy.globals = self.globals.copy()
-        copy.renaming = self.renaming.copy()
-        return copy
 
 
 @dataclasses.dataclass
@@ -67,6 +27,7 @@ class NodeContext:
     src_lines: list[str]
     parser_args: ParserArgs
     runtime: str
+    only_parse: bool
     directive_callback: typing.Callable[['NodeContext', OmpDirective], None] | None = None
     directive: ast.Constant | None = None
     stack: list[ast.AST] = dataclasses.field(default_factory=list)
@@ -93,7 +54,7 @@ class NodeContext:
         elif isinstance(node, ast.Name):
             return node.id in ("omp", self.parser_args.alias)
         elif isinstance(node, ast.Attribute):
-            return self.is_omp(node.value)
+            return node.attr in ("omp", self.parser_args.alias)
         return False
 
     def new_variable(self, name: str) -> str:
@@ -198,73 +159,13 @@ def node_name(node: ast.expr | str) -> str:
     return str(node)
 
 
-@dataclasses.dataclass
-class VariableVisitor(ast.NodeVisitor):
-    store: Variables = dataclasses.field(default_factory=Variables)
-    load: Variables = dataclasses.field(default_factory=Variables)
-
-    def visit_declare(self, node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
-        self.store.add(node.name)
-
-    visit_FunctionDef = visit_declare
-    visit_AsyncFunctionDef = visit_declare
-    visit_ClassDef = visit_declare
-
-    def visit_ignore(self, node: ast.AST):
-        pass
-
-    visit_GeneratorExp = visit_ignore
-    visit_Attribute = visit_ignore
-
-    def visit_Global(self, node: ast.Global):
-        self.store.gadd_multiple(node.names)
-
-    def visit_Nonlocal(self, node: ast.Nonlocal):
-        self.store.add_multiple(node.names)
-
-    def visit_Name(self, node: ast.Name):
-        if isinstance(node.ctx, ast.Load):
-            self.load.add(node.id)
-        else:
-            self.store.add(node.id)
-
-    def visit_alias(self, node: ast.alias):
-        if node.asname is not None:
-            self.store.add(node.asname)
-        else:
-            self.store.add(node.name)
-
-    @classmethod
-    def search(cls, nodes: list[ast.stmt]) -> tuple[set[str], set[str]]:
-        v: VariableVisitor = VariableVisitor()
-        v.load.globals = v.store.globals
-        [v.visit(node) for node in nodes]
-        return v.store.names, v.load.names
-
-
-@dataclasses.dataclass
-class VariableRenaming(ast.NodeVisitor):
-    names: dict[str, str]
-
-    def visit_Nonlocal(self, node: ast.Nonlocal):
-        node.names = [self.names.get(name, name) for name in node.names]
-
-    def visit_Name(self, node: ast.Name):
-        node.id = self.names.get(node.id, node.id)
-
-    def visit_alias(self, node: ast.alias):
-        if node.asname is not None:
-            node.asname = self.names.get(node.asname, node.asname)
-        elif node.name in self.names:
-            node.asname = self.names[node.name]
-
-    def visit_arg(self, node: ast.arg):
-        node.arg = self.names.get(node.arg, node.arg)
-
-    def visit_Attribute(self, node: ast.Attribute):
-        pass
-
-    @classmethod
-    def rename(cls, nodes: list[ast.stmt], names: dict[str, str]):
-        v: VariableRenaming = VariableRenaming(names)
-        [v.visit(node) for node in nodes]
+def ast_search(name: str, root: ast.AST | list[ast.AST]) -> ast.expr | ast.stmt | None:
+    node: ast.AST
+    nroot: ast.AST
+    field: typing.Any
+    for nroot in root if isinstance(root, list) else [root]:
+        for node in ast.walk(nroot):
+            for field in ast.iter_fields(node):
+                if field[1] == name:
+                    return node
+        return None

@@ -22,6 +22,13 @@ class Mutex:
     def test(self) -> bool:
         return self._lock.acquire(blocking=False)
 
+    def __enter__(self):
+        self.lock()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.unlock()
+        return False
+
 
 class RMutex:
     _lock: threading.RLock
@@ -42,6 +49,13 @@ class RMutex:
     def test(self) -> bool:
         return self._lock.acquire(blocking=False)
 
+    def __enter__(self):
+        self.lock()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.unlock()
+        return False
+
 
 class Barrier:
     _value: threading.Barrier
@@ -53,5 +67,5 @@ class Barrier:
     def __init__(self, parties: pyint):
         self._value = threading.Barrier(parties)
 
-    def wait(self):
+    def wait(self) -> None:
         self._value.wait()

@@ -2,6 +2,11 @@ from omp4py.cruntime.basics cimport array, lock, atomic
 from omp4py.cruntime.common cimport controlvars, threadshared
 from omp4py.cruntime.basics.types cimport *
 
+cdef pyint ParallelTaskID
+cdef pyint ForTaskID
+cdef pyint TeamsTaskID
+cdef pyint SectionsTaskID
+
 cdef class Task:
     cdef Task parent
     cdef ParallelTask parallel
@@ -28,7 +33,8 @@ cdef class ForTask(Task):
     cdef pyint chunk
     cdef pyint count
     cdef pyint step
-    cdef atomic.AtomicInt shared_counter
+    cdef pyint current_chunk
+    cdef atomic.AtomicInt shared_count
 
     @staticmethod
     cdef ForTask new(controlvars.ControlVars cvars)

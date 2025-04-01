@@ -1,3 +1,5 @@
+from itertools import count
+
 from omp4py.runtime.basics.types import *
 from omp4py.runtime.basics import array, math, atomic
 from omp4py.runtime.common import controlvars, thread, tasks, enums
@@ -71,18 +73,18 @@ def for_init(bounds: array.iview, kind: pyint, chunk: pyint, monotonic: bool, or
         task.chunk = -chunk
     else:
         task.chunk = chunk
+    task.current_chunk = chunk
     task.step = chunk * (team_size - 1)
 
+    thread.current().set_task(task)
     if kind == _dynamic or kind == _guided:
-        zero: pyint = -1 if task.collapse > 1 else bounds[2] - chunk
-        task.shared_count = task.parallel.context.push(0, atomic.AtomicInt.new(zero)) #TODO tp code
+        start: pyint = -1 if task.collapse > 1 else bounds[2] - (chunk if kind == _dynamic else 0)
+        task.shared_count = task.parallel.context.push(tasks.ForTaskID, atomic.AtomicInt.new(start))
     else:
         thread_num: pyint = task.cvars.dataenv.thread_num
         task.count = task.chunk * thread_num - task.step
         if task.collapse == 1:
             task.count += bounds[2]
-
-    thread.current().set_task(task)
 
 
 def for_next(bounds: array.iview) -> bool:
@@ -90,14 +92,14 @@ def for_next(bounds: array.iview) -> bool:
 
     task.kind(task, bounds)
     count: pyint = task.count
-    task.count += task.chunk
+    task.count += task.current_chunk
 
     if task.collapse > 1:
         if task.count >= task.iters:
             return False
 
-        bounds[0] = task.chunk
-        bounds[1] = task.chunk
+        bounds[0] = task.current_chunk
+        bounds[1] = task.current_chunk
 
         if task.collapse > 1:
             bounds[5] = count // bounds[7] * bounds[4]
@@ -108,21 +110,21 @@ def for_next(bounds: array.iview) -> bool:
                                          bounds[2 + i * 6 + 5] * bounds[2 + i * 6 + 2])
         else:
             bounds[0] = bounds[3] + bounds[5]
-            bounds[1] = bounds[0] + task.chunk
-    elif task.chunk > 0:
+            bounds[1] = bounds[0] + task.current_chunk
+    elif task.current_chunk > 0:
+        if count >= bounds[3]:
+            return False
         bounds[0] = count
         if task.count > bounds[3]:
             task.count = bounds[3]
         bounds[1] = task.count
-        if count >= bounds[3]:
-            return False
     else:
+        if count <= bounds[3]:
+            return False
         bounds[0] = count
         if task.count < bounds[3]:
             task.count = bounds[3]
         bounds[1] = task.count
-        if count <= bounds[3]:
-            return False
 
     return True
 
@@ -132,11 +134,29 @@ def for_static(task: tasks.ForTask, bounds: array.iview) -> None:
 
 
 def for_dynamic(task: tasks.ForTask, bounds: array.iview) -> None:
-    task.count = task.shared_counter.add(task.step)
+    task.count = task.shared_count.add(task.step)
 
 
 def for_guided(task: tasks.ForTask, bounds: array.iview) -> None:
-    pass
+    step: pyint = 1 if task.collapse > 1 else bounds[4]
+    num_threads: pyint = task.cvars.dataenv.team_size
+    chunk_size: pyint = task.chunk
+    start: pyint = task.shared_count.get()
+    while True:
+        stop: pyint = task.iters if task.collapse else bounds[3]
+        n: pyint = (stop - start) // step
+        q: pyint = (n + num_threads - 1) // num_threads
+
+        if q < chunk_size:
+            q = chunk_size
+        if q <= n:
+            stop = start + q * step
+
+        if task.shared_count.compare_exchange_weak(start, stop):
+            task.count = start
+            task.current_chunk = q
+            break
+        start = task.count
 
 
 def section(*f):

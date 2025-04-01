@@ -1,10 +1,18 @@
 import typing
+import itertools
 
 from omp4py.runtime.basics import array, lock, atomic
 from omp4py.runtime.common import controlvars, threadshared
 from omp4py.runtime.basics.types import *
 
-__all__ = ['Task', 'ParallelTask', 'TeamsTask', 'ForTask', 'SectionsTask']
+__all__ = ['Task', 'ParallelTask', 'ParallelTaskID', 'TeamsTask', 'TeamsTaskID', 'ForTask', 'ForTaskID', 'SectionsTask',
+           'SectionsTaskID']
+
+_taskid = itertools.count()
+ParallelTaskID: pyint = next(_taskid)
+ForTaskID: pyint = next(_taskid)
+TeamsTaskID: pyint = next(_taskid)
+SectionsTaskID: pyint = next(_taskid)
 
 
 class Task:
@@ -44,7 +52,8 @@ class ForTask(Task):
     chunk: pyint
     count: pyint
     step: pyint
-    shared_counter: atomic.AtomicInt
+    current_chunk: pyint
+    shared_count: atomic.AtomicInt
 
     @staticmethod
     def new(cvars: controlvars.ControlVars) -> 'ForTask':

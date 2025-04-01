@@ -57,6 +57,12 @@ class OmpItem:
     value: Any
     args: OmpArgs | None = None
 
+    def __str__(self) -> str:
+        """
+        Returns a string representation of the item.
+        """
+        return str(self.value)
+
 
 class ArgsParser(Protocol):
     """
@@ -264,7 +270,7 @@ def parse_python(tokens: list[TokenInfo]) -> ast.Module:
                      column information.
     """
     offsets: list[int] = [0]
-    lineno:int = tokens[0].lineno
+    lineno: int = tokens[0].lineno
     new_tokens: list[TokenInfo] = []
     token: TokenInfo
     for token in tokens:
@@ -280,7 +286,7 @@ def parse_python(tokens: list[TokenInfo]) -> ast.Module:
     code: str = tokenizer.untokenize(new_tokens)
     module: ast.Module
     try:
-        module= ast.parse(code)
+        module = ast.parse(code)
     except SyntaxError as ex:
         raise SyntaxError(ex.msg, (tokens[0].filename, ex.lineno + lineno, ex.offset + offsets[ex.lineno],
                                    tokens[0].line, ex.end_lineno + lineno, ex.end_offset + offsets[ex.end_lineno])
@@ -538,6 +544,7 @@ def item_var(i: int, name: str, specs: Arguments, tokens: list[TokenInfo], sep: 
 
     return OmpItem(name=name, tokens=tuple(tokens), value=exp)
 
+
 @transformer(name=T_ITEM_CONST)
 def item_const(i: int, name: str, specs: Arguments, tokens: list[TokenInfo], sep: TokenInfo) -> OmpItem:
     """
@@ -556,6 +563,7 @@ def item_const(i: int, name: str, specs: Arguments, tokens: list[TokenInfo], sep
         return OmpItem(name=name, tokens=tuple(tokens), value=eval(tokenizer.untokenize(tokens), {}, {}))
     except Exception as ex:
         raise tokenizer.expected_error(tokenizer.merge(tokens), 'expression must be constant') from ex
+
 
 @transformer(name=T_ITEM_EXP)
 def item_exp(i: int, name: str, specs: Arguments, tokens: list[TokenInfo], sep: TokenInfo) -> OmpItem:

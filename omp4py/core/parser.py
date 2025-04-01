@@ -94,7 +94,7 @@ def omp(c: type[T]) -> type[T]:
 
 @typing.overload
 def omp(*, alias: str = ..., cache: bool = ..., dump: bool = ..., debug: bool = ..., pure: bool = ...,
-        compile: bool = ..., compiler_args: dict = ..., compiler_modules: list = ..., force: bool = ...,
+        compile: bool = ..., compiler_args: dict = ..., force: bool = ...,
         cache_dir: str = ...) -> \
         typing.Callable[[typing.Callable], typing.Callable] | typing.Callable[[type], type]:
     """
@@ -110,7 +110,6 @@ def omp(*, alias: str = ..., cache: bool = ..., dump: bool = ..., debug: bool = 
         pure (bool): Only use python runtime.
         compile (bool): Compile the decorated function to improve performance.
         compiler_args (dict): Arguments to pass to the compiler.
-        compiler_modules (list): Compiler modules to pass to the compiler.
         force (bool): Force compilation even if the compiler has already been compiled.
         cache_dir (str): The directory to store the cache.
 
@@ -121,14 +120,13 @@ def omp(*, alias: str = ..., cache: bool = ..., dump: bool = ..., debug: bool = 
 
 
 def omp(arg: Any = None, /, *, alias: str = "", cache: bool = _cache, dump: bool = _dump, debug: bool = _debug,
-        pure: bool = _pure, compile: bool = _compile, compiler_args: dict = _compiler_args, compiler_modules: list = [],
+        pure: bool = _pure, compile: bool = _compile, compiler_args: dict = _compiler_args,
         force: bool = _force, cache_dir: str = _cache_dir) -> Any:
     def wrap(arg):
         try:
             return omp_parse(arg,
                              ParserArgs(alias, cache, dump, debug, pure, compile,
-                                        _compiler_args_default | compiler_args,
-                                        list(compiler_modules), force, cache_dir))
+                                        _compiler_args_default | compiler_args, force, cache_dir))
         except SyntaxError as ex:
             if not debug:
                 try:
@@ -146,34 +144,35 @@ def omp(arg: Any = None, /, *, alias: str = "", cache: bool = _cache, dump: bool
     return wrap(arg)
 
 
-def check_func(fm: Any, src_filename: str, src_start: int, src_line: str):
-    if not inspect.getclosurevars(fm).nonlocals:
+def check_func(fc: Any, src_filename: str, src_start: int, src_line: str):
+    if not inspect.getclosurevars(fc).nonlocals:
         return
-    outer_name: str = fm.__qualname__.split('.')[0]
-    raise SyntaxError(f"'{fm.__name__}' has variable dependencies, decorator must be set on '{outer_name}'",
+    outer_name: str = fc.__qualname__.split('.')[0]
+    raise SyntaxError(f"'{fc.__name__}' has variable dependencies, decorator must be set on '{outer_name}'",
                       (src_filename, src_start + 1, -1, src_line))
 
 
-def omp_parse(fm: Any, args: ParserArgs) -> Any:
+def omp_parse(fc: Any, args: ParserArgs) -> Any:
     src_lines: list[str]
     src_start: int
-    src_name: str = fm.__name__
-    src_full_lines, src_start = inspect.findsource(inspect.unwrap(fm))
+    src_name: str = fc.__name__
+    only_parse: bool = src_name == '_'
+    src_full_lines, src_start = inspect.findsource(inspect.unwrap(fc))
     src_lines = inspect.getblock(src_full_lines[src_start:])
     src_code: str = ''.join(src_lines)
-    src_module: ModuleType = inspect.getmodule(fm)
+    src_module: ModuleType = inspect.getmodule(fc)
     src_filename: str = src_module.__file__
     cache_key: str = gen_cache_key(src_code, args.compile, args.compiler_args) if args.cache or args.compile else ''
 
     if not args.force and (cached := search_cache(src_module, args.cache_dir, cache_key)) is not None:
         return cached
 
-    if inspect.isclass(fm):
-        for name, value in inspect.getmembers(fm, predicate=lambda x: inspect.isfunction(x) or inspect.ismethod(x)):
+    if inspect.isclass(fc):
+        for name, value in inspect.getmembers(fc, predicate=lambda x: inspect.isfunction(x) or inspect.ismethod(x)):
             print(name)
             check_func(value, src_filename, src_start, src_lines[0])
-    elif inspect.getclosurevars(fm).nonlocals:
-        check_func(fm, src_filename, src_start, src_lines[0])
+    elif inspect.getclosurevars(fc).nonlocals:
+        check_func(fc, src_filename, src_start, src_lines[0])
 
     i: int
     if len(src_lines[0]) - len(src_lines[0].lstrip()) > 0:
@@ -187,14 +186,16 @@ def omp_parse(fm: Any, args: ParserArgs) -> Any:
 
     module: ast.Module = ast.parse(''.join(src_lines), filename=src_filename)
 
-    module = OmpTransformer(src_filename, src_lines, args).transform(module)
+    module = OmpTransformer(src_filename, src_lines, args, only_parse).transform(module)
+    if only_parse:
+        return None
     module = ast.fix_missing_locations(module)
 
     if args.dump:
         if args.debug:
-            with open(f"{os.path.basename(inspect.getfile(fm))}_{fm.__name__}_omp_d.ast", "w") as file:
+            with open(f"{os.path.basename(inspect.getfile(fc))}_{fc.__name__}_omp_d.ast", "w") as file:
                 file.write(ast.dump(module, indent=4))
-        with open(f"{os.path.basename(inspect.getfile(fm))}_{fm.__name__}_omp_d.py", "w") as file:
+        with open(f"{os.path.basename(inspect.getfile(fc))}_{fc.__name__}_omp_d.py", "w") as file:
             file.write(ast.unparse(module))
 
     return build(src_name, src_module, module, cache_key, args)
@@ -204,8 +205,8 @@ class OmpTransformer(ast.NodeTransformer):
     ctx: NodeContext
     attibutes: bool
 
-    def __init__(self, filename: str, src_lines: list[str], parser_args: ParserArgs) -> None:
-        self.ctx = NodeContext(filename, src_lines, parser_args, '__ompp' if parser_args.pure else '__omp')
+    def __init__(self, filename: str, src_lines: list[str], parser_args: ParserArgs, only_parse: bool) -> None:
+        self.ctx = NodeContext(filename, src_lines, parser_args, '__ompp' if parser_args.pure else '__omp', only_parse)
         self.attibutes = False
 
     def transform(self, node: ast.Module) -> ast.Module:

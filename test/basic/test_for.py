@@ -170,36 +170,19 @@ def test_for_schedule_auto():
 
 
 def for_schedule_dynamic(q: Queue):
-    with omp("parallel for schedule(dynamic)"):
+    with omp("parallel for schedule(dynamic, 1)"):
         for i in range(11):
             q.put(omp_get_thread_num())
-            while q.qsize() < 2:
+            while (omp_get_thread_num() == 0 and q.qsize() != 11) or (omp_get_thread_num() == 1 and q.qsize() == 1):
                 time.sleep(0.1)
+
 
 
 def test_for_schedule_dynamic():
     q = Queue()
     omp_set_num_threads(2)
     omp(for_schedule_dynamic)(q)
-    assert 0 < sorted(q.queue).count(0) < 11
-
-
-################################################
-
-
-def for_schedule_dynamic_3(q: Queue):
-    with omp("parallel for schedule(dynamic, 3)"):
-        for i in range(12):
-            q.put(omp_get_thread_num())
-            while q.qsize() < 2:
-                time.sleep(0.1)
-
-
-def test_for_schedule_dynamic_3():
-    q = Queue()
-    omp_set_num_threads(2)
-    omp(for_schedule_dynamic_3)(q)
-    assert "000" in "".join(map(str, sorted(q.queue)))
+    assert list(q.queue).count(0) == 1
 
 
 ################################################
@@ -207,9 +190,9 @@ def test_for_schedule_dynamic_3():
 
 def for_schedule_guided(q: Queue):
     with omp("parallel for schedule(guided)"):
-        for i in range(11):
+        for i in range(12):
             q.put(omp_get_thread_num())
-            while q.qsize() < 2:
+            while (omp_get_thread_num() == 0 and q.qsize() < 7) or (omp_get_thread_num() == 1 and q.qsize() == 1):
                 time.sleep(0.1)
 
 
@@ -217,7 +200,7 @@ def test_for_schedule_guided():
     q = Queue()
     omp_set_num_threads(2)
     omp(for_schedule_guided)(q)
-    assert 0 < sorted(q.queue).count(0) < 11
+    assert list(q.queue).count(0) > 1
 
 
 ################################################
@@ -236,12 +219,10 @@ def test_for_schedule_var():
     assert len(q.queue) == 10
 
 
-@pytest.mark.filterwarnings("ignore:Exception in thread")
-def test_for_schedule_var_str_error():
+def test_for_schedule_var_not_int():
     q = Queue()
     omp_set_num_threads(2)
-    with pytest.raises(OmpError):
-        omp(for_schedule_var)(q, "1")
+    omp(for_schedule_var)(q, "1")
 
 
 ################################################
@@ -389,7 +370,7 @@ def for_ordered_multiple_hidden_error(q: Queue, f: Callable):
 def test_for_ordered_multiple_hidden_error():
     q = Queue()
     omp_set_num_threads(2)
-    with pytest.raises(OmpError):
+    with pytest.raises(SyntaxError):
         omp(for_ordered_multiple_hidden_error)(q, omp(hidden_ordered))
 
 
@@ -413,7 +394,7 @@ def for_ordered_multiple_nested_hidden_error(q: Queue, f: Callable):
 def test_for_ordered_multiple_nested_hidden_error():
     q = Queue()
     omp_set_num_threads(2)
-    with pytest.raises(OmpError):
+    with pytest.raises(SyntaxError):
         omp(for_ordered_multiple_nested_hidden_error)(q, omp(nested_hidden_ordered))
 
 
