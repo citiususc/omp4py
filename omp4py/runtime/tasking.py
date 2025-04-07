@@ -15,7 +15,7 @@ def task_submit(f: typing.Callable[[], None], c_if: bool) -> None:
 
 
 def task_wait() -> None:
-    queue = threadshared.TaskQueue = thread.current().parallel.queue
+    queue: threadshared.TaskQueue = thread.current().parallel.queue
 
     while True:
         entry: tasks.CustomTask = cast(tasks.CustomTask, queue.take())
