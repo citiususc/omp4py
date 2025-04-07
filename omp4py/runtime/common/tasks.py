@@ -64,3 +64,6 @@ class ForTask(Task):
 
 class SectionsTask:
     pass
+
+class CustomTask:
+    f: typing.Callable[[], None]

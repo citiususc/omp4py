@@ -1,5 +1,3 @@
-from itertools import count
-
 from omp4py.runtime.basics.types import *
 from omp4py.runtime.basics import array, math, atomic
 from omp4py.runtime.common import controlvars, thread, tasks, enums

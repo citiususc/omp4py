@@ -41,3 +41,6 @@ cdef class ForTask(Task):
 
 cdef class TeamsTask:
     pass
+
+cdef class CustomTask:
+    cdef object f

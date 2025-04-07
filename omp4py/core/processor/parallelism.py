@@ -1,11 +1,11 @@
 import ast
 
-from omp4py.core.directive import names, OmpItem, tokenizer
+from omp4py.core.directive import names, OmpItem
 from omp4py.core.processor.processor import omp_processor
 from omp4py.core.directive import OmpDirective, OmpClause, OmpArgs
 from omp4py.core.processor.nodes import NodeContext, check_body, clause_not_implemented
-from omp4py.core.processor.varscope import Variables, var_add, var_rename, var_delete, var_update
-from omp4py.core.processor.common import get_item, code_to_function, name_array
+from omp4py.core.processor.varscope import var_add, var_rename, var_update
+from omp4py.core.processor.common import get_item, code_to_function, name_array, OmpItemError
 
 __all__ = []
 
@@ -14,7 +14,8 @@ def parallel(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | Non
     check_body(ctx, body)
     parallel_name: str = ctx.new_id(names.D_PARALLEL)
     parallel_func: ast.FunctionDef
-    parallel_func, _ = code_to_function(ctx, parallel_name, body)
+    used_vars: list[str]
+    parallel_func, used_vars = code_to_function(ctx, parallel_name, body)
 
     body_header: list[ast.stmt] = [parallel_func.body[0]]
     parallel_func.body = parallel_func.body[1:]
@@ -69,17 +70,18 @@ def parallel(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | Non
             case names.C_COPYIN:
                 raise clause_not_implemented(clause)
 
+    used_vars = sorted(set(used_vars) - data_scope)
     match default_scope:
         case names.K_SHARED:
             pass
         case names.K_NONE:
-            var: str
-            body_header[0].names = [var for var in body_header[0].names if var in data_scope]
+            if len(used_vars) > 0:
+                raise ValueError(f"'{used_vars[0]}' not specified in enclosing '{names.D_PARALLEL}'")
         case names.K_FIRSTPRIVATE:
-            others: list[str] = [var for var in body_header[0].names if var not in data_scope]
+            others: list[str] = [var for var in used_vars]
             body_header.extend(var_rename(ctx, parallel_func.body, others, '__new__'))
         case names.K_PRIVATE:
-            others: list[str] = [var for var in body_header[0].names if var not in data_scope]
+            others: list[str] = [var for var in used_vars]
             body_header.extend(var_rename(ctx, parallel_func.body, others, '__copy__'))
 
     parallel_func.body = body_header + parallel_func.body
@@ -112,7 +114,8 @@ def teams(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, 
     check_body(ctx, body)
     teams_name: str = ctx.new_id(names.D_TEAMS)
     teams_func: ast.FunctionDef
-    teams_func, _ = code_to_function(ctx, teams_name, body)
+    used_vars: list[str]
+    teams_func, used_vars = code_to_function(ctx, teams_name, body)
 
     body_header: list[ast.stmt] = [teams_func.body[0]]
     teams_func.body = teams_func.body[1:]
@@ -159,17 +162,18 @@ def teams(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, 
             case names.C_ALLOCATE:
                 raise clause_not_implemented(clause)
 
+    used_vars = sorted(set(used_vars) - data_scope)
     match default_scope:
         case names.K_SHARED:
             pass
         case names.K_NONE:
-            var: str
-            body_header[0].names = [var for var in body_header[0].names if var in data_scope]
+            if len(used_vars) > 0:
+                raise ValueError(f"'{used_vars[0]}' not specified in enclosing '{names.D_TEAMS}'")
         case names.K_FIRSTPRIVATE:
-            others: list[str] = [var for var in body_header[0].names if var not in data_scope]
+            others: list[str] = [var for var in used_vars]
             body_header.extend(var_rename(ctx, teams_func.body, others, '__new__'))
         case names.K_PRIVATE:
-            others: list[str] = [var for var in body_header[0].names if var not in data_scope]
+            others: list[str] = [var for var in used_vars]
             body_header.extend(var_rename(ctx, teams_func.body, others, '__copy__'))
 
     teams_func.body = body_header + teams_func.body

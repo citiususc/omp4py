@@ -15,6 +15,7 @@ class AtomicFlag:
 
     def __init__(self):
         self._value = False
+        self._lock = threading.Lock()
 
     def no_clear_test_and_set(self) -> bool:
         if self._value:

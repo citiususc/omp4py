@@ -3,7 +3,6 @@ import ast
 import json
 import typing
 import inspect
-import dataclasses
 from typing import Any, cast
 from types import ModuleType
 from contextlib import contextmanager
@@ -12,6 +11,7 @@ from omp4py.core.directive import OmpDirective, OmpClause, tokenizer
 from omp4py.core.processor.processor import OMP_PROCESSOR
 from omp4py.core.processor.builder import build, search_cache, get_cache_dir, gen_cache_key, __version__
 from omp4py.core.processor.nodes import NodeContext, directive_node, Variables, ParserArgs
+from omp4py.core.processor.common import OmpItemError
 
 __all__ = ['omp', 'omp4py_force_pure', '__version__']
 
@@ -185,8 +185,8 @@ def omp_parse(fc: Any, args: ParserArgs) -> Any:
         src_lines = ["\n"] * src_start + src_lines
 
     module: ast.Module = ast.parse(''.join(src_lines), filename=src_filename)
-
-    module = OmpTransformer(src_filename, src_lines, args, only_parse).transform(module)
+    ctx: NodeContext
+    module, ctx = OmpTransformer(src_filename, src_lines, args, only_parse).transform(module)
     if only_parse:
         return None
     module = ast.fix_missing_locations(module)
@@ -198,7 +198,7 @@ def omp_parse(fc: Any, args: ParserArgs) -> Any:
         with open(f"{os.path.basename(inspect.getfile(fc))}_{fc.__name__}_omp_d.py", "w") as file:
             file.write(ast.unparse(module))
 
-    return build(fc, src_name, src_module, module, cache_key, args)
+    return build(fc, src_name, src_module, module, ctx.variables.history_types, cache_key, args)
 
 
 class OmpTransformer(ast.NodeTransformer):
@@ -209,8 +209,8 @@ class OmpTransformer(ast.NodeTransformer):
         self.ctx = NodeContext(filename, src_lines, parser_args, '__ompp' if parser_args.pure else '__omp', only_parse)
         self.attibutes = False
 
-    def transform(self, node: ast.Module) -> ast.Module:
-        return cast(ast.Module, self.visit(node))
+    def transform(self, node: ast.Module) -> (ast.Module, NodeContext):
+        return cast(ast.Module, self.visit(node)), self.ctx
 
     def visit(self, node: ast.AST) -> ast.AST:
         self.ctx.stack.append(node)
@@ -259,8 +259,16 @@ class OmpTransformer(ast.NodeTransformer):
             self.ctx.variables.add(node.name)
         return node
 
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> ast.AnnAssign:
+        if isinstance(node.target, ast.Name):
+            self.ctx.variables.add(node.target.id, node.annotation)
+        else:
+            self.ctx.variables.history_types[ast.unparse(node.target)] = node.annotation
+            self.generic_visit(node.target)
+        return node
+
     def visit_arg(self, node: ast.arg) -> ast.arg:
-        self.ctx.variables.add(node.arg)
+        self.ctx.variables.add(node.arg, node.annotation)
         return node
 
     def visit_Nonlocal(self, node: ast.Nonlocal):
@@ -302,6 +310,8 @@ class OmpTransformer(ast.NodeTransformer):
         if str(directive) in OMP_PROCESSOR:
             try:
                 return OMP_PROCESSOR[str(directive)](body, list(directive.clauses), directive.args, self.ctx)
+            except OmpItemError as ex:
+                raise tokenizer.merge(ex.value.tokens).make_error(str(ex))
             except ValueError as ex:
                 raise tokenizer.merge(directive.tokens).make_error(str(ex))
 
@@ -313,6 +323,8 @@ class OmpTransformer(ast.NodeTransformer):
                 raise tokenizer.merge(directive.tokens).make_error(f"'{name}' directive is not supported yet")
             try:
                 body = OMP_PROCESSOR[name](body, name_clauses, directive.args, self.ctx)
+            except OmpItemError as ex:
+                raise tokenizer.merge(ex.value.tokens).make_error(str(ex))
             except ValueError as ex:
                 raise tokenizer.merge(directive.tokens).make_error(str(ex))
 

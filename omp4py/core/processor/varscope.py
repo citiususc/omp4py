@@ -71,7 +71,8 @@ class Variables:
     globals: set[str] = dataclasses.field(default_factory=set)
     renaming: dict[str, str] = dataclasses.field(default_factory=dict)
     shared: set[str] = dataclasses.field(default_factory=set)
-    type_comments: dict[str, str] = dataclasses.field(default_factory=dict)
+    current_types: dict[str, ast.expr] = dataclasses.field(default_factory=dict)
+    history_types: dict[str, ast.expr] = dataclasses.field(default_factory=dict)
     _storage: dict[str, tuple[list[ast.stmt], list[ast.stmt]]] = \
         dataclasses.field(default_factory=lambda: _storage.copy())
 
@@ -84,17 +85,17 @@ class Variables:
                 return old_name
         return new_name
 
-    def add(self, name: str, type_comment: str | None = None):
+    def add(self, name: str, type_ann: ast.expr | None = None):
         if name not in self.globals:
             self.names.add(name)
             self.renaming[name] = name
-        if type_comment is not None:
-            self.type_comments[name] = type_comment
+        if type_ann is not None:
+            self.history_types[name] = self.current_types[name] = type_ann
 
-    def gadd(self, name: str, type_comment: str | None = None):
+    def gadd(self, name: str, type_ann: ast.expr | None = None):
         self.globals.add(name)
-        if type_comment is not None:
-            self.type_comments[name] = type_comment
+        if type_ann is not None:
+            self.history_types[name] = self.current_types[name] = type_ann
 
     def add_multiple(self, names: typing.Iterable[str]):
         [self.add(name) for name in names]
@@ -110,6 +111,8 @@ class Variables:
         other.names = self.names.copy()
         other.globals = self.globals.copy()
         other.renaming = self.renaming.copy()
+        other.current_types = self.current_types.copy()
+        other.history_types = self.history_types
         other._storage = self._storage.copy()
         return other
 
@@ -211,7 +214,7 @@ def var_rename(ctx: nodes.NodeContext, body: list[ast.stmt], new_vars: list[str]
         old_name: str = ctx.variables.final_name(var_name)
         new_name: str = ctx.new_variable(var_name)
 
-        result.extend(_create_var(ctx, init, old_name, new_name, ctx.variables.type_comments.get(old_name, None), 0))
+        result.extend(_create_var(ctx, init, old_name, new_name, ctx.variables.current_types.get(old_name, None), 0))
         # new_value.args.append(ast.Name(id=old_name, ctx=ast.Load()))
         # result.append(ctx.copy_pos(
         #     ast.Assign(targets=[ast.Name(id=new_name, ctx=ast.Store())], value=new_value)
@@ -231,7 +234,7 @@ def var_update(ctx: nodes.NodeContext, new_vars: typing.Iterable[OmpItem], op: s
         new_name: str = ctx.variables.final_name(var_name)
         old_name: str = ctx.variables.renaming[new_name]
 
-        result.extend(_create_var(ctx, op, old_name, new_name, ctx.variables.type_comments.get(old_name, None), 1))
+        result.extend(_create_var(ctx, op, old_name, new_name, ctx.variables.current_types.get(old_name, None), 1))
 
         # reduction_value: ast.Call = ctx.new_call(op)
         # reduction_value.args.append(ast.Name(id=old_name, ctx=ast.Load()))

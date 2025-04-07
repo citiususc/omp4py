@@ -59,10 +59,12 @@ def code_to_function(ctx: nodes.NodeContext, fname: str, body: list[ast.stmt]) -
         block_func.body = block_func.body[1:]
     else:
         block_func.body[0] = ast.Nonlocal(names=be_decl)
-    return block_func, be_ref
+    return block_func, be_ref + be_decl
+
 
 def barrier(ctx: nodes.NodeContext) -> ast.stmt:
     return ctx.copy_pos(ast.Expr(ctx.new_call(f'{ctx.r}.barrier')))
+
 
 def mutex(ctx: nodes.NodeContext, body: list[ast.stmt]) -> [ast.stmt]:
     mutex_body: list[ast.stmt] = list()
@@ -75,6 +77,7 @@ def mutex(ctx: nodes.NodeContext, body: list[ast.stmt]) -> [ast.stmt]:
 
     return [ctx.new_try(mutex_body, [ctx.copy_pos(ast.Expr(unlock))])]
 
+
 def no_wait(ctx: nodes.NodeContext, expr: ast.expr) -> ast.stmt:
     if isinstance(expr, ast.Constant):
         if expr.value:
@@ -82,3 +85,11 @@ def no_wait(ctx: nodes.NodeContext, expr: ast.expr) -> ast.stmt:
         return barrier(ctx)
 
     return ctx.copy_pos(ast.If(test=ast.UnaryOp(op=ast.Not(), operand=expr), body=[barrier(ctx)], orelse=[]))
+
+
+class OmpItemError(ValueError):
+    value: OmpItem
+
+    def __init__(self, value: OmpItem, message: str):
+        super().__init__(self, message)
+        self.value = value

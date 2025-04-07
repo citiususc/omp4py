@@ -17,6 +17,8 @@ D_TEAMS = "teams"
 D_THREADPRIVATE = "threadprivate"
 D_BARRIER = "barrier"
 D_CRITICAL = "critical"
+D_TASK = "task"
+D_TASK_WAIT = "taskwait"
 
 # Clauses
 C_AFFINITY = "affinity"
@@ -53,6 +55,7 @@ C_SCHEDULE = "schedule"
 C_SEVERITY = "severity"
 C_SHARED = "shared"
 C_THREAD_LIMIT = "thread_limit"
+C_UNTIED = "untied"
 
 # Modifiers
 M_ALWAYS = "always"

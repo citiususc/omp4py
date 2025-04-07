@@ -10,4 +10,7 @@ def cast(t: type[T], value: typing.Any) -> T:
         return value
     if value is None:
         return None
-    return t(value)
+    try:
+        return t(value)
+    except:
+        raise TypeError(f'{type(value)} cannot be cast to {t}') from None

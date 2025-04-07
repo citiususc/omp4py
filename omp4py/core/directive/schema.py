@@ -252,9 +252,10 @@ CLAUSES: dict[str, Clause] = {
     C_ORDER: Clause(args=Arguments(num_args=1, choices=(K_CONCURRENT,), modifiers=(M_ORDER_MODIFIER,))),
     C_ORDERED: Clause(args=Arguments(require_args=False, num_args=1, transform=T_ITEM_EXP)),
     C_SCHEDULE: Clause(args=Arguments(transform=T_ITEM_KIND, modifiers=(M_SIMD,),
-                                      choices=(K_STATIC, K_DYNAMIC,K_GUIDED,K_RUNTIME,K_AUTO),
-                                      modifiers_groups=(Group(elems=(M_ORDER_MODIFIER, M_ORDERING_MODIFIER)),), ))
+                                      choices=(K_STATIC, K_DYNAMIC, K_GUIDED, K_RUNTIME, K_AUTO),
+                                      modifiers_groups=(Group(elems=(M_ORDER_MODIFIER, M_ORDERING_MODIFIER)),), )),
     # Tasking constructs
+    C_UNTIED: Clause(),
 
     # Device directives and constructs
 
@@ -304,13 +305,15 @@ DIRECTIVES: dict[str, Directive] = {
     D_LOOP: Directive(),
 
     # Tasking constructs
+    D_TASK: Directive(clauses=(C_IF, C_UNTIED, C_DEFAULT, C_PRIVATE, C_FIRSTPRIVATE, C_SHARED)),
+    D_TASK_WAIT: Directive(),
 
     # Device directives and constructs
 
     # Interoperability construct
 
     # Synchronization constructs
-    D_CRITICAL: Directive(),#TODO hint clause
+    D_CRITICAL: Directive(),  # TODO hint clause
     D_BARRIER: Directive(),
 
     # Cancellation constructs

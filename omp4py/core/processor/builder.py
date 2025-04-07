@@ -117,8 +117,8 @@ def search_cache(module: types.ModuleType, cache_dir: str, cache_key: str) -> ty
             return load_dynamic(module, cache_key, os.path.join(cache_dir, os.path.join(cache_key) + ext))
 
 
-def build(fc: typing.Any, name: str, module: types.ModuleType, omp_ast: ast.Module, cache_key: str, args: ParserArgs) \
-        -> typing.Any:
+def build(fc: typing.Any, name: str, module: types.ModuleType, omp_ast: ast.Module, ann: dict[str, ast.expr],
+          cache_key: str, args: ParserArgs) -> typing.Any:
     if args.cache or args.compile:
         os.makedirs(args.cache_dir, exist_ok=True)
         omp_ast.body.append(ast.Assign(targets=[ast.Name(id='__omp4py__', ctx=ast.Store())], value=ast.Constant(name)))
@@ -148,7 +148,7 @@ def build(fc: typing.Any, name: str, module: types.ModuleType, omp_ast: ast.Modu
         define_macros = []
         c_include_dirs = []
         with open(src_file, "w") as f:
-            _resolve_imports(args, f, module, fc, define_macros, c_include_dirs)
+            _resolve_imports(args, f, module, fc, ann, define_macros, c_include_dirs)
             f.write(f'__omp4py__="{name}"\n')
             f.write(ast.unparse(node))
 
@@ -173,7 +173,8 @@ def build(fc: typing.Any, name: str, module: types.ModuleType, omp_ast: ast.Modu
         build_extension.run()
 
         if args.debug:
-            shutil.copy(src_file[:-2] + 'html', os.getcwd())
+            shutil.copy(src_file[:-2] + 'html',
+                        os.path.join(os.getcwd(), fc.__qualname__ + os.path.basename(src_file[:-2] + 'html')))
 
     env(module)
     return load_dynamic(module, cache_key,
@@ -181,20 +182,33 @@ def build(fc: typing.Any, name: str, module: types.ModuleType, omp_ast: ast.Modu
 
 
 def _resolve_imports(args: ParserArgs, f: typing.TextIO, module: types.ModuleType, fc: typing.Any,
-                     define_macros: list[str], c_include_dirs: list[str]) -> None:
+                     ann: dict[str, ast.expr], define_macros: list[str], c_include_dirs: list[str]) -> None:
     symbols: set[str]
     if hasattr(fc, '__code__'):
         symbols = set(fc.__code__.co_names)
     else:
         symbols = set(sum([getattr(fc, f).__code__.co_names for f in dir(fc)
                            if hasattr(getattr(fc, f), '__code__')], []))
+
+    if len(ann) > 0:  # add annotations dependencies
+        value: ast.expr
+        node: ast.AST
+        for value in ann.values():
+            for node in ast.walk(value):
+                if isinstance(node, ast.Name):
+                    symbols.add(node.id)
+
     shadow_globals: bool = 'globals' in symbols
-    copy_imports: set[types.ModuleType] = {cython}
+    omp4py: types.ModuleType = sys.modules['omp4py']
+    omp4py_types: types.ModuleType = sys.modules['omp4py.runtime.basics.types']
+    copy_imports: set[types.ModuleType] = {omp4py, cython}
     symbols -= set(__builtins__.keys())
     symbols &= set(module.__dict__.keys())
 
+    cimport: str = ''
     if not args.pure:
-        f.write('import cython.cimports.omp4py.cruntime as __omp\n')
+        cimport = 'cython.cimports.'
+        f.write(f'import {cimport}omp4py.cruntime as __omp\n')
     else:
         f.write('import omp4py.runtime as __ompp\n')
 
@@ -209,13 +223,22 @@ def _resolve_imports(args: ParserArgs, f: typing.TextIO, module: types.ModuleTyp
             c_include_dirs.append(pythran.get_include())
 
     name: str
-    for name in symbols:
+    for name in sorted(symbols):
         import_: typing.Any = module.__dict__[name]
+        iname: str = import_.__name__
 
         if import_ in copy_imports:
-            f.write(f'import {import_.__name__} as {name}\n')
+            prefix: str = ''
+            if iname == 'omp4py':
+                prefix = cimport
+                symbols.remove(name)
+            f.write(f'import {prefix}{iname} as {name}\n')
         elif hasattr(import_, '__module__') and import_.__module__ in copy_imports:
             f.write(f'from {import_.__module__} import {name}\n')
+        elif name in omp4py.__dict__ and import_ == omp4py.__dict__[name] and \
+                ('runtime' in import_.__module__ or name in omp4py_types.__dict__):
+            f.write(f'from {cimport}omp4py import {name}\n')
+            symbols.remove(name)
 
     f.write(f'__omp4py_modules = {sorted(symbols)}\n')
     for name in sorted(symbols):
