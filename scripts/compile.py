@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import shutil
 import typing
 import sysconfig
@@ -52,7 +53,7 @@ def import_update(ifaces: list[str]) -> typing.Callable[[str], str]:
     return lambda txt: p.sub(wrap, txt)
 
 
-if __name__ == "__main__":
+def main():
     freethreading: bool = sysconfig.get_config_vars().get("Py_GIL_DISABLED") == 1
     pyfiles: set[str] = set(glob(f'omp4py{sep}runtime{sep}**{sep}*.p*', recursive=True))
     cfiles: set[str] = set(glob(f'omp4py{sep}cruntime{sep}**{sep}*.p*', recursive=True))
@@ -63,7 +64,14 @@ if __name__ == "__main__":
     os.makedirs(f'build', exist_ok=True)
     shutil.rmtree(f'build{sep}omp4py', ignore_errors=True)
     shutil.rmtree(f'build{sep}libs', ignore_errors=True)
+    shutil.rmtree(f'build{sep}test', ignore_errors=True)
     copytree('omp4py', f'build{sep}omp4py', dirs_exist_ok=True)
+
+    if sys.version_info[1] < 13 or os.getenv("OMP4PY_NO_COMPILE") is not None:
+        os.makedirs(f'build{sep}libs{sep}omp4py{sep}cruntime', exist_ok=True)
+        with open(f'build{sep}libs{sep}omp4py{sep}cruntime{sep}__init__.py', 'w') as out:
+            out.write('\nomp4py_compiled = False\n')
+        return
 
     extensions: list[str] = []
     pure_files: set[str] = {file for file in cfiles if file.endswith('.py') and file[:-2] + 'pxd' not in ifaces}
@@ -75,7 +83,7 @@ if __name__ == "__main__":
             pyfile: str = file[:-3].replace(f'{sep}cruntime', f'{sep}runtime') + 'py'
             if os.path.basename(file) == '__init__.pxd':
                 pure_files.add(copy(pyfile, os.path.join('build', file[:-3] + 'py'),
-                                       lambda txt: txt.replace('.runtime', '.cruntime')))
+                                    lambda txt: txt.replace('.runtime', '.cruntime')))
                 continue
 
             if pyfile not in pyfiles:
@@ -88,14 +96,12 @@ if __name__ == "__main__":
     compiler_directives: dict = {'freethreading_compatible': freethreading, 'annotation_typing': True}
     ext_modules = cythonize(extensions, language_level="3", annotate=True, compiler_directives=compiler_directives)
 
-
     class Build(build_ext):
         def build_extensions(self):
             if self.compiler.compiler_type == "msvc":
                 for e in self.extensions:
                     e.extra_compile_args += ['/std:c11', '/experimental:c11atomics']
             build_ext.build_extensions(self)
-
 
     cmd = Build(Distribution({
         "name": "package",
@@ -113,3 +119,9 @@ if __name__ == "__main__":
     for output in cmd.get_outputs():
         copyfile(output, os.path.join('build', os.path.relpath(output, cmd.build_lib)))
         copyfile(output, os.path.join(f'build{sep}libs', os.path.relpath(output, cmd.build_lib)))
+
+    copytree('test', f'build{sep}test', dirs_exist_ok=True)
+
+
+if __name__ == "__main__":
+    main()
