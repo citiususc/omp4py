@@ -85,6 +85,10 @@ def for_init(bounds: array.iview, kind: pyint, chunk: pyint, monotonic: bool, or
             task.count += bounds[2]
 
 
+def for_end():
+    thread.current().pop_task()
+
+
 def for_next(bounds: array.iview) -> bool:
     task: tasks.ForTask = cast(tasks.ForTask, thread.current().task)
 
@@ -155,6 +159,16 @@ def for_guided(task: tasks.ForTask, bounds: array.iview) -> None:
             task.current_chunk = q
             break
         start = task.count
+
+
+def single() -> bool:
+    executed: atomic.AtomicFlag = thread.current().parallel.context.push(tasks.SingleTaskID, atomic.AtomicFlag.new())
+    task: tasks.SingleTask = tasks.SingleTask.new(thread.cvars(), executed)
+    return not task.executed.no_clear_test_and_set()
+
+
+def single_end():
+    thread.current().pop_task()
 
 
 def section(*f):

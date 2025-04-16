@@ -1,7 +1,8 @@
 from omp4py.runtime.common import thread
+from omp4py.runtime.common.barrier import task_barrier
 
-def barrier():
-    thread.current().parallel.lock_barrier.wait()
+def sync_barrier():
+    task_barrier(thread.current().task)
 
 
 def mutex_lock():

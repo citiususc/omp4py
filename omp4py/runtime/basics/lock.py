@@ -1,8 +1,5 @@
 import threading
 
-from omp4py.runtime.basics.types import *
-
-
 class Mutex:
     _lock: threading.Lock
 
@@ -57,15 +54,18 @@ class RMutex:
         return False
 
 
-class Barrier:
-    _value: threading.Barrier
+class Event:
+    _event: threading.Event
 
     @staticmethod
-    def new(parties: pyint) -> 'Barrier':
-        return Barrier(parties)
+    def new() -> 'Event':
+        return Event()
 
-    def __init__(self, parties: pyint):
-        self._value = threading.Barrier(parties)
+    def __init__(self):
+        self._event = threading.Event()
 
     def wait(self) -> None:
-        self._value.wait()
+        self._event.wait()
+
+    def notify(self) -> None:
+        self._event.set()

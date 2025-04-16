@@ -16,10 +16,6 @@ def single(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None,
     check_body(ctx, body)
     old_variables: Variables = ctx.variables.new_scope()
     single_call: ast.Call = ctx.new_call(f'{ctx.r}.single')
-    single_call.args.append(ast.Name(id='__name__', ctx=ast.Load()))
-    single_call.args.append(ast.Constant(value=ctx.directive.lineno))
-    single_call.args.append(ast.Constant(value=ctx.directive.col_offset))
-
     body_header: list[ast.stmt] = list()
 
     data_scope: set[str] = set()
@@ -47,7 +43,7 @@ def single(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None,
                 else:
                     c_nowait = ctx.cast_expression("bool", clause.args.array[0].value)
             case names.C_ALLOCATE:
-                pass  # TODO
+                raise clause_not_implemented(clause)
 
     single_if: ast.If = ctx.copy_pos(ast.If(test=single_call, body=body_header + body, orelse=[]))
 
@@ -82,7 +78,7 @@ def single(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None,
     single_if.body.extend(var_delete(ctx, old_variables))
 
     ctx.variables = old_variables
-    return [single_if]
+    return [single_if, ast.Expr(ctx.new_call(f'{ctx.r}.single_end'))]
 
 
 def is_section(ctx: NodeContext, stmt: ast.stmt) -> bool:
@@ -314,6 +310,7 @@ def for_(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, c
 
     body_footer.extend(var_delete(ctx, old_variables))
     body_footer.append(no_wait(ctx, c_nowait))
+    body_footer.append(ast.Expr(ctx.new_call(f'{ctx.r}.for_end')))
 
     ctx.variables = old_variables
     return body_header + new_body + body_footer

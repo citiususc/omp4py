@@ -3,6 +3,8 @@ from libc.stdint cimport uintptr_t
 
 cdef extern from "<stdatomic.h>":
     """
+    #define p_atomic_load atomic_load
+    #define p_atomic_store atomic_store
     #define p_atomic_compare_exchange_strong atomic_compare_exchange_strong
 
     atomic_flag atomic_flag_init(){atomic_flag v = ATOMIC_FLAG_INIT; return v;}
@@ -15,6 +17,8 @@ cdef extern from "<stdatomic.h>":
 
     ctypedef struct atomic_uintptr_t:
         pass
+    cdef uintptr_t p_atomic_load(atomic_uintptr_t *obj)
+    cdef void p_atomic_store(atomic_uintptr_t *obj, uintptr_t desired)
     cdef bint p_atomic_compare_exchange_strong(atomic_uintptr_t *obj, uintptr_t * expected, uintptr_t desired)
 
     ctypedef struct atomic_llong:

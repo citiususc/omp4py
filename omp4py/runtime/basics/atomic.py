@@ -19,15 +19,15 @@ class AtomicFlag:
 
     def no_clear_test_and_set(self) -> bool:
         if self._value:
-            return False
+            return True
         return self.test_and_set()
 
     def test_and_set(self) -> bool:
         with self._lock:
             if not self._value:
                 self._value = True
-                return True
-        return False
+                return False
+        return True
 
     def clear(self) -> None:
         self._value = False

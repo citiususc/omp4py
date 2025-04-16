@@ -6,13 +6,16 @@ from omp4py.runtime.common import controlvars, threadshared
 from omp4py.runtime.basics.types import *
 
 __all__ = ['Task', 'ParallelTask', 'ParallelTaskID', 'TeamsTask', 'TeamsTaskID', 'ForTask', 'ForTaskID', 'SectionsTask',
-           'SectionsTaskID']
+           'SectionsTaskID', 'SingleTask', 'SingleTaskID', 'BarrierTask', 'BarrierTaskID', 'CustomTask', 'CustomTaskID']
 
 _taskid = itertools.count()
 ParallelTaskID: pyint = next(_taskid)
 ForTaskID: pyint = next(_taskid)
 TeamsTaskID: pyint = next(_taskid)
 SectionsTaskID: pyint = next(_taskid)
+SingleTaskID: pyint = next(_taskid)
+BarrierTaskID: pyint = next(_taskid)
+CustomTaskID: pyint = next(_taskid)
 
 
 class Task:
@@ -26,7 +29,6 @@ class ParallelTask(Task):
     context: threadshared.SharedContext
     queue: threadshared.TaskQueue
     lock_mutex: lock.Mutex
-    lock_barrier: lock.Barrier
 
     @staticmethod
     def new(cvars: controlvars.ControlVars, shared: threadshared.SharedFactory) -> 'ParallelTask':
@@ -35,7 +37,6 @@ class ParallelTask(Task):
         task.context = shared.context()
         task.queue = shared.task_queue()
         task.lock_mutex = shared.lock_mutex
-        task.lock_barrier = shared.lock_barrier
         return task
 
 
@@ -62,8 +63,45 @@ class ForTask(Task):
         return task
 
 
-class SectionsTask:
+class SectionsTask(Task):
     pass
 
-class CustomTask:
+
+class SingleTask(Task):
+    executed: atomic.AtomicFlag
+
+    @staticmethod
+    def new(cvars: controlvars.ControlVars, executed: atomic.AtomicFlag) -> 'SingleTask':
+        task: SingleTask = SingleTask.__new__(SingleTask)
+        task.cvars = cvars
+        task.executed = executed
+        return task
+
+class BarrierTask(Task):
+    parties: pyint
+    count: atomic.AtomicInt
+    context: threadshared.SharedContext
+
+    @staticmethod
+    def new(cvars: controlvars.ControlVars, parties: pyint, context: threadshared.SharedContext,
+            count: atomic.AtomicInt) -> 'BarrierTask':
+        task: BarrierTask = BarrierTask.__new__(BarrierTask)
+        task.cvars = cvars
+        task.parties = parties
+        task.count = count
+        task.context = context.__copy__()
+
+        return task
+
+class CustomTask(Task):
     f: typing.Callable[[], None]
+    wait_event: lock.Event
+
+    @staticmethod
+    def new(cvars: controlvars.ControlVars, f: typing.Callable[[], None]) -> 'CustomTask':
+        task: CustomTask = CustomTask.__new__(CustomTask)
+        task.cvars = cvars
+        task.f = f
+        task.wait_event = lock.Event()
+
+        return task

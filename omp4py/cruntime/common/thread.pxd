@@ -10,9 +10,9 @@ cdef class OmpThread:
 
     cdef void pop_task(self)
 
-    cdef void set_parallel(self, tasks.ParallelTask task)
+    cdef OmpThread set_parallel(self, tasks.ParallelTask task)
 
-    cdef void set_teams(self, tasks.TeamsTask task)
+    cdef OmpThread set_teams(self, tasks.TeamsTask task)
 
 cdef OmpThread init(tasks.Task task)
 

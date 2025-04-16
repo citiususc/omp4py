@@ -1,4 +1,4 @@
-from threading import local
+from threading import local, get_ident
 from cpython.object cimport PyObject
 
 _storage: local = local()
@@ -27,8 +27,10 @@ cdef extern from *:
     #endif
 
     thread_local PyObject* omp_thread = NULL;
+    thread_local long long int omp_thread_id = -1;
     """
     PyObject *omp_thread
+    pyint omp_thread_id
 
 
 cdef bint has_storage():
@@ -41,3 +43,11 @@ cdef void set_storage(object value):
     global omp_thread
     omp_thread = <PyObject *> value
     setattr(_storage, 'omp', value)
+
+cdef pyint thread_id():
+    global omp_thread_id
+    if omp_thread_id != -1:
+        return omp_thread_id
+    omp_thread_id = get_ident()
+    return omp_thread_id
+

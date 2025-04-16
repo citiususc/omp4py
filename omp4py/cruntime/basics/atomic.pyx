@@ -1,7 +1,5 @@
 from cpython.object cimport PyObject
 
-cdef PyObject *PY_NONE = <PyObject *> None
-
 cdef class AtomicFlag:
     @staticmethod
     cdef AtomicFlag new():
@@ -25,7 +23,7 @@ cdef class AtomicObject:
     @staticmethod
     cdef AtomicObject new():
         obj: AtomicObject = AtomicObject.__new__(AtomicObject)
-        obj._value = <atomic_uintptr_t> <uintptr_t> PY_NONE
+        p_atomic_store(&obj._value, 0)
         obj._holder = None
         return obj
 
@@ -33,11 +31,15 @@ cdef class AtomicObject:
         raise ValueError("use new() class method")
 
     cdef object get(self):
-        return <object> <PyObject *> self._value
+        ref: uintptr_t = p_atomic_load(&self._value)
+        if ref == 0:
+            return None
+        return <object> <PyObject *> ref
 
     cdef bint set(self, object value):
-        if p_atomic_compare_exchange_strong(&self._value, <uintptr_t *> &PY_NONE, <uintptr_t> <PyObject *> value):
-            self._holder = <object> <PyObject *> self._value
+        cdef uintptr_t ZERO = <uintptr_t> 0
+        if p_atomic_compare_exchange_strong(&self._value, &ZERO, <uintptr_t> <PyObject *> value):
+            self._holder = <object> <PyObject *> p_atomic_load(&self._value)
             return True
         return False
 
@@ -67,16 +69,16 @@ cdef class AtomicInt:
         return atomic_compare_exchange_weak(&self._value, &expected, desired)
 
     cdef pyint add(self, pyint arg):
-        return atomic_fetch_add(&self._value, arg)
+        return atomic_fetch_add(&self._value, arg) + arg
 
     cdef pyint sub(self, pyint arg):
-        return atomic_fetch_sub(&self._value, arg)
+        return atomic_fetch_sub(&self._value, arg) - arg
 
     cdef pyint or_(self, pyint arg):
-        return atomic_fetch_or(&self._value, arg)
+        return atomic_fetch_or(&self._value, arg) | arg
 
     cdef pyint xor(self, pyint arg):
-        return atomic_fetch_xor(&self._value, arg)
+        return atomic_fetch_xor(&self._value, arg) ^ arg
 
     cdef pyint and_(self, pyint arg):
-        return atomic_fetch_and(&self._value, arg)
+        return atomic_fetch_and(&self._value, arg) & arg

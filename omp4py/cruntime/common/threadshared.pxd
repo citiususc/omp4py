@@ -10,30 +10,45 @@ cdef class SharedContext:
     cdef  _SharedEntry _head
     cdef _SharedEntry _tail
 
+    @staticmethod
+    cdef SharedContext new()
+
     cdef object push(self, pyint tp, object value)
 
-    cdef void pop(self)
+    cdef object get(self, pyint tp)
 
-    cdef bint has(self)
+    cdef void move_last(self)
+
+    cdef SharedContext __copy__(self)
 
 cdef class _QueueEntry:
     cdef object obj
     cdef atomic.AtomicFlag free
+    cdef lock.Event wait_event
     cdef atomic.AtomicObject next
 
 cdef class TaskQueue:
     cdef _QueueEntry _head
     cdef _QueueEntry _tail
+    cdef _QueueEntry _history
+
+    @staticmethod
+    cdef TaskQueue new()
 
     cdef void add(self, object value)
 
     cdef object take(self)
 
+    cdef void set_history(self)
+
+    cdef object history_take(self)
+
+    cdef TaskQueue __copy__(self)
+
 cdef class SharedFactory:
-    cdef _SharedEntry _context
-    cdef _QueueEntry _tasks
+    cdef SharedContext _context
+    cdef TaskQueue _tasks
     cdef lock.Mutex lock_mutex
-    cdef lock.Barrier lock_barrier
 
     cdef SharedContext context(self)
 

@@ -25,18 +25,20 @@ class OmpThread:
         self.teams = self.task.teams
         self.task = self.task.parent
 
-    def set_parallel(self, task: tasks.ParallelTask) -> None:
+    def set_parallel(self, task: tasks.ParallelTask) -> 'OmpThread':
         self.parallel = task
+        return self
 
-    def set_teams(self, task: tasks.TeamsTask) -> None:
+    def set_teams(self, task: tasks.TeamsTask) -> 'OmpThread':
         self.teams = task
+        return self
 
 
 def init(task: tasks.Task) -> OmpThread:
     local: OmpThread = OmpThread.__new__(OmpThread)
     local.task = task
-    local.parallel = None
-    local.teams = None
+    local.parallel = task.parallel
+    local.teams = task.teams
     threadlocal.set_storage(local)
     return local
 
@@ -45,9 +47,12 @@ def current() -> OmpThread:
     if not threadlocal.has_storage():
         cvars: controlvars.ControlVars = controlvars.ControlVars()
         cvars.default()
-        task: tasks.ParallelTask = tasks.ParallelTask.new(cvars, threadshared.SharedFactory(cvars))
+        task: tasks.ParallelTask = tasks.ParallelTask.new(cvars, threadshared.SharedFactory.new(cvars))
+        task.parallel = task
+        task.teams = None
+        task.parent = None
 
-        init(task).set_parallel(task)
+        init(task)
     return cast(OmpThread, threadlocal.get_storage())
 
 

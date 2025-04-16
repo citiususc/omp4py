@@ -12,26 +12,50 @@ class _SharedEntry:
 
 
 class SharedContext:
-    _head: _SharedEntry
     _tail: _SharedEntry
+
+    @staticmethod
+    def new() -> 'SharedContext':
+        sc: SharedContext = SharedContext.__new__(SharedContext)
+        sc._tail = _SharedEntry.__new__(_SharedEntry)
+        sc._tail.tp = -1
+        sc._tail.obj = None
+        sc._tail.next = atomic.AtomicObject.new()
+
+        return sc
 
     def push(self, tp: pyint, value: typing.Any) -> typing.Any:
         entry: _SharedEntry = _SharedEntry.__new__(_SharedEntry)
         entry.tp = tp
         entry.obj = value
         entry.next = atomic.AtomicObject.new()
-        if not self._tail.next.set(entry):
-            entry = cast(_SharedEntry, self._tail.next.get())
-            if entry.tp != tp:
-                raise ValueError('Each thread will execute the same instruction stream')
-        self._tail = entry
-        return entry.obj
+        if self._tail.next.set(entry):
+            self._tail = entry
+        else:
+            self._tail = cast(_SharedEntry, self._tail.next.get())
+            if self._tail.tp != tp:
+                raise ValueError(f'Each thread will execute the same instruction stream {self._tail.tp} != {tp}')
+        return self._tail.obj
 
-    def pop(self) -> None:
-        self._head = cast(_SharedEntry, self._head.next.get())
+    def get(self, tp: pyint) -> typing.Any:
+        next: _SharedEntry = self._tail
+        while next is not None:
+            if next.tp == tp:
+                return next.obj
+            next = cast(_SharedEntry, next.next.get())
+        return None
 
-    def has(self) -> bool:
-        return self._head.next.get() is not None
+    def move_last(self):
+        next: _SharedEntry = self._tail
+        while next is not None:
+            self._tail = next
+            next = cast(_SharedEntry, self._tail.next.get())
+
+    def __copy__(self) -> 'SharedContext':
+        sc: SharedContext = SharedContext.__new__(SharedContext)
+        sc._tail = self._tail
+
+        return sc
 
 
 class _QueueEntry:
@@ -43,6 +67,20 @@ class _QueueEntry:
 class TaskQueue:
     _head: _QueueEntry
     _tail: _QueueEntry
+    _history: _QueueEntry | None
+
+    @staticmethod
+    def new() -> 'TaskQueue':
+        tq: TaskQueue = TaskQueue.__new__(TaskQueue)
+
+        tq._head = tq._tail = _QueueEntry.__new__(_QueueEntry)
+        tq._head.free = atomic.AtomicFlag.new()
+        tq._head.free.test_and_set()
+        tq._head.obj = None
+        tq._head.next = atomic.AtomicObject.new()
+        tq._history = None
+
+        return tq
 
     def add(self, value: typing.Any) -> None:
         entry: _QueueEntry = _QueueEntry.__new__(_QueueEntry)
@@ -50,49 +88,54 @@ class TaskQueue:
         entry.free = atomic.AtomicFlag.new()
         entry.next = atomic.AtomicObject.new()
         while not self._tail.next.set(entry):
-            entry = cast(_QueueEntry, self._tail.next.get())
-        self._tail = entry
+            self._tail = cast(_QueueEntry, self._tail.next.get())
 
     def take(self) -> typing.Any:
         entry = cast(_QueueEntry, self._head.next.get())
-        while entry is not None and not entry.free.no_clear_test_and_set():
+        while entry is not None and entry.free.no_clear_test_and_set():
             entry = cast(_QueueEntry, entry.next.get())
 
         if entry is not None:
             self._head = entry
             return entry.obj
 
+    def set_history(self) -> None:
+        self._history = self._head
 
-class SharedFactory:
-    _context: _SharedEntry
-    _tasks: _QueueEntry
-    lock_mutex: lock.Mutex
-    lock_barrier: lock.Barrier
+    def history_take(self) -> typing.Any:
+        if self._history is self._head:
+            self._history = None
+        if self._history is None:
+            return None
+        obj: typing.Any = self._history.obj
+        self._history = cast(_QueueEntry, self._history.next.get())
+        return obj
 
-    def __init__(self, cvars: controlvars.ControlVars):
-        self._context = _SharedEntry.__new__(_SharedEntry)
-        self._context.tp = 0
-        self._context.obj = None
-        self._context.next = atomic.AtomicObject.new()
-        self._tasks = _QueueEntry.__new__(_QueueEntry)
-        self._tasks.free = atomic.AtomicFlag.new()
-        self._tasks.free.test_and_set()
-        self._tasks.fast = False
-        self._tasks.obj = None
-        self._tasks.next = atomic.AtomicObject.new()
-        self.lock_mutex = lock.Mutex.new()
-        self.lock_barrier = lock.Barrier.new(cvars.dataenv.team_size)
-
-    def context(self) -> SharedContext:
-        sh: SharedContext = SharedContext.__new__(SharedContext)
-        sh._head = self._context
-        sh._tail = self._context
-
-        return sh
-
-    def task_queue(self) -> TaskQueue:
+    def __copy__(self):
         tq: TaskQueue = TaskQueue.__new__(TaskQueue)
-        tq._head = self._tasks
-        tq._tail = self._tasks
+        tq._head = self._head
+        tq._tail = self._tail
 
         return tq
+
+
+class SharedFactory:
+    _context: SharedContext
+    _tasks: TaskQueue
+    lock_mutex: lock.Mutex
+
+    @staticmethod
+    def new(cvars: controlvars.ControlVars):
+        sf: SharedFactory = SharedFactory.__new__(SharedFactory)
+
+        sf._context = SharedContext.new()
+        sf._tasks = TaskQueue.new()
+        sf.lock_mutex = lock.Mutex.new()
+
+        return sf
+
+    def context(self) -> SharedContext:
+        return self._context.__copy__()
+
+    def task_queue(self) -> TaskQueue:
+        return self._tasks.__copy__()

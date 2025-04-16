@@ -1,3 +1,4 @@
+cimport omp4py.cruntime.common.barrier as barrier
 cimport omp4py.cruntime.common.controlvars as controlvars
 cimport omp4py.cruntime.common.enums as enums
 cimport omp4py.cruntime.common.tasks as tasks

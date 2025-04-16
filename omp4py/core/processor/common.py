@@ -63,7 +63,7 @@ def code_to_function(ctx: nodes.NodeContext, fname: str, body: list[ast.stmt]) -
 
 
 def barrier(ctx: nodes.NodeContext) -> ast.stmt:
-    return ctx.copy_pos(ast.Expr(ctx.new_call(f'{ctx.r}.barrier')))
+    return ctx.copy_pos(ast.Expr(ctx.new_call(f'{ctx.r}.sync_barrier')))
 
 
 def mutex(ctx: nodes.NodeContext, body: list[ast.stmt]) -> [ast.stmt]:

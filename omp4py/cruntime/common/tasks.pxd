@@ -6,6 +6,9 @@ cdef pyint ParallelTaskID
 cdef pyint ForTaskID
 cdef pyint TeamsTaskID
 cdef pyint SectionsTaskID
+cdef pyint SingleTaskID
+cdef pyint BarrierTaskID
+cdef pyint CustomTaskID
 
 cdef class Task:
     cdef Task parent
@@ -17,7 +20,6 @@ cdef class ParallelTask(Task):
     cdef threadshared.SharedContext context
     cdef threadshared.TaskQueue queue
     cdef lock.Mutex lock_mutex
-    cdef lock.Barrier lock_barrier
 
     @staticmethod
     cdef ParallelTask new(controlvars.ControlVars cvars, threadshared.SharedFactory shared)
@@ -39,8 +41,28 @@ cdef class ForTask(Task):
     @staticmethod
     cdef ForTask new(controlvars.ControlVars cvars)
 
-cdef class TeamsTask:
+cdef class TeamsTask(Task):
     pass
 
-cdef class CustomTask:
+cdef class SingleTask(Task):
+    cdef atomic.AtomicFlag executed
+
+    @staticmethod
+    cdef SingleTask new(controlvars.ControlVars cvars, atomic.AtomicFlag executed)
+
+
+cdef class BarrierTask(Task):
+    cdef pyint parties
+    cdef atomic.AtomicInt count
+    cdef threadshared.SharedContext context
+
+    @staticmethod
+    cdef BarrierTask new(controlvars.ControlVars cvars, pyint parties, threadshared.SharedContext context,
+                         atomic.AtomicInt count)
+
+cdef class CustomTask(Task):
     cdef object f
+    cdef lock.Event wait_event
+
+    @staticmethod
+    cdef CustomTask new(controlvars.ControlVars cvars, object f)

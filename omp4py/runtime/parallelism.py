@@ -1,20 +1,22 @@
 import typing
 import threading
 
-from omp4py.runtime.common import threadshared, controlvars, thread, tasks
+from omp4py.runtime.common import threadshared, controlvars, thread, tasks, barrier
 from omp4py.runtime.basics import array
 from omp4py.runtime.basics.types import *
 
 
 def omp_parallel(num: pyint, f: typing.Callable[[], None], cvars: controlvars.ControlVars, parent: tasks.Task,
                  shared: threadshared.SharedFactory) -> None:
+    if num > 0:
+        thread.init(parent)
     task: tasks.ParallelTask = tasks.ParallelTask.new(cvars.__copy__(), shared)
     task.cvars.dataenv = task.cvars.dataenv.__copy__()
     task.cvars.dataenv.thread_num = num
-    thread.init(parent).set_task(task).set_parallel(task)
-    # TODO barrier and explicit tasks
+    thread.current().set_parallel(task).set_task(task)
     f()
-    task.lock_barrier.wait()
+    barrier.task_barrier(task)
+    thread.current().pop_task()
 
 
 def parallel_run(f: typing.Callable[[], None], c_if: bool, c_message: str, c_nthreads: tuple[pyint, ...],
@@ -33,7 +35,7 @@ def parallel_run(f: typing.Callable[[], None], c_if: bool, c_message: str, c_nth
         cvars.dataenv.nthreads = cvars.dataenv.nthreads[1:]
     cvars.dataenv.levels += 1
 
-    shared: threadshared.SharedFactory = threadshared.SharedFactory(cvars)
+    shared: threadshared.SharedFactory = threadshared.SharedFactory.new(cvars)
     if not c_if:
         omp_parallel(0, f, cvars, parent, shared)
         return
