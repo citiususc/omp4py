@@ -1,9 +1,9 @@
 import networkx as nx
 import time
-from omputils import njit, pyomp, omp
+from omputils import njit, pyomp, omp, use_pyomp, use_pure, use_compiled, use_compiled_types
 
 
-@omp
+@omp(pure=use_pure(), compile=use_compiled())
 def _omp4py_graphc(G):
     clustering = [0] * len(G)
 
@@ -13,9 +13,8 @@ def _omp4py_graphc(G):
     return clustering
 
 
-def graphc(n=300000, seed=0, numba=False):
-    numba = False
-    print(f"graphc: n={n}, seed={seed}, numba={numba}")
+def graphc(n=300000, seed=0):
+    print(f"graphc: n={n}, seed={seed}")
     # https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.cluster.clustering.html#networkx.algorithms.cluster.clustering
     G = nx.barabasi_albert_graph(n, 100)
 

@@ -1,6 +1,7 @@
 import math
 import time
-from omputils import njit, pyomp, omp
+from omputils import njit, pyomp, omp, use_pyomp, use_pure, use_compiled, use_compiled_types
+
 
 @njit
 def _f(x):
@@ -19,7 +20,7 @@ def _pyomp_quad(n, a, b):
     return total
 
 
-@omp
+@omp(pure=use_pure(), compile=use_compiled())
 def _omp4py_quad(n, a, b):
     total = 0.0
 
@@ -31,8 +32,21 @@ def _omp4py_quad(n, a, b):
     return total
 
 
-def quad(n=1000000000, numba=False):
-    print(f"quad: n={n}, numba={numba}")
+@omp(pure=use_pure(), compile=use_compiled())
+def _omp4py_quad_types(n: int, a: float, b: float):
+    total: float = 0.0
+    PI: float = math.pi
+
+    with omp("parallel for reduction(+:total)"):
+        for i in range(n):
+            x: float = ((n - i - 1) * a + i * b) / (n - 1)
+            total = total + 50.0 / (PI * (2500.0 * x * x + 1.0))
+
+    return total
+
+
+def quad(n=1000000000):
+    print(f"quad: n={n}")
     a = 0.0
     b = 10.0
     exact = 0.49936338107645674464
@@ -46,7 +60,12 @@ def quad(n=1000000000, numba=False):
           f"  Exact    = {exact}")
 
     wtime = time.perf_counter()
-    total = (_pyomp_quad if numba else _omp4py_quad)(n, a, b)
+    if use_pyomp():
+        total = _pyomp_quad(n, a, b)
+    elif use_compiled_types():
+        total = _omp4py_quad_types(n, a, b)
+    else:
+        total = _omp4py_quad(n, a, b)
     wtime = time.perf_counter() - wtime
 
     total = (b - a) * total / n

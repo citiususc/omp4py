@@ -1,7 +1,7 @@
 import random
 import time
 import string
-from omputils import njit, pyomp, omp
+from omputils import njit, pyomp, omp, use_pyomp, use_pure, use_compiled, use_compiled_types
 
 
 def random_word(min_length=3, max_length=10):
@@ -24,14 +24,14 @@ def generate_text(b_size, seed):
 
 
 @njit
-def _pyomp_wordcount(text):
+def _pyomp_wordcount(lines):
     count = {}
 
     with pyomp("parallel"):
         local_count = {}
         with pyomp("for"):
-            for i in range(len(text)):
-                for word in text.split():
+            for i in range(len(lines)):
+                for word in lines[i].split():
                     if word in local_count:
                         local_count[word] += 1
                     else:
@@ -43,7 +43,7 @@ def _pyomp_wordcount(text):
     return count
 
 
-@omp
+@omp(pure=use_pure(), compile=use_compiled())
 def _omp4py_wordcount(lines):
     count = {}
 
@@ -63,12 +63,15 @@ def _omp4py_wordcount(lines):
     return count
 
 
-def wordcount(n=1000000, seed=0, numba=False):
-    print(f"wordcount: {n}, seed: {seed}, numba: {numba}")
+def wordcount(n=1000000, seed=0):
+    print(f"wordcount: {n}, seed: {seed}")
     text = generate_text(n, seed)
     lines = text.splitlines()
 
     wtime = time.perf_counter()
-    _pyomp_wordcount(lines) if numba else _omp4py_wordcount(lines)
+    if use_pyomp():
+        _pyomp_wordcount(lines)
+    else:
+        _omp4py_wordcount(lines)
     wtime = time.perf_counter() - wtime
     print("Elapsed time : %.6f" % wtime)

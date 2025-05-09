@@ -1,7 +1,12 @@
 import numpy as np
 import math
 import time
-from omputils import njit, pyomp, omp
+from omputils import njit, pyomp, omp, use_pyomp, use_pure, use_compiled, use_compiled_types
+
+try:
+    import cython
+except ImportError:
+    pass
 
 
 def _ggl(seed):
@@ -49,38 +54,6 @@ def _cfft2(n, x, y, w, sgn, _step):
     _step(n, mj, x[0 * 2 + 0:], x[(n // 2) * 2 + 0:], y[0 * 2 + 0:], y[mj * 2 + 0:], w, sgn)
 
 
-@omp
-def _omp4py_step(n, mj, a, b, c, d, w, sgn):
-    mj2 = 2 * mj
-    lj = n // mj2
-
-    with omp("parallel"):
-        wjw = np.empty(2)
-        with omp("for"):
-            for j in range(lj):
-                jw = j * mj
-                ja = jw
-                jb = ja
-                jc = j * mj2
-                jd = jc
-
-                wjw[0] = w[jw * 2 + 0]
-                wjw[1] = w[jw * 2 + 1]
-
-                if sgn < 0.0:
-                    wjw[1] = -wjw[1]
-
-                for k in range(mj):
-                    c[(jc + k) * 2 + 0] = a[(ja + k) * 2 + 0] + b[(jb + k) * 2 + 0]
-                    c[(jc + k) * 2 + 1] = a[(ja + k) * 2 + 1] + b[(jb + k) * 2 + 1]
-
-                    ambr = a[(ja + k) * 2 + 0] - b[(jb + k) * 2 + 0]
-                    ambu = a[(ja + k) * 2 + 1] - b[(jb + k) * 2 + 1]
-
-                    d[(jd + k) * 2 + 0] = wjw[0] * ambr - wjw[1] * ambu
-                    d[(jd + k) * 2 + 1] = wjw[1] * ambr + wjw[0] * ambu
-
-
 @njit
 def _pyomp_step(n, mj, a, b, c, d, w, sgn):
     mj2 = 2 * mj
@@ -113,14 +86,91 @@ def _pyomp_step(n, mj, a, b, c, d, w, sgn):
                     d[(jd + k) * 2 + 1] = wjw[1] * ambr + wjw[0] * ambu
 
 
-def fft(ln2_max=22, nits=10000, seed=331, numba=False):
-    print(f"fft: ln2_max={ln2_max}, nits={nits}, seed={seed}, numba={numba}")
-    #https://people.math.sc.edu/Burkardt/cpp_src/fft_openmp/fft_openmp.html
+@omp(pure=use_pure(), compile=use_compiled())
+def _omp4py_step(n, mj, a, b, c, d, w, sgn):
+    mj2 = 2 * mj
+    lj = n // mj2
+
+    with omp("parallel"):
+        wjw = np.empty(2)
+        with omp("for"):
+            for j in range(lj):
+                jw = j * mj
+                ja = jw
+                jb = ja
+                jc = j * mj2
+                jd = jc
+
+                wjw[0] = w[jw * 2 + 0]
+                wjw[1] = w[jw * 2 + 1]
+
+                if sgn < 0.0:
+                    wjw[1] = -wjw[1]
+
+                for k in range(mj):
+                    c[(jc + k) * 2 + 0] = a[(ja + k) * 2 + 0] + b[(jb + k) * 2 + 0]
+                    c[(jc + k) * 2 + 1] = a[(ja + k) * 2 + 1] + b[(jb + k) * 2 + 1]
+
+                    ambr = a[(ja + k) * 2 + 0] - b[(jb + k) * 2 + 0]
+                    ambu = a[(ja + k) * 2 + 1] - b[(jb + k) * 2 + 1]
+
+                    d[(jd + k) * 2 + 0] = wjw[0] * ambr - wjw[1] * ambu
+                    d[(jd + k) * 2 + 1] = wjw[1] * ambr + wjw[0] * ambu
+
+
+@omp(pure=use_pure(), compile=use_compiled())
+def _omp4py_step_types(n: int, mj: int, a2, b2, c2, d2, w2, sgn: float):
+    mj2: int = 2 * mj
+    lj: int = n // mj2
+
+    a: cython.double[:] = a2
+    b: cython.double[:] = b2
+    c: cython.double[:] = c2
+    d: cython.double[:] = d2
+    w: cython.double[:] = w2
+
+    with omp("parallel"):
+        wjw0: float = 0
+        wjw1: float = 1
+        with omp("for"):
+            for j in range(lj):
+                jw: int = j * mj
+                ja: int = jw
+                jb: int = ja
+                jc: int = j * mj2
+                jd: int = jc
+
+                wjw0 = w[jw * 2 + 0]
+                wjw1 = w[jw * 2 + 1]
+
+                if sgn < 0.0:
+                    wjw1 = -wjw1
+
+                k: int
+                for k in range(mj):
+                    c[(jc + k) * 2 + 0] = a[(ja + k) * 2 + 0] + b[(jb + k) * 2 + 0]
+                    c[(jc + k) * 2 + 1] = a[(ja + k) * 2 + 1] + b[(jb + k) * 2 + 1]
+
+                    ambr: float = a[(ja + k) * 2 + 0] - b[(jb + k) * 2 + 0]
+                    ambu: float = a[(ja + k) * 2 + 1] - b[(jb + k) * 2 + 1]
+
+                    d[(jd + k) * 2 + 0] = wjw0 * ambr - wjw1 * ambu
+                    d[(jd + k) * 2 + 1] = wjw1 * ambr + wjw0 * ambu
+
+
+def fft(ln2_max=22, nits=10000, seed=331):
+    print(f"fft: ln2_max={ln2_max}, nits={nits}, seed={seed}")
+    # https://people.math.sc.edu/Burkardt/cpp_src/fft_openmp/fft_openmp.html
     print("  Accuracy check:")
     print("            N      NITS    Error         Time          Time/Call     MFLOPS")
 
     wtotal = 0
-    _step = _pyomp_step if numba else _omp4py_step
+    if use_pyomp():
+        _step = _pyomp_step
+    elif use_compiled_types():
+        _step = _omp4py_step_types
+    else:
+        _step = _omp4py_step
     n = 1
     # LN2 is the log base 2 of N.  Each increase of LN2 doubles N.
     for ln2 in range(1, ln2_max + 1):

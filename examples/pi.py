@@ -1,6 +1,6 @@
 import math
 import time
-from omputils import njit, pyomp, omp
+from omputils import njit, pyomp, omp, use_pyomp, use_pure, use_compiled, use_compiled_types
 
 
 @njit
@@ -14,7 +14,7 @@ def _pyomp_pi(n):
     return PI * w
 
 
-@omp
+@omp(pure=use_pure(), compile=use_compiled())
 def _omp4py_pi(n):
     w = 1.0 / n
     PI = 0.0
@@ -24,27 +24,28 @@ def _omp4py_pi(n):
             PI += 4.0 / (1.0 + local * local)
     return PI * w
 
-@omp
-def _omp4py_pi2(n):
-    w = 1.0 / n
-    PI = 0.0
-    with omp("parallel"):
-        pi_local = 0.0
-        with omp("for"):
-            for i in range(n):
-                local = (i + 0.5) * w
-                pi_local += 4.0 / (1.0 + local * local)
-        with omp("critical"):
-            PI += pi_local
 
+@omp(pure=use_pure(), compile=use_compiled())
+def _omp4py_pi_types(n: int):
+    w: float = 1.0 / n
+    PI: float = 0.0
+    with omp("parallel for reduction(+:PI)"):
+        for i in range(n):
+            local: float = (i + 0.5) * w
+            PI += 4.0 / (1.0 + local * local)
     return PI * w
 
 
-def pi(n=2000000000, numba=False):
-    print(f"pi: n={n}, numba={numba}")
+def pi(n=2000000000):
+    print(f"pi: n={n}")
 
     wtime = time.perf_counter()
-    PI = _pyomp_pi(n) if numba else _omp4py_pi2(n)
+    if use_pyomp():
+        PI = _pyomp_pi(n)
+    elif use_compiled_types():
+        PI = _omp4py_pi_types(n)
+    else:
+        PI = _omp4py_pi(n)
     wtime = time.perf_counter() - wtime
 
     error = math.fabs(PI - math.pi)

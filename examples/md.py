@@ -2,9 +2,15 @@ import numpy as np
 import math
 import time
 import random
-from omputils import njit, pyomp, omp
+from omputils import njit, pyomp, omp, use_pyomp, use_pure, use_compiled, use_compiled_types
 
 _PI_2 = math.pi / 2
+
+try:
+    import cython
+except ImportError:
+    pass
+
 
 @njit
 def _v(x):
@@ -12,6 +18,7 @@ def _v(x):
         return math.sin(x) ** 2
     else:
         return 1.0
+
 
 @njit
 def _dv(x):
@@ -30,6 +37,7 @@ def _initialize(np, nd, box, pos, vel, acc, seed):
             vel[i][j] = 0.0
             acc[i][j] = 0.0
 
+
 @njit
 def _dist(nd, r1, r2, dr):
     d = 0.0
@@ -37,6 +45,7 @@ def _dist(nd, r1, r2, dr):
         dr[i] = r1[i] - r2[i]
         d += dr[i] * dr[i]
     return math.sqrt(d)
+
 
 @njit
 def _dot_prod(n, x, y):
@@ -84,7 +93,7 @@ def _pyomp_update(n, nd, pos, vel, f, a, mass, dt):
                 a[i][j] = f[i][j] * rmass
 
 
-@omp
+@omp(pure=use_pure(), compile=use_compiled())
 def _omp4py_compute(n, nd, pos, vel, mass, f):
     pot = 0.0
     kin = 0.0
@@ -109,7 +118,7 @@ def _omp4py_compute(n, nd, pos, vel, mass, f):
     return pot, kin
 
 
-@omp
+@omp(pure=use_pure(), compile=use_compiled())
 def _omp4py_update(n, nd, pos, vel, f, a, mass, dt):
     rmass = 1.0 / mass
     with omp("parallel for"):
@@ -120,13 +129,80 @@ def _omp4py_update(n, nd, pos, vel, f, a, mass, dt):
                 a[i][j] = f[i][j] * rmass
 
 
-def md(n=2000, steps=10, seed=0, numba=False):
-    print(f"md: n={n}, steps={steps}, seed={seed}, numba={numba}")
+@omp(pure=use_pure(), compile=use_compiled())
+def _omp4py_compute_types(n: int, nd: int, pos2, vel2, mass: float, f2):
+    pot: float = 0.0
+    kin: float = 0.0
+
+    pos: cython.double[:, :] = pos2
+    vel: cython.double[:, :] = vel2
+    f: cython.double[:, :] = f2
+
+    with omp("parallel reduction(+:pot, kin)"):
+        rij2 = np.empty(nd)
+        rij: cython.double[:] = rij2
+
+        with omp("for"):
+            for i in range(n):
+                j: int
+                for j in range(nd):
+                    f[i][j] = 0.0
+                for j in range(n):
+                    if i != j:
+                        d: float = 0.0
+                        for s in range(nd):
+                            rij[s] = pos[i][s] - pos[j][s]
+                            d += rij[s] * rij[s]
+                        d = math.sqrt(d)
+
+                        pot = pot + 0.5 * (math.sin(d) ** 2 if d < _PI_2 else 1.0)
+                        for k in range(nd):
+                            if d == 0:
+                                d = 10e-16
+                            f[i][k] = f[i][k] - rij[k] * (2 * math.sin(d) * math.cos(d) if d < _PI_2 else 0.0) / d
+
+                t: float = 0.0
+                s: int
+                for s in range(nd):
+                    t += vel[i][s] * vel[j][s]
+                kin = kin + t
+    kin = kin * 0.5 * mass
+    return pot, kin
+
+
+@omp(pure=use_pure(), compile=use_compiled())
+def _omp4py_update_types(n: int, nd: int, pos2, vel2, f2, a2, mass: float, dt: float):
+    rmass: float = 1.0 / mass
+
+    pos: cython.double[:, :] = pos2
+    vel: cython.double[:, :] = vel2
+    f: cython.double[:, :] = f2
+    a: cython.double[:, :] = a2
+
+    with omp("parallel for"):
+        for i in range(n):
+            j: int
+            for j in range(nd):
+                pos[i][j] = pos[i][j] * vel[i][j] * dt + 0.5 * dt * dt * a[i][j]
+                vel[i][j] = vel[i][j] + 0.5 * dt * (f[i][j] * rmass + a[i][j])
+                a[i][j] = f[i][j] * rmass
+
+
+def md(n=2000, steps=10, seed=0):
+    print(f"md: n={n}, steps={steps}, seed={seed}")
     mass = 1.0
     dt = 1.0e-4
     ndim = 3
-    _compute = _pyomp_compute if numba else _omp4py_compute
-    _update = _pyomp_update if numba else _omp4py_update
+
+    if use_pyomp():
+        _compute = _pyomp_compute
+        _update = _pyomp_update
+    elif use_compiled_types():
+        _compute = _omp4py_compute_types
+        _update = _omp4py_update_types
+    else:
+        _compute = _omp4py_compute
+        _update = _omp4py_update
 
     box = np.empty(ndim)
     position = np.empty((n, ndim))
