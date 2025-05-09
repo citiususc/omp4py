@@ -3,6 +3,7 @@ import ast
 import typing
 import dataclasses
 import copy
+from os import rename
 
 from omp4py.core.directive import OmpDirective, OmpClause, parse_line
 from omp4py.core.processor.varscope import Variables
@@ -27,7 +28,7 @@ class NodeContext:
     src_lines: list[str]
     parser_args: ParserArgs
     runtime: str
-    only_parse: bool
+    global_parse: bool
     directive_callback: typing.Callable[['NodeContext', OmpDirective], None] | None = None
     directive: ast.Constant | None = None
     stack: list[ast.AST] = dataclasses.field(default_factory=list)

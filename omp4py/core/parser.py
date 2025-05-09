@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from omp4py.core.directive import OmpDirective, OmpClause, tokenizer
 from omp4py.core.processor.processor import OMP_PROCESSOR
 from omp4py.core.processor.builder import build, search_cache, get_cache_dir, gen_cache_key, __version__
-from omp4py.core.processor.nodes import NodeContext, directive_node, Variables, ParserArgs
+from omp4py.core.processor.nodes import NodeContext, directive_node, Variables, ParserArgs, node_name
 from omp4py.core.processor.common import OmpItemError
 
 __all__ = ['omp', 'omp4py_force_pure', '__version__']
@@ -156,7 +156,7 @@ def omp_parse(fc: Any, args: ParserArgs) -> Any:
     src_lines: list[str]
     src_start: int
     src_name: str = fc.__name__
-    only_parse: bool = src_name == '_'
+    global_parse: bool = src_name == '_'
     src_full_lines, src_start = inspect.findsource(inspect.unwrap(fc))
     src_lines = inspect.getblock(src_full_lines[src_start:])
     src_code: str = ''.join(src_lines)
@@ -186,8 +186,8 @@ def omp_parse(fc: Any, args: ParserArgs) -> Any:
 
     module: ast.Module = ast.parse(''.join(src_lines), filename=src_filename)
     ctx: NodeContext
-    module, ctx = OmpTransformer(src_filename, src_lines, args, only_parse).transform(module)
-    if only_parse:
+    module, ctx = OmpTransformer(src_filename, src_lines, args, global_parse).transform(module)
+    if global_parse:
         return None
     module = ast.fix_missing_locations(module)
 
@@ -198,15 +198,15 @@ def omp_parse(fc: Any, args: ParserArgs) -> Any:
         with open(f"{os.path.basename(inspect.getfile(fc))}_{fc.__name__}_omp_d.py", "w") as file:
             file.write(ast.unparse(module))
 
-    return build(fc, src_name, src_module, module, ctx.variables.history_types, cache_key, args)
+    return build(fc, src_name, src_module, module, ctx.variables.annotations, cache_key, args)
 
 
 class OmpTransformer(ast.NodeTransformer):
     ctx: NodeContext
     attibutes: bool
 
-    def __init__(self, filename: str, src_lines: list[str], parser_args: ParserArgs, only_parse: bool) -> None:
-        self.ctx = NodeContext(filename, src_lines, parser_args, '__ompp' if parser_args.pure else '__omp', only_parse)
+    def __init__(self, filename: str, src_lines: list[str], parser_args: ParserArgs, global_parse: bool) -> None:
+        self.ctx = NodeContext(filename, src_lines, parser_args, '__ompp' if parser_args.pure else '__omp', global_parse)
         self.attibutes = False
 
     def transform(self, node: ast.Module) -> (ast.Module, NodeContext):
@@ -263,7 +263,7 @@ class OmpTransformer(ast.NodeTransformer):
         if isinstance(node.target, ast.Name):
             self.ctx.variables.add(node.target.id, node.annotation)
         else:
-            self.ctx.variables.history_types[ast.unparse(node.target)] = node.annotation
+            self.ctx.variables.add_ann(node_name(node.target), node.annotation)
             self.generic_visit(node.target)
         return node
 

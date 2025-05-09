@@ -382,7 +382,7 @@ def _parse_modifiers(specs: Arguments, lpar: TokenInfo, tokens: list[TokenInfo],
             avail_mods.remove(mod_name)
 
         parsed_modifiers.append(dataclasses.replace(mod, args=args) if n_args > 0 else mod)
-        i += c_sep + n_args
+        i = c_sep + 1
 
     for mod_name in avail_mods:  # check required modifiers
         if MODIFIERS[mod_name].required and mod_name not in used_mods:
@@ -450,15 +450,19 @@ def parser_basic(specs: Arguments, lpar: TokenInfo, tokens: list[TokenInfo], rpa
 
     modifiers: list[OmpItem] = []
     i: int = 0
-    if not specs.post_modified and colon_sep != -1:
-        modifiers = _parse_modifiers(specs, lpar, tokens[:colon_sep], rpar)
-        i = colon_sep + 1
+    args_tokens: int = len(tokens)
+    if colon_sep != -1:
+        if not specs.post_modified:
+            modifiers = _parse_modifiers(specs, lpar, tokens[:colon_sep], rpar)
+            i = colon_sep + 1
+        else:
+            args_tokens = colon_sep
 
     args: list[OmpItem] = []
     args_transform: ItemTransformer = TRANSFORMERS[specs.transform]
-    i = colon_sep + 1
-    while i < len(tokens):
-        c_sep: int = max(find_separator(tokens[i:], sep=tokenizer.COMMA) + i, i + 1)
+
+    while i < args_tokens:
+        c_sep: int = max(find_separator(tokens[i:args_tokens], sep=tokenizer.COMMA) + i, i + 1)
         args.append(args_transform(len(args), M_ARGS, specs, tokens[i:c_sep], rpar))
         i = c_sep + 1
 

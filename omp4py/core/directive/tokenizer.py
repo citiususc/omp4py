@@ -78,9 +78,9 @@ def expected_error(t: TokenInfo, expected: str) -> SyntaxError:
     if t.type == tokenize.ENDMARKER:
         before_msg = "end of line"
     elif t.type == tokenize.NAME:
-        before_msg = f"'{t.string}'"
+        before_msg = f"'{t.string.strip()}'"
     else:
-        before_msg = f"'{t.string}' token"
+        before_msg = f"'{t.string.strip()}' token"
     return t.make_error(f"expected {expected} before {before_msg}")
 
 

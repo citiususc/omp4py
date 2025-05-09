@@ -299,6 +299,11 @@ def for_(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | None, c
             loop.iter.args.append(ctx.array_pos(name_bound, 6 * i + 1, ast.Load()))
 
         loop.iter.args.append(ctx.clone(bounds_list.elts[-1]))
+        if isinstance(loop.target, ast.Name) and loop.target.id not in ctx.variables.history_types:
+            type_comment: ast.Name = ast.Name(id='int', ctx=ast.Load())
+            body_header.append(ctx.copy_pos(ast.AnnAssign(target=loop.target, annotation=type_comment, simple=1)))
+            ctx.variables.history_types[loop.target.id] = type_comment
+
         body = loop.body
 
     for_init.args.append(ast.Name(id=name_bound, ctx=ast.Load()))

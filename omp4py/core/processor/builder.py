@@ -117,7 +117,7 @@ def search_cache(module: types.ModuleType, cache_dir: str, cache_key: str) -> ty
             return load_dynamic(module, cache_key, os.path.join(cache_dir, os.path.join(cache_key) + ext))
 
 
-def build(fc: typing.Any, name: str, module: types.ModuleType, omp_ast: ast.Module, ann: dict[str, ast.expr],
+def build(fc: typing.Any, name: str, module: types.ModuleType, omp_ast: ast.Module, ann: list[ast.expr],
           cache_key: str, args: ParserArgs) -> typing.Any:
     if args.cache or args.compile:
         os.makedirs(args.cache_dir, exist_ok=True)
@@ -182,7 +182,7 @@ def build(fc: typing.Any, name: str, module: types.ModuleType, omp_ast: ast.Modu
 
 
 def _resolve_imports(args: ParserArgs, f: typing.TextIO, module: types.ModuleType, fc: typing.Any,
-                     ann: dict[str, ast.expr], define_macros: list[str], c_include_dirs: list[str]) -> None:
+                     ann: list[ast.expr], define_macros: list[str], c_include_dirs: list[str]) -> None:
     symbols: set[str]
     if hasattr(fc, '__code__'):
         symbols = set(fc.__code__.co_names)
@@ -193,14 +193,13 @@ def _resolve_imports(args: ParserArgs, f: typing.TextIO, module: types.ModuleTyp
     if len(ann) > 0:  # add annotations dependencies
         value: ast.expr
         node: ast.AST
-        for value in ann.values():
+        for value in ann:
             for node in ast.walk(value):
                 if isinstance(node, ast.Name):
                     symbols.add(node.id)
 
     shadow_globals: bool = 'globals' in symbols
     omp4py: types.ModuleType = sys.modules['omp4py']
-    omp4py_types: types.ModuleType = sys.modules['omp4py.runtime.basics.types']
     copy_imports: set[types.ModuleType] = {omp4py, cython}
     symbols -= set(__builtins__.keys())
     symbols &= set(module.__dict__.keys())
@@ -209,6 +208,10 @@ def _resolve_imports(args: ParserArgs, f: typing.TextIO, module: types.ModuleTyp
     if not args.pure:
         cimport = 'cython.cimports.'
         f.write(f'import {cimport}omp4py.cruntime as __omp\n')
+
+        if gen_native_types(ann):
+            f.write(f'from {cimport}omp4py.cruntime.basics.compilertypes import *\n')
+
     else:
         f.write('import omp4py.runtime as __ompp\n')
 
@@ -218,14 +221,14 @@ def _resolve_imports(args: ParserArgs, f: typing.TextIO, module: types.ModuleTyp
         c_include_dirs.append(numpy.get_include())
         define_macros.append(("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION"))
 
-        if 'np_pythran' in args.compiler_args and args.compiler_args['np_pythran']:
+        if 'np_pythran' in sys.modules:
             import pythran
             c_include_dirs.append(pythran.get_include())
 
     name: str
     for name in sorted(symbols):
         import_: typing.Any = module.__dict__[name]
-        iname: str = import_.__name__
+        iname: str = import_.__name__ if hasattr(import_, '__name__') else name
 
         if import_ in copy_imports:
             prefix: str = ''
@@ -235,8 +238,7 @@ def _resolve_imports(args: ParserArgs, f: typing.TextIO, module: types.ModuleTyp
             f.write(f'import {prefix}{iname} as {name}\n')
         elif hasattr(import_, '__module__') and import_.__module__ in copy_imports:
             f.write(f'from {import_.__module__} import {name}\n')
-        elif name in omp4py.__dict__ and import_ == omp4py.__dict__[name] and \
-                ('runtime' in import_.__module__ or name in omp4py_types.__dict__):
+        elif name in omp4py.__dict__ and import_ == omp4py.__dict__[name] and 'runtime' in import_.__module__:
             f.write(f'from {cimport}omp4py import {name}\n')
             symbols.remove(name)
 
@@ -246,3 +248,13 @@ def _resolve_imports(args: ParserArgs, f: typing.TextIO, module: types.ModuleTyp
 
     if shadow_globals:
         f.write(f'__omp4py_globals = ...\nglobals = lambda: __omp4py_globals\n')
+
+
+def gen_native_types(ann: list[ast.expr]) -> bool:
+    found: bool = True
+    expr: ast.Expr
+    for expr in ann:
+        if isinstance(expr, ast.Name) and expr.id in ('int', 'float'):
+            expr.id = f'omp_{expr.id}'
+            found = True
+    return found
