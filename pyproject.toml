@@ -60,5 +60,5 @@ script = "scripts/compile.py"
 
 
 [build-system]
-requires = ["poetry-core", "setuptools>=78", "Cython>=3.1.0rc2"]
+requires = ["poetry-core", "setuptools>=78", "Cython>=3.1.0"]
 build-backend = "poetry.core.masonry.api"
