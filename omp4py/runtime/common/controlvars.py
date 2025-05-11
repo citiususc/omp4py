@@ -106,6 +106,10 @@ class GlobalVars:
     num_devices: pyint
     target_offload: str
 
+    @staticmethod
+    def new() -> 'GlobalVars':
+        return GlobalVars.__new__(GlobalVars)
+
     def default(self):
         self.available_devices = getenv('OMP_AVAILABLE_DEVICES', '', str)  # TODO
         self.cancel = getenv('OMP_CANCELLATION', False, bool)
@@ -116,7 +120,7 @@ class GlobalVars:
         self.target_offload = getenv('OMP_TARGET_OFFLOAD', 'default',
                                      p_match(lambda v: v in ['mandatory', 'disabled', 'default']))
 
-    def __copy__(self):
+    def __copy__(self) -> 'GlobalVars':
         other: GlobalVars = GlobalVars()
         other.available_devices = self.available_devices
         other.cancel = self.cancel
@@ -149,6 +153,10 @@ class DataEnvVars:
     thread_limit: pyint
     thread_num: pyint
 
+    @staticmethod
+    def new() -> 'DataEnvVars':
+        return DataEnvVars.__new__(DataEnvVars)
+
     def default(self):
         self.active_levels = 0
         self.bind = getenv('OMP_PROC_BIND', '', str)  # TODO
@@ -170,7 +178,7 @@ class DataEnvVars:
         self.thread_limit = getenv('OMP_THREAD_LIMIT', 2 ** 31, int)
         self.thread_num = 0
 
-    def __copy__(self):
+    def __copy__(self) ->'DataEnvVars':
         other: DataEnvVars = DataEnvVars()
         other.active_levels = self.active_levels
         other.bind = self.bind
@@ -204,6 +212,10 @@ class DeviceVars:
     teams_thread_limit: pyint
     wait_policy: str
 
+    @staticmethod
+    def new() -> 'DeviceVars':
+        return DeviceVars.__new__(DeviceVars)
+
     def default(self):
         self.affinity_format = getenv('OMP_AFFINITY_FORMAT', '', str)  # TODO
         self.device_num = 0
@@ -214,8 +226,8 @@ class DeviceVars:
         self.wait_policy = getenv('OMP_WAIT_POLICY', 'active',
                                   p_match(lambda v: v.lower() in ['active', 'passive'])).lower()
 
-    def __copy__(self):
-        other = DeviceVars()
+    def __copy__(self) -> 'DeviceVars':
+        other:DeviceVars = DeviceVars.new()
         other.affinity_format = self.affinity_format
         other.device_num = self.device_num
         other.nteams = self.nteams
@@ -231,12 +243,16 @@ class ITaskVars:
     def_allocator: str
     place_assignment: str
 
+    @staticmethod
+    def new() -> 'ITaskVars':
+        return ITaskVars.__new__(ITaskVars)
+
     def default(self):
         self.def_allocator = getenv('OMP_ALLOCATOR', '', str)  # TODO
         self.place_assignment = ''  # TODO
 
-    def __copy__(self):
-        other = DeviceVars()
+    def __copy__(self) ->'ITaskVars':
+        other: ITaskVars = ITaskVars.new()
         other.def_allocator = self.def_allocator
         other.place_assignment = self.place_assignment
 
@@ -249,18 +265,22 @@ class ControlVars:
     device: DeviceVars
     itask: ITaskVars
 
+    @staticmethod
+    def new() -> 'ControlVars':
+        return ControlVars.__new__(ControlVars)
+
     def default(self):
-        self.global_ = GlobalVars()
+        self.global_ = GlobalVars.new()
         self.global_.default()
-        self.dataenv = DataEnvVars()
+        self.dataenv = DataEnvVars.new()
         self.dataenv.default()
-        self.device = DeviceVars()
+        self.device = DeviceVars.new()
         self.device.default()
-        self.itask = ITaskVars()
+        self.itask = ITaskVars.new()
         self.itask.default()
 
-    def __copy__(self):
-        other = ControlVars()
+    def __copy__(self)-> 'ControlVars':
+        other: ControlVars = ControlVars.new()
         other.global_ = self.global_
         other.dataenv = self.dataenv
         other.device = self.device

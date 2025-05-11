@@ -11,7 +11,7 @@ cdef class ScheduleVar:
     @staticmethod
     cdef pyint kind_int(kind: str)
 
-    cdef __copy__(self)
+    cdef ScheduleVar __copy__(self)
 
 cdef class GlobalVars:
     cdef str available_devices
@@ -22,9 +22,12 @@ cdef class GlobalVars:
     cdef pyint num_devices
     cdef str target_offload
 
-    cdef default(self)
+    @staticmethod
+    cdef GlobalVars new()
 
-    cdef __copy__(self)
+    cdef void default(self)
+
+    cdef GlobalVars __copy__(self)
 
 
 cdef class DataEnvVars:
@@ -48,9 +51,12 @@ cdef class DataEnvVars:
     cdef pyint thread_limit
     cdef pyint thread_num
 
-    cdef default(self)
+    @staticmethod
+    cdef DataEnvVars new()
 
-    cdef __copy__(self)
+    cdef void default(self)
+
+    cdef DataEnvVars __copy__(self)
 
 
 cdef class DeviceVars:
@@ -62,18 +68,24 @@ cdef class DeviceVars:
     cdef pyint teams_thread_limit
     cdef str wait_policy
 
-    cdef default(self)
+    @staticmethod
+    cdef DeviceVars new()
 
-    cdef __copy__(self)
+    cdef void default(self)
+
+    cdef DeviceVars __copy__(self)
 
 
 cdef class ITaskVars:
     cdef str def_allocator
     cdef str place_assignment
 
-    cdef default(self)
+    @staticmethod
+    cdef ITaskVars new()
 
-    cdef __copy__(self)
+    cdef void default(self)
+
+    cdef ITaskVars __copy__(self)
 
 cdef class ControlVars:
     cdef GlobalVars global_
@@ -81,6 +93,9 @@ cdef class ControlVars:
     cdef DeviceVars device
     cdef ITaskVars itask
 
-    cdef default(self)
+    @staticmethod
+    cdef ControlVars new()
 
-    cdef __copy__(self)
+    cdef void default(self)
+
+    cdef ControlVars __copy__(self)

@@ -164,6 +164,7 @@ def for_guided(task: tasks.ForTask, bounds: array.iview) -> None:
 def single() -> bool:
     executed: atomic.AtomicFlag = thread.current().parallel.context.push(tasks.SingleTaskID, atomic.AtomicFlag.new())
     task: tasks.SingleTask = tasks.SingleTask.new(thread.cvars(), executed)
+    thread.current().set_task(task)
     return not task.executed.no_clear_test_and_set()
 
 

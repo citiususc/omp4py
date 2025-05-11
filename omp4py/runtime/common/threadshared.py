@@ -111,7 +111,7 @@ class TaskQueue:
         self._history = cast(_QueueEntry, self._history.next.get())
         return obj
 
-    def __copy__(self):
+    def __copy__(self) -> 'TaskQueue':
         tq: TaskQueue = TaskQueue.__new__(TaskQueue)
         tq._head = self._head
         tq._tail = self._tail
