@@ -15,11 +15,11 @@ class ParserArgs:
     cache: bool
     dump: bool
     debug: bool
-    pure: bool
     compile: bool
-    compiler_args: dict
     force: bool
     cache_dir: str
+    options: dict
+    pure: bool
 
 
 @dataclasses.dataclass

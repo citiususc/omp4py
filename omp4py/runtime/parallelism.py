@@ -31,7 +31,7 @@ def parallel_run(f: typing.Callable[[], None], c_if: bool, c_message: str, c_nth
     cvars.dataenv.team_size = cvars.dataenv.nthreads[0]
     if cvars.dataenv.team_size < 1:
         cvars.dataenv.team_size = 1
-    if len(cvars.dataenv.nthreads) > 0:
+    if len(cvars.dataenv.nthreads) > 1:
         cvars.dataenv.nthreads = cvars.dataenv.nthreads[1:]
     cvars.dataenv.levels += 1
 

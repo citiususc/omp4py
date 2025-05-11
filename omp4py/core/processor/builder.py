@@ -4,6 +4,7 @@ import types
 import ast
 import os
 import typing
+import inspect
 import hashlib
 import platform
 import py_compile
@@ -38,13 +39,13 @@ except ImportError as ex:
         raise RuntimeError("'cython' and 'setuptools' are required to compile:", exstr)
 
 
-def gen_cache_key(code: str, _compile: bool, compiler_args: dict):
+def gen_cache_key(code: str, _compile: bool, options: dict):
     value: str
     if _compile:
         check_cython()
-        value = str((code, _compile, compiler_args, __version__, sys.version_info, cython_inline.Cython.__version__))
+        value = str((code, _compile, options, __version__, sys.version_info, cython_inline.Cython.__version__))
     else:
-        value = str((code, _compile, compiler_args, __version__))
+        value = str((code, _compile, options, __version__))
 
     return '__omp4py__' + hashlib.sha256(value.encode('utf-8')).hexdigest()
 
@@ -158,7 +159,7 @@ def build(fc: typing.Any, name: str, module: types.ModuleType, omp_ast: ast.Modu
             include_dirs=c_include_dirs or None,
             define_macros=define_macros or None,
         )
-        compiler_args = args.compiler_args.copy()
+        compiler_args = {key[7:]: value for key, value in args.options.items() if key.startswith('cython_')}
         compiler_args['freethreading_compatible'] = True
 
         build_extension = cython_inline._get_build_extension()
@@ -173,8 +174,9 @@ def build(fc: typing.Any, name: str, module: types.ModuleType, omp_ast: ast.Modu
         build_extension.run()
 
         if args.debug:
+            prefix: str = f"{os.path.basename(inspect.getfile(fc))}_{fc.__name__}_cache"
             shutil.copy(src_file[:-2] + 'html',
-                        os.path.join(os.getcwd(), fc.__qualname__ + os.path.basename(src_file[:-2] + 'html')))
+                        os.path.join(os.getcwd(), prefix + os.path.basename(src_file[:-2] + 'html')))
 
     env(module)
     return load_dynamic(module, cache_key,
@@ -199,8 +201,7 @@ def _resolve_imports(args: ParserArgs, f: typing.TextIO, module: types.ModuleTyp
                     symbols.add(node.id)
 
     shadow_globals: bool = 'globals' in symbols
-    omp4py: types.ModuleType = sys.modules['omp4py']
-    copy_imports: set[types.ModuleType] = {omp4py, cython}
+    copy_imports: set[str] = {'omp4py', 'cython'}
     symbols -= set(__builtins__.keys())
     symbols &= set(module.__dict__.keys())
 
@@ -217,7 +218,7 @@ def _resolve_imports(args: ParserArgs, f: typing.TextIO, module: types.ModuleTyp
 
     if 'numpy' in sys.modules:
         import numpy
-        copy_imports.add(numpy)
+        copy_imports.add('numpy')
         c_include_dirs.append(numpy.get_include())
         define_macros.append(("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION"))
 
@@ -225,22 +226,28 @@ def _resolve_imports(args: ParserArgs, f: typing.TextIO, module: types.ModuleTyp
             import pythran
             c_include_dirs.append(pythran.get_include())
 
-    name: str
-    for name in sorted(symbols):
-        import_: typing.Any = module.__dict__[name]
-        iname: str = import_.__name__ if hasattr(import_, '__name__') else name
+    alias: str
+    for alias in sorted(symbols):
+        import_: typing.Any = module.__dict__[alias]
+        import_name = import_.__name__
+        symbols_name: str = import_.__name__ if hasattr(import_, '__name__') else alias
+        prefix: str = ''
 
-        if import_ in copy_imports:
-            prefix: str = ''
-            if iname == 'omp4py':
-                prefix = cimport
-                symbols.remove(name)
-            f.write(f'import {prefix}{iname} as {name}\n')
-        elif hasattr(import_, '__module__') and import_.__module__ in copy_imports:
-            f.write(f'from {import_.__module__} import {name}\n')
-        elif name in omp4py.__dict__ and import_ == omp4py.__dict__[name] and 'runtime' in import_.__module__:
-            f.write(f'from {cimport}omp4py import {name}\n')
-            symbols.remove(name)
+        if import_name.split('.')[0] in copy_imports:  # import .. as ..
+            if import_name.startswith('omp4py.cruntime'):
+                if not prefix:
+                    continue
+                prefix += cimport
+            symbols.remove(alias)
+            f.write(f'import {prefix}{symbols_name} as {alias}\n')
+        elif hasattr(import_, '__module__') and import_.__module__.split('.')[0] in copy_imports:
+            # from .. import ..
+            if import_.__module__.startswith('omp4py.cruntime'):
+                if not prefix:
+                    continue
+                prefix += cimport
+            f.write(f'from {prefix}{import_.__module__} import {symbols_name} as {alias}\n')
+            symbols.remove(alias)
 
     f.write(f'__omp4py_modules = {sorted(symbols)}\n')
     for name in sorted(symbols):

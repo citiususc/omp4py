@@ -1,6 +1,9 @@
 import numpy as np
 import time
-from omputils import njit, pyomp, omp, use_pyomp, use_pure, use_compiled, use_compiled_types
+from omputils import njit, pyomp, omp, omp_pure, use_pyomp, use_pure, use_compiled, use_compiled_types
+
+if use_pure():
+    omp = omp_pure
 
 try:
     import cython
@@ -39,7 +42,7 @@ def _pyomp_qsort(array, limit):
             _pyomp_quicksort(array, 0, len(array) - 1, limit)
 
 
-@omp(pure=use_pure(), compile=use_compiled())
+@omp(compile=use_compiled())
 def _omp4py_quicksort(array, low, high, limit):
     if high > low:
         pi = _partition(array, low, high)
@@ -51,14 +54,14 @@ def _omp4py_quicksort(array, low, high, limit):
             _omp4py_quicksort(array, pi + 1, high, limit)
 
 
-@omp(pure=use_pure(), compile=use_compiled())
+@omp(compile=use_compiled())
 def _omp4py_qsort(array, limit):
     with omp("parallel"):
         with omp("single"):
             _omp4py_quicksort(array, 0, len(array) - 1, limit)
 
 
-@omp(pure=use_pure(), compile=use_compiled())
+@omp(compile=use_compiled())
 def _omp4py_quicksort_types(array: cython.double[:], low: int, high: int, limit: int):
     if high > low:
 
@@ -79,7 +82,7 @@ def _omp4py_quicksort_types(array: cython.double[:], low: int, high: int, limit:
             _omp4py_quicksort(array, pi + 1, high, limit)
 
 
-@omp(pure=use_pure(), compile=use_compiled())
+@omp(compile=use_compiled())
 def _omp4py_qsort_types(array2, limit: int):
     with omp("parallel"):
         with omp("single"):

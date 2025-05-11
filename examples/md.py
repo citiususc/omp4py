@@ -2,7 +2,10 @@ import numpy as np
 import math
 import time
 import random
-from omputils import njit, pyomp, omp, use_pyomp, use_pure, use_compiled, use_compiled_types
+from omputils import njit, pyomp, omp, omp_pure, use_pyomp, use_pure, use_compiled, use_compiled_types
+
+if use_pure():
+    omp = omp_pure
 
 _PI_2 = math.pi / 2
 
@@ -93,7 +96,7 @@ def _pyomp_update(n, nd, pos, vel, f, a, mass, dt):
                 a[i][j] = f[i][j] * rmass
 
 
-@omp(pure=use_pure(), compile=use_compiled())
+@omp(compile=use_compiled())
 def _omp4py_compute(n, nd, pos, vel, mass, f):
     pot = 0.0
     kin = 0.0
@@ -118,7 +121,7 @@ def _omp4py_compute(n, nd, pos, vel, mass, f):
     return pot, kin
 
 
-@omp(pure=use_pure(), compile=use_compiled())
+@omp(compile=use_compiled())
 def _omp4py_update(n, nd, pos, vel, f, a, mass, dt):
     rmass = 1.0 / mass
     with omp("parallel for"):
@@ -129,7 +132,7 @@ def _omp4py_update(n, nd, pos, vel, f, a, mass, dt):
                 a[i][j] = f[i][j] * rmass
 
 
-@omp(pure=use_pure(), compile=use_compiled())
+@omp(compile=use_compiled())
 def _omp4py_compute_types(n: int, nd: int, pos2, vel2, mass: float, f2):
     pot: float = 0.0
     kin: float = 0.0
@@ -170,7 +173,7 @@ def _omp4py_compute_types(n: int, nd: int, pos2, vel2, mass: float, f2):
     return pot, kin
 
 
-@omp(pure=use_pure(), compile=use_compiled())
+@omp(compile=use_compiled())
 def _omp4py_update_types(n: int, nd: int, pos2, vel2, f2, a2, mass: float, dt: float):
     rmass: float = 1.0 / mass
 

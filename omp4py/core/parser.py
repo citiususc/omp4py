@@ -35,13 +35,13 @@ _compile: bool = get_bool_config('OMP4PY_COMPILE', False)
 _pure: bool = get_bool_config('OMP4PY_PURE', False)
 omp4py_force_pure: bool = get_bool_config('OMP4PY_FORCE_PURE', False)
 try:
-    _compiler_args: dict = json.loads(os.environ.get("OMP4PY_COMPILER_ARGS", "{}"))
+    _options: dict = json.loads(os.environ.get("OMP4PY_OPTIONS", "{}"))
 except:
-    _compiler_args: dict = {}
+    _options: dict = {}
 try:
-    _compiler_args_default: dict = json.loads(os.environ.get("OMP4PY_COMPILER_DARGS", "{}"))
+    _doptions: dict = json.loads(os.environ.get("OMP4PY_DOPTIONS", "{}"))
 except:
-    _compiler_args_default: dict = {}
+    _doptions: dict = {}
 
 
 @typing.overload
@@ -93,25 +93,23 @@ def omp(c: type[T]) -> type[T]:
 
 
 @typing.overload
-def omp(*, alias: str = ..., cache: bool = ..., dump: bool = ..., debug: bool = ..., pure: bool = ...,
-        compile: bool = ..., compiler_args: dict = ..., force: bool = ...,
-        cache_dir: str = ...) -> \
+def omp(*, alias: str = ..., cache: bool = ..., dump: bool = ..., debug: bool = ..., compile: bool = ...,
+        force: bool = ..., cache_dir: str = ..., **options) -> \
         typing.Callable[[typing.Callable], typing.Callable] | typing.Callable[[type], type]:
     """
     Create a `omp` decorator with custom arguments.
 
-    The `omp` decorator with arguments.
+    Use:  omp(...)(omp) to change the default values
 
     Args:
         alias (str): Create an alias for the `omp` function.
-        cache (bool): Create a cache for the `omp` function.
+        cache (bool): Use cache to store the result for future executions.
         dump (bool): Save the decorated function to a file.
         debug (bool): Enable debug mode.
-        pure (bool): Only use python runtime.
         compile (bool): Compile the decorated function to improve performance.
-        compiler_args (dict): Arguments to pass to the compiler.
         force (bool): Force compilation even if the compiler has already been compiled.
         cache_dir (str): The directory to store the cache.
+        options: compiler and parser advanced options.
 
     Returns:
         Callable: A customized `omp` decorator.
@@ -120,13 +118,12 @@ def omp(*, alias: str = ..., cache: bool = ..., dump: bool = ..., debug: bool = 
 
 
 def omp(arg: Any = None, /, *, alias: str = "", cache: bool = _cache, dump: bool = _dump, debug: bool = _debug,
-        pure: bool = _pure, compile: bool = _compile, compiler_args: dict = _compiler_args,
-        force: bool = _force, cache_dir: str = _cache_dir) -> Any:
+        compile: bool = _compile, force: bool = _force, cache_dir: str = _cache_dir, **options) -> Any:
     def wrap(arg):
         try:
-            return omp_parse(arg,
-                             ParserArgs(alias, cache, dump, debug, pure, compile,
-                                        _compiler_args_default | compiler_args, force, cache_dir))
+            pure: bool = options.pop('__omp4py_pure', False)
+            options2: dict = _doptions | _options | options
+            return omp_parse(arg, ParserArgs(alias, cache, dump, debug, compile, force, cache_dir, options2, pure))
         except SyntaxError as ex:
             if not debug:
                 try:
@@ -152,7 +149,23 @@ def check_func(fc: Any, src_filename: str, src_start: int, src_line: str):
                       (src_filename, src_start + 1, -1, src_line))
 
 
+def set_defaults(args: ParserArgs) -> typing.Callable:
+    global _dump, _cache, _force, _cache_dir, _debug, _compile, _options
+
+    _dump = args.dump
+    _cache = args.cache
+    _force = args.force
+    _cache_dir = args.cache_dir
+    _debug = args.debug
+    _compile = args.compile
+    _options = args.options
+    return omp
+
+
 def omp_parse(fc: Any, args: ParserArgs) -> Any:
+    if fc == omp:
+        return set_defaults(args)
+
     src_lines: list[str]
     src_start: int
     src_name: str = fc.__name__
@@ -162,7 +175,7 @@ def omp_parse(fc: Any, args: ParserArgs) -> Any:
     src_code: str = ''.join(src_lines)
     src_module: ModuleType = inspect.getmodule(fc)
     src_filename: str = src_module.__file__
-    cache_key: str = gen_cache_key(src_code, args.compile, args.compiler_args) if args.cache or args.compile else ''
+    cache_key: str = gen_cache_key(src_code, args.compile, args.options) if args.cache or args.compile else ''
 
     if not args.force and (cached := search_cache(src_module, args.cache_dir, cache_key)) is not None:
         return cached
@@ -192,10 +205,11 @@ def omp_parse(fc: Any, args: ParserArgs) -> Any:
     module = ast.fix_missing_locations(module)
 
     if args.dump:
+        prefix: str = f"{os.path.basename(inspect.getfile(fc))}_{fc.__name__}_omp_d"
         if args.debug:
-            with open(f"{os.path.basename(inspect.getfile(fc))}_{fc.__name__}_omp_d.ast", "w") as file:
+            with open(prefix + ".ast", "w") as file:
                 file.write(ast.dump(module, indent=4))
-        with open(f"{os.path.basename(inspect.getfile(fc))}_{fc.__name__}_omp_d.py", "w") as file:
+        with open(prefix + ".py", "w") as file:
             file.write(ast.unparse(module))
 
     return build(fc, src_name, src_module, module, ctx.variables.annotations, cache_key, args)
@@ -206,7 +220,8 @@ class OmpTransformer(ast.NodeTransformer):
     attibutes: bool
 
     def __init__(self, filename: str, src_lines: list[str], parser_args: ParserArgs, global_parse: bool) -> None:
-        self.ctx = NodeContext(filename, src_lines, parser_args, '__ompp' if parser_args.pure else '__omp', global_parse)
+        self.ctx = NodeContext(filename, src_lines, parser_args, '__ompp' if parser_args.pure else '__omp',
+                               global_parse)
         self.attibutes = False
 
     def transform(self, node: ast.Module) -> (ast.Module, NodeContext):

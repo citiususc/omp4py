@@ -2,7 +2,10 @@ import sys
 import math
 import time
 import numpy as np
-from omputils import njit, pyomp, omp, use_pyomp, use_pure, use_compiled, use_compiled_types
+from omputils import njit, pyomp, omp, omp_pure, use_pyomp, use_pure, use_compiled, use_compiled_types
+
+if use_pure():
+    omp = omp_pure
 
 try:
     import cython
@@ -12,6 +15,7 @@ except ImportError:
 try:
     import mpi4py
     import mpi4py.MPI
+
     has_mpi4py = True
     print("mpi4py found", file=sys.stderr)
 except:
@@ -56,7 +60,7 @@ def _pyomp_jacobi(a, x, b, max_iter, tol):
     return iter, norm
 
 
-@omp(pure=use_pure(), compile=use_compiled())
+@omp(compile=use_compiled())
 def _omp4py_jacobi(a, x, b, max_iter, tol):
     n = x.shape[0]
 
@@ -87,8 +91,8 @@ def _omp4py_jacobi(a, x, b, max_iter, tol):
     return iter, norm
 
 
-@omp(pure=use_pure(), compile=use_compiled())
-def _omp4py_jacobi_types(a2, x2, b2, max_iter: float, tol: float):
+@omp(compile=use_compiled())
+def _omp4py_jacobi_types(a2, x2, b2, max_iter: int, tol: float):
     n: int = x2.shape[0]
 
     x_new2 = np.empty(n)
@@ -124,7 +128,7 @@ def _omp4py_jacobi_types(a2, x2, b2, max_iter: float, tol: float):
     return iter, norm
 
 
-@omp(pure=use_pure(), compile=use_compiled())
+@omp(compile=use_compiled())
 def _omp4py_mpi_jacobi(a, x, b, max_iter, tol):
     n = x.shape[0]
 
@@ -165,8 +169,8 @@ def _omp4py_mpi_jacobi(a, x, b, max_iter, tol):
     return iter, norm
 
 
-@omp(pure=use_pure(), compile=use_compiled())
-def _omp4py_mpi_jacobi_types(a2, x2, b2, max_iter: float, tol: float):
+@omp(compile=use_compiled())
+def _omp4py_mpi_jacobi_types(a2, x2, b2, max_iter: int, tol: float):
     n: int = x2.shape[0]
 
     x_new2 = np.empty(n)
@@ -177,8 +181,8 @@ def _omp4py_mpi_jacobi_types(a2, x2, b2, max_iter: float, tol: float):
     rank: int = mpi4py.MPI.COMM_WORLD.rank
     chunk_size: int = math.ceil(n / procs)
 
-    start:int = rank * chunk_size
-    end:int = min(start + chunk_size, n)
+    start: int = rank * chunk_size
+    end: int = min(start + chunk_size, n)
 
     a: cython.double[:, :] = a2
     x: cython.double[:] = x2
@@ -189,8 +193,8 @@ def _omp4py_mpi_jacobi_types(a2, x2, b2, max_iter: float, tol: float):
         while iter < max_iter:
             with omp("for reduction(+:norm)"):
                 for i in range(start, end):
-                    sigma:float = 0.0
-                    j:int
+                    sigma: float = 0.0
+                    j: int
                     for j in range(i):
                         sigma += a[i][j] * x[j]
                     for j in range(i + 1, n):

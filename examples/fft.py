@@ -1,7 +1,10 @@
 import numpy as np
 import math
 import time
-from omputils import njit, pyomp, omp, use_pyomp, use_pure, use_compiled, use_compiled_types
+from omputils import njit, pyomp, omp, omp_pure, use_pyomp, use_pure, use_compiled, use_compiled_types
+
+if use_pure():
+    omp = omp_pure
 
 try:
     import cython
@@ -86,7 +89,7 @@ def _pyomp_step(n, mj, a, b, c, d, w, sgn):
                     d[(jd + k) * 2 + 1] = wjw[1] * ambr + wjw[0] * ambu
 
 
-@omp(pure=use_pure(), compile=use_compiled())
+@omp(compile=use_compiled())
 def _omp4py_step(n, mj, a, b, c, d, w, sgn):
     mj2 = 2 * mj
     lj = n // mj2
@@ -118,7 +121,7 @@ def _omp4py_step(n, mj, a, b, c, d, w, sgn):
                     d[(jd + k) * 2 + 1] = wjw[1] * ambr + wjw[0] * ambu
 
 
-@omp(pure=use_pure(), compile=use_compiled())
+@omp(compile=use_compiled())
 def _omp4py_step_types(n: int, mj: int, a2, b2, c2, d2, w2, sgn: float):
     mj2: int = 2 * mj
     lj: int = n // mj2

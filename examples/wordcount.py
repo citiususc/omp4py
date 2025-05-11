@@ -43,7 +43,7 @@ def _pyomp_wordcount(lines):
     return count
 
 
-@omp(pure=use_pure(), compile=use_compiled())
+@omp(compile=use_compiled())
 def _omp4py_wordcount(lines):
     count = {}
 

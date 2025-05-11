@@ -20,6 +20,7 @@ except:
 
 try:
     from omp4py import omp, omp_set_num_threads as omp4py_set_num_threads
+    from omp4py.pure import omp as omp_pure, omp_set_num_threads as omp4py_pure_set_num_threads
 
     has_omp4py = True
     print("omp4py found", file=sys.stderr)
@@ -32,6 +33,7 @@ try:
 except:
     has_omp4py = False
     omp = lambda *a, **k: None
+    omp_pure = lambda *a, **k: None
 
 
 def set_omp_threads(n):
@@ -40,6 +42,7 @@ def set_omp_threads(n):
 
     if has_omp4py:
         omp4py_set_num_threads(n)
+        omp4py_pure_set_num_threads(n)
 
     print("threads : " + str(n))
 

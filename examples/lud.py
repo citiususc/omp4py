@@ -1,6 +1,9 @@
 import time
 import numpy as np
-from omputils import njit, pyomp, omp, use_pyomp, use_pure, use_compiled, use_compiled_types
+from omputils import njit, pyomp, omp, omp_pure, use_pyomp, use_pure, use_compiled, use_compiled_types
+
+if use_pure():
+    omp = omp_pure
 
 try:
     import cython
@@ -33,7 +36,7 @@ def _pyomp_lud(a, l, u):
                 l[k][k] = 1.0
 
 
-@omp(pure=use_pure(), compile=use_compiled())
+@omp(compile=use_compiled())
 def _omp4py_lud(a, l, u):
     n = a.shape[0]
 
@@ -58,7 +61,7 @@ def _omp4py_lud(a, l, u):
             with omp("single"):
                 l[k][k] = 1.0
 
-@omp(pure=use_pure(), compile=use_compiled())
+@omp(compile=use_compiled())
 def _omp4py_lud_types(a2, l2, u2):
     n:int = a2.shape[0]
 

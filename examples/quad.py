@@ -1,6 +1,9 @@
 import math
 import time
-from omputils import njit, pyomp, omp, use_pyomp, use_pure, use_compiled, use_compiled_types
+from omputils import njit, pyomp, omp, omp_pure, use_pyomp, use_pure, use_compiled, use_compiled_types
+
+if use_pure():
+    omp = omp_pure
 
 
 @njit
@@ -20,7 +23,7 @@ def _pyomp_quad(n, a, b):
     return total
 
 
-@omp(pure=use_pure(), compile=use_compiled())
+@omp(compile=use_compiled())
 def _omp4py_quad(n, a, b):
     total = 0.0
 
@@ -32,7 +35,7 @@ def _omp4py_quad(n, a, b):
     return total
 
 
-@omp(pure=use_pure(), compile=use_compiled())
+@omp(compile=use_compiled())
 def _omp4py_quad_types(n: int, a: float, b: float):
     total: float = 0.0
     PI: float = math.pi
