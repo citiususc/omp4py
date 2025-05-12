@@ -48,7 +48,7 @@ def _pyomp_jacobi(a, x, b, max_iter, tol):
                     x_new[i] = (b[i] - sigma) / a[i][i]
                     norm += (x_new[i] - x[i]) * (x_new[i] - x[i])
 
-            if math.sqrt(norm) < tol:
+            if np.sqrt(norm) < tol:
                 break
             with pyomp("barrier"):
                 pass
@@ -80,7 +80,7 @@ def _omp4py_jacobi(a, x, b, max_iter, tol):
                     x_new[i] = (b[i] - sigma) / a[i][i]
                     norm += (x_new[i] - x[i]) * (x_new[i] - x[i])
 
-            if math.sqrt(norm) < tol:
+            if np.sqrt(norm) < tol:
                 break
             omp("barrier")
             with omp("single"):
@@ -117,7 +117,7 @@ def _omp4py_jacobi_types(a2, x2, b2, max_iter: int, tol: float):
                     x_new[i] = (b[i] - sigma) / a[i][i]
                     norm += (x_new[i] - x[i]) * (x_new[i] - x[i])
 
-            if math.sqrt(norm) < tol:
+            if np.sqrt(norm) < tol:
                 break
             omp("barrier")
             with omp("single"):
@@ -158,7 +158,7 @@ def _omp4py_mpi_jacobi(a, x, b, max_iter, tol):
             with omp("single"):
                 norm = mpi4py.MPI.COMM_WORLD.allreduce(norm, op=mpi4py.MPI.SUM)
 
-            if math.sqrt(norm) < tol:
+            if np.sqrt(norm) < tol:
                 break
             omp("barrier")
             with omp("single"):
@@ -205,7 +205,7 @@ def _omp4py_mpi_jacobi_types(a2, x2, b2, max_iter: int, tol: float):
             with omp("single"):
                 norm = mpi4py.MPI.COMM_WORLD.allreduce(norm, op=mpi4py.MPI.SUM)
 
-            if math.sqrt(norm) < tol:
+            if np.sqrt(norm) < tol:
                 break
             omp("barrier")
             with omp("single"):
