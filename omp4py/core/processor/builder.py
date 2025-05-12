@@ -149,7 +149,7 @@ def build(fc: typing.Any, name: str, module: types.ModuleType, omp_ast: ast.Modu
         define_macros = []
         c_include_dirs = []
         with open(src_file, "w") as f:
-            _resolve_imports(args, f, module, fc, ann, define_macros, c_include_dirs)
+            used_modules: set[str] = _resolve_imports(args, f, module, fc, ann, define_macros, c_include_dirs)
             f.write(f'__omp4py__="{name}"\n')
             f.write(ast.unparse(node))
 
@@ -168,7 +168,8 @@ def build(fc: typing.Any, name: str, module: types.ModuleType, omp_ast: ast.Modu
             compiler_directives=compiler_args,
             quiet=not args.debug,
             language_level="3",
-            annotate=args.debug, )
+            annotate=args.debug,
+            np_pythran = 'pythran' in used_modules)
         build_extension.build_temp = os.path.dirname(src_file)
         build_extension.build_lib = args.cache_dir
         build_extension.run()
@@ -184,7 +185,8 @@ def build(fc: typing.Any, name: str, module: types.ModuleType, omp_ast: ast.Modu
 
 
 def _resolve_imports(args: ParserArgs, f: typing.TextIO, module: types.ModuleType, fc: typing.Any,
-                     ann: list[ast.expr], define_macros: list[str], c_include_dirs: list[str]) -> None:
+                     ann: list[ast.expr], define_macros: list[str], c_include_dirs: list[str]) -> set[str]:
+    used_modules: set[str] = set()
     symbols: set[str]
     if hasattr(fc, '__code__'):
         symbols = set(fc.__code__.co_names)
@@ -219,12 +221,14 @@ def _resolve_imports(args: ParserArgs, f: typing.TextIO, module: types.ModuleTyp
     if 'numpy' in sys.modules:
         import numpy
         copy_imports.add('numpy')
+        used_modules.add('numpy')
         c_include_dirs.append(numpy.get_include())
         define_macros.append(("NPY_NO_DEPRECATED_API", "NPY_1_7_API_VERSION"))
 
-        if 'np_pythran' in sys.modules:
+        if 'pythran' in sys.modules:
             import pythran
             c_include_dirs.append(pythran.get_include())
+            used_modules.add('pythran')
 
     alias: str
     for alias in sorted(symbols):
@@ -255,6 +259,7 @@ def _resolve_imports(args: ParserArgs, f: typing.TextIO, module: types.ModuleTyp
 
     if shadow_globals:
         f.write(f'__omp4py_globals = ...\nglobals = lambda: __omp4py_globals\n')
+    return used_modules
 
 
 def gen_native_types(ann: list[ast.expr]) -> bool:
