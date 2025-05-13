@@ -8,7 +8,7 @@ use_compiled_types = lambda: _mode == 3
 use_pyomp = lambda: _mode == -1
 
 try:
-    from numba import njit
+    from numba.openmp import njit
     from numba.openmp import omp_set_num_threads as pyomp_set_num_threads, openmp_context as pyomp
 
     has_pyomp = True
@@ -32,8 +32,8 @@ try:
         pass
 except:
     has_omp4py = False
-    omp = lambda *a, **k: None
-    omp_pure = lambda *a, **k: None
+    omp = lambda *a, **k: (lambda *a, **k: None)
+    omp_pure = lambda *a, **k: (lambda *a, **k: None)
 
 
 def set_omp_threads(n):
