@@ -63,7 +63,7 @@ def _omp4py_wordcount(lines):
     return count
 
 
-def wordcount(n=1000000, seed=0):
+def wordcount(n=1000000000, seed=0):
     print(f"wordcount: {n}, seed: {seed}")
     text = generate_text(n, seed)
     lines = text.splitlines()

@@ -233,12 +233,11 @@ def _resolve_imports(args: ParserArgs, f: typing.TextIO, module: types.ModuleTyp
     alias: str
     for alias in sorted(symbols):
         import_: typing.Any = module.__dict__[alias]
-        import_name = import_.__name__
         symbols_name: str = import_.__name__ if hasattr(import_, '__name__') else alias
         prefix: str = ''
 
-        if import_name.split('.')[0] in copy_imports:  # import .. as ..
-            if import_name.startswith('omp4py.cruntime'):
+        if symbols_name in sys.modules and symbols_name.split('.')[0] in copy_imports:  # import .. as ..
+            if symbols_name.startswith('omp4py.cruntime'):
                 if not prefix:
                     continue
                 prefix += cimport

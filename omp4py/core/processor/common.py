@@ -39,13 +39,15 @@ def code_to_function(ctx: nodes.NodeContext, fname: str, body: list[ast.stmt]) -
     fake_func.args.args = [ast.arg(n) for n in maybe_ref]
     fake_func.body.append(block_func)
 
-    table = symtable.symtable(ast.unparse(fake_func), "string", "exec")
+    table: symtable.SymbolTable = symtable.symtable(ast.unparse(fake_func), "string", "exec")
+    subtable: symtable.SymbolTable = [t for t in [t.get_children() for t in table.get_children()
+                                                  if t.get_name() == 'fake'][0] if t.get_name() == fname][0]
 
     be_ref: list[str] = list()
     be_decl: list[str] = list()
     be_global: list[str] = list()
     s: symtable.Symbol
-    for s in table.get_children()[0].get_children()[0].get_symbols():
+    for s in subtable.get_symbols():
         sname: str = s.get_name()
         if sname in ctx.variables.globals:
             be_global.append(sname)
