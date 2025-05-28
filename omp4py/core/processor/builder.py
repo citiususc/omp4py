@@ -169,7 +169,7 @@ def build(fc: typing.Any, name: str, module: types.ModuleType, omp_ast: ast.Modu
             quiet=not args.debug,
             language_level="3",
             annotate=args.debug,
-            np_pythran = 'pythran' in used_modules)
+            np_pythran='pythran' in used_modules)
         build_extension.build_temp = os.path.dirname(src_file)
         build_extension.build_lib = args.cache_dir
         build_extension.run()
@@ -203,7 +203,7 @@ def _resolve_imports(args: ParserArgs, f: typing.TextIO, module: types.ModuleTyp
                     symbols.add(node.id)
 
     shadow_globals: bool = 'globals' in symbols
-    copy_imports: set[str] = {'omp4py', 'cython'}
+    copy_imports: set[str] = {'omp4py', 'cython', 'math'}
     symbols -= set(__builtins__.keys())
     symbols &= set(module.__dict__.keys())
 
@@ -241,6 +241,8 @@ def _resolve_imports(args: ParserArgs, f: typing.TextIO, module: types.ModuleTyp
                 if not prefix:
                     continue
                 prefix += cimport
+            if symbols_name == 'math':
+                prefix += 'cython.cimports.libc.'
             symbols.remove(alias)
             f.write(f'import {prefix}{symbols_name} as {alias}\n')
         elif hasattr(import_, '__module__') and import_.__module__.split('.')[0] in copy_imports:
@@ -249,6 +251,8 @@ def _resolve_imports(args: ParserArgs, f: typing.TextIO, module: types.ModuleTyp
                 if not prefix:
                     continue
                 prefix += cimport
+            if import_.__module__ == 'math':
+                prefix += 'cython.cimports.libc.'
             f.write(f'from {prefix}{import_.__module__} import {symbols_name} as {alias}\n')
             symbols.remove(alias)
 

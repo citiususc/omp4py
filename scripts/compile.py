@@ -74,7 +74,8 @@ def main():
         return
 
     extensions: list[str] = []
-    pure_files: set[str] = {file for file in cfiles if file.endswith('.py') and file[:-2] + 'pxd' not in ifaces}
+    copy_files: set[str] = {file for file in cfiles if file.endswith('.py') and file[:-2] + 'pxd' not in ifaces}
+    copy_files.update(ifaces)
     file: str
     for file in ifaces:
         if file[:-3] + 'pyx' in cfiles:
@@ -82,7 +83,7 @@ def main():
         else:
             pyfile: str = file[:-3].replace(f'{sep}cruntime', f'{sep}runtime') + 'py'
             if os.path.basename(file) == '__init__.pxd':
-                pure_files.add(copy(pyfile, os.path.join('build', file[:-3] + 'py'),
+                copy_files.add(copy(pyfile, os.path.join('build', file[:-3] + 'py'),
                                     lambda txt: txt.replace('.runtime', '.cruntime')))
                 continue
 
@@ -111,8 +112,12 @@ def main():
     cmd.run()
 
     output: str
-    for output in pure_files:
-        target: str = os.path.join(f'build{sep}libs', os.path.relpath(output, 'build'))
+    for output in sorted(copy_files):
+        target: str = f'build{sep}libs'
+        if output.startswith("build"):
+            target = os.path.join(target, os.path.relpath(output, 'build'))
+        else:
+            target = os.path.join(target, output)
         os.makedirs(os.path.dirname(target), exist_ok=True)
         copyfile(output, target)
 
