@@ -8,7 +8,8 @@ if use_pure():
 try:
     import cython
 except ImportError:
-    pass
+    class cython:
+        double = []
 
 
 def _partition(array, low, high):

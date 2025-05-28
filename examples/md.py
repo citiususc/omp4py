@@ -14,7 +14,6 @@ try:
 except ImportError:
     pass
 
-
 @njit
 def _v(x):
     if x < _PI_2:
@@ -67,7 +66,7 @@ def _pyomp_compute(n, nd, pos, vel, mass, f):
 
     with pyomp("parallel reduction(+:pot, kin)"):
         rij = np.empty(nd)
-        with omp("for"):
+        with pyomp("for"):
             for i in range(n):
                 for j in range(nd):
                     f[i][j] = 0.0
@@ -136,6 +135,7 @@ def _omp4py_update(n, nd, pos, vel, f, a, mass, dt):
 def _omp4py_compute_types(n: int, nd: int, pos2, vel2, mass: float, f2):
     pot: float = 0.0
     kin: float = 0.0
+    PI_2: float = _PI_2
 
     pos: cython.double[:, :] = pos2
     vel: cython.double[:, :] = vel2
@@ -157,12 +157,16 @@ def _omp4py_compute_types(n: int, nd: int, pos2, vel2, mass: float, f2):
                             rij[s] = pos[i][s] - pos[j][s]
                             d += rij[s] * rij[s]
                         d = math.sqrt(d)
-
-                        pot = pot + 0.5 * (math.sin(d) ** 2 if d < _PI_2 else 1.0)
+                        if d < PI_2:
+                            sin_d: float = math.sin(d)
+                            pot = pot + 0.5 * sin_d * sin_d
+                        else:
+                            pot = pot + 0.5
                         for k in range(nd):
                             if d == 0:
                                 d = 10e-16
-                            f[i][k] = f[i][k] - rij[k] * (2 * math.sin(d) * math.cos(d) if d < _PI_2 else 0.0) / d
+
+                            f[i][k] = f[i][k] - rij[k] * ((2 * math.sin(d) * math.cos(d)) if d < PI_2 else 0.0) / d
 
                 t: float = 0.0
                 s: int

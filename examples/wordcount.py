@@ -65,8 +65,12 @@ def _omp4py_wordcount(lines):
 
 def wordcount(n=1000000000, seed=0):
     print(f"wordcount: {n}, seed: {seed}")
-    text = generate_text(n, seed)
-    lines = text.splitlines()
+    if isinstance(n, int):
+        text = generate_text(n, seed)
+        lines = text.splitlines()
+    else:
+        with open(n, "r") as f:
+            lines = f.readlines()
 
     wtime = time.perf_counter()
     if use_pyomp():
