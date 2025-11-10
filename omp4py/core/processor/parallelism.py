@@ -79,10 +79,10 @@ def parallel(body: list[ast.stmt], clauses: list[OmpClause], args: OmpArgs | Non
                 raise ValueError(f"'{used_vars[0]}' not specified in enclosing '{names.D_PARALLEL}'")
         case names.K_FIRSTPRIVATE:
             others: list[str] = [var for var in used_vars]
-            body_header.extend(var_rename(ctx, parallel_func.body, others, '__new__'))
+            body_header.extend(var_rename(ctx, parallel_func.body, others, '__copy__'))
         case names.K_PRIVATE:
             others: list[str] = [var for var in used_vars]
-            body_header.extend(var_rename(ctx, parallel_func.body, others, '__copy__'))
+            body_header.extend(var_rename(ctx, parallel_func.body, others, '__new__'))
 
     parallel_func.body = body_header + parallel_func.body
 

@@ -4,10 +4,7 @@ from omp4py.runtime.common import thread, tasks, barrier, threadshared
 from omp4py.runtime.basics.casting import *
 
 
-def task_submit(f: typing.Callable[[], None], c_if: bool) -> None:
-    if not c_if:
-        f()
-        return
+def task_submit(f: typing.Callable[[], None]) -> None:
     task: tasks.CustomTask = tasks.CustomTask.new(thread.cvars(), f)
 
     thread.current().parallel.queue.add(task)

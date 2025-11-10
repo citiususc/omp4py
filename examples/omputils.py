@@ -1,7 +1,7 @@
 import sys
 
 _mode = 1
-
+_threads = 1
 use_pure = lambda: _mode == 0
 use_compiled = lambda: _mode == 2 or _mode == 3
 use_compiled_types = lambda: _mode == 3
@@ -37,6 +37,8 @@ except:
 
 
 def set_omp_threads(n):
+    global _threads
+    _threads = n
     if has_pyomp:
         pyomp_set_num_threads(n)
 
@@ -46,6 +48,9 @@ def set_omp_threads(n):
 
     print("threads : " + str(n))
 
+
+def get_omp_threads():
+    return _threads
 
 def set_omp_mode(mode):
     global _mode

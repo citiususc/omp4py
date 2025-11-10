@@ -35,12 +35,18 @@ def main():
     elif test == "graphc":
         import graphc
         graphc.graphc(*args)
+    elif test == "fib":
+        import fib
+        fib.fib(*args)
     elif test == "jacobi":
         import jacobi
         jacobi.jacobi(*args)
     elif test == "lud":
         import lud
         lud.lud(*args)
+    elif test == "maze":
+        import maze
+        maze.maze(*args)
     elif test == "md":
         import md
         md.md(*args)

@@ -44,7 +44,8 @@ def _bool_op(op: ast.boolop, neutral_const: bool) -> tuple[list[ast.stmt], list[
 
 
 _storage: dict[str, tuple[list[ast.stmt], list[ast.stmt]]] = {
-    '__new__': (_call_op('new_var'), _call_op('copy_var')),
+    '__new__': (_call_op('new_var'), []),
+    '__copy__': (_call_op('copy_var'), []),
     '+': _symbol_op(ast.Add(), 0),
     '-': _symbol_op(ast.Sub(), 0),
     '*': _symbol_op(ast.Mult(), 1),
@@ -55,10 +56,11 @@ _storage: dict[str, tuple[list[ast.stmt], list[ast.stmt]]] = {
     'or': _bool_op(ast.Or(), False)
 }
 
-__new__const: tuple[list[ast.stmt], list[ast.stmt]] = (_const_var(), _const_var())
+__new__const: tuple[list[ast.stmt], list[ast.stmt]] = (_const_var(), [])
 _type: str
 for _type in ('int', 'float', 'complex', 'str', 'bytes'):
     _storage[f'{_type}.__new__'] = __new__const
+    _storage[f'{_type}.__copy__'] = __new__const
 del __new__const
 del _type
 
