@@ -10,6 +10,12 @@ solution. Unlike PyOMP, it does not impose restrictions on using functions from 
 certain Python objects and data structures. Additionally, OMP4Py code can be combined with [mpi4py](https://github.com/mpi4py/mpi4py) to develop 
 parallel applications that exploit both intra-node and inter-node parallelism.
 
+If you use **OMP4Py**, please cite the following works:
+
+* [OMP4Py: A pure Python implementation of openMP](https://doi.org/10.1016/j.future.2025.108035)  
+César Piñeiro and Juan C. Pichel.  
+Future Generation Computer Systems, Volume 175, 2025
+
 ## Features
 
 - Native Python library
