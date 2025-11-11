@@ -8,7 +8,7 @@ def main():
         print("required: <mode> <test> <threads> [args...]", file=sys.stderr)
         print("available modes: 0 -> pure, 1 -> hybrid, 2 -> compiled, 3 -> compiled with types, -1 -> pyomp",
               file=sys.stderr)
-        print("available tests: fft, graphc, jacobi, lud, md, pi, qsort, wordcount", file=sys.stderr)
+        print("available tests: fft, graphc, fib, jacobi, lud, maze, md, pi, qsort, quad, wordcount", file=sys.stderr)
         exit(-1)
     try:
         mode = int(sys.argv[1])

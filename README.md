@@ -62,6 +62,8 @@ Here's a basic example of how to use OMP4Py to calculate $\pi$:
     print(pi(10000000))  
 ```
 
+More examples can be found in the **examples** folder.
+
 ## Tests
 
 To run the unit tests and check the coverage, you can use the following commands with Poetry*:
