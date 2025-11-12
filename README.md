@@ -64,6 +64,8 @@ Here's a basic example of how to use OMP4Py to calculate $\pi$:
 
 More examples can be found in the **examples** folder.
 
+You can try **omp4py** using the following Docker image: [https://hub.docker.com/r/cesarpomar/omp4py](https://hub.docker.com/r/cesarpomar/omp4py)
+
 ## Tests
 
 To run the unit tests and check the coverage, you can use the following commands with Poetry*:
