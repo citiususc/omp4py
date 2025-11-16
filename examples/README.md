@@ -57,7 +57,7 @@ This experiment simulates the motion of particles over time using the velocity V
 ``python3 main.py 1 md 2 [n=2000] [steps=10] [seed=0]``
 
 
-### 7. **Riemann integration (computing π) **
+### 7. **Riemann integration (computing π)**
 The area under the curve `y = 4 / (1 + x^2)` between 0 and 1 approximates the value of `π`. This integral was estimated using numerical summation, with 2 billion intervals employed to compute the approximation.
 
 ``python3 main.py 1 pi 2 [n=2000000000]``
