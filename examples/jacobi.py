@@ -128,7 +128,7 @@ def _omp4py_jacobi_types(a2, x2, b2, max_iter: int, tol: float):
     return iter, norm
 
 
-@omp(compile=use_compiled())
+@omp(compile=use_compiled() and has_mpi4py)
 def _omp4py_mpi_jacobi(a, x, b, max_iter, tol):
     n = x.shape[0]
 
@@ -169,7 +169,7 @@ def _omp4py_mpi_jacobi(a, x, b, max_iter, tol):
     return iter, norm
 
 
-@omp(compile=use_compiled())
+@omp(compile=use_compiled() and has_mpi4py)
 def _omp4py_mpi_jacobi_types(a2, x2, b2, max_iter: int, tol: float):
     n: int = x2.shape[0]
 
