@@ -70,13 +70,7 @@ It recursively sorts smaller subarrays (limit argument) to achieve an **average 
 ``python3 main.py 1 qsort 2 [n=40000000] [limit=100000]``
 
 
-### 9. **QUAD**
-The QUAD experiment uses a numerical integration technique to estimate the value of an integral using an averaging method. The function `f(x) = 50 / (π * (2500 * x^2 + 1))` was approximated over the interval from `A = 0` to `B = 10`. The method involves sampling the function at numerous points within the interval to compute an average value, which is then used to estimate the integral. The test was run for 1 billion iterations.
-
-``python3 main.py 1 quad 2 [n=1000000000]``
-
-
-### 10. **Wordcount**
+### 9. **Wordcount**
 This algorithm counts the number of occurrences of each word in an input text. A text of 1 million characters was generated, containing words of lengths between 3 and 10 letters, with a 10% chance of a new line being added after each word. Although recent versions of Numba have experimental support for Python dictionaries, PyOMP is based on an earlier version that lacks the necessary support to compile Wordcount dictionaries.
 
 ``python3 main.py 1 wordcount 2 [n=1000000] [seed=0]`` or ``python3 main.py 1 wordcount 2 \"file.txt\"``
