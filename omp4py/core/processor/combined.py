@@ -8,7 +8,7 @@ from omp4py.core.processor.nodes import NodeContext
 __all__ = []
 
 def clause_filter(name: str, clauses: list[OmpClause]) -> list[OmpClause]:
-    return list(filter(lambda c: c.directive == names.D_FOR, clauses))
+    return list(filter(lambda c: c.directive == name, clauses))
 
 
 @omp_processor(f'{names.D_PARALLEL} {names.D_FOR}')

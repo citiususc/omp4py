@@ -74,8 +74,8 @@ def parse_line(filename: str, line: str, lineno: int, preproc=False) -> OmpDirec
     result_args: OmpArgs | None = None
     result_clauses: list[OmpClause] = []
 
-    used_directives: set[str] = set()
-    used_clauses: set[str] = set()
+    used_directives: list[str] = []
+    used_clauses: list[str] = []
 
     i: int = 0
     prefix: str = ""
@@ -112,7 +112,7 @@ def parse_line(filename: str, line: str, lineno: int, preproc=False) -> OmpDirec
         # Process the directive
         n_args: int
         n_args, result_args = parse_args(specs.args, tokens[i:])
-        used_directives.add(token_name)
+        used_directives.append(token_name)
         i += n_args + 1
 
     # If the directive ends in a prefix, raise an error with the possible compositions
@@ -158,7 +158,7 @@ def parse_line(filename: str, line: str, lineno: int, preproc=False) -> OmpDirec
             else:
                 raise tokens[i].make_error(f"'{token_name}' is not valid clause for 'omp {result_name}'")
 
-        used_clauses.add(token_name)
+        used_clauses.append(token_name)
         result_clauses.append(OmpClause(dir_name, tokens[i], args))
         i += n_args + 1
 
