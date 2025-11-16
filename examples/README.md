@@ -6,7 +6,7 @@ Use Poetry environment: ``poetry env activate``
 
 Run: ``python3 main.py  <mode> <test> <threads> [args...]``
 
-Available modes: 0 -> pure, 1 -> hybrid, 2 -> compiled, 3 -> compiled with types
+Available modes: 0 -> pure, 1 -> hybrid, 2 -> compiled, 3 -> compiled with data types
 
 Available tests: fft, graphc, fib, jacobi, lud, maze, md, pi, qsort, quad, wordcount
 
@@ -57,10 +57,10 @@ This experiment simulates the motion of particles over time using the velocity V
 ``python3 main.py 1 md 2 [n=2000] [steps=10] [seed=0]``
 
 
-### 7. **Computing π**
+### 7. **Riemann integration (computing π) **
 The area under the curve `y = 4 / (1 + x^2)` between 0 and 1 approximates the value of `π`. This integral was estimated using numerical summation, with 2 billion intervals employed to compute the approximation.
 
-``python3 main.py 1 md 2 [n=2000000000]``
+``python3 main.py 1 pi 2 [n=2000000000]``
 
 
 ### 8. **Quicksort**
