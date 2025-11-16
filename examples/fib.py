@@ -79,7 +79,7 @@ def _omp4py_fib_types(n, limit):
 
 
 def fib(n=30):
-    print(f"fibonazzi : n={n}")
+    print(f"fibonacci : n={n}")
     limit = int(math.ceil(math.log2(get_omp_threads())))
 
     wtime = time.perf_counter()
