@@ -153,7 +153,7 @@ def _gen_maze(n, seed):
     return maze
 
 
-def maze(n=10, seed=0, cache=None):
+def maze(n=2100, seed=0, cache=None):
     if cache is not None and os.path.exists(f"{cache}.npy"):
         maze = np.load(f"{cache}.npy")
     else:
