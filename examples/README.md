@@ -1,8 +1,8 @@
 # **OMP4Py Examples**
 
-Install dependencies (first time): ``pip install poetry`` and ``poetry install``
+Install Poetry (first time): ``pip install poetry``
 
-Use Poetry environment: ``poetry env activate``
+Use Poetry environment: ``eval $(poetry env activate)``
 
 Run: ``python3 main.py  <mode> <test> <threads> [args...]``
 
