@@ -19,7 +19,7 @@ def _omp4py_graphc(G):
 def graphc(n=300000, seed=0):
     print(f"graphc: n={n}, seed={seed}")
     # https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.cluster.clustering.html#networkx.algorithms.cluster.clustering
-    G = nx.barabasi_albert_graph(n, 100)
+    G = nx.barabasi_albert_graph(n, min(100, n - 1))
     if use_pyomp():
         raise RuntimeError('PyOmp cannot handle networkx library')
 
