@@ -12,15 +12,10 @@ show that OMP4Py achieves good performance and scalability for both numerical an
 OMP4Py code can be combined with [mpi4py](https://github.com/mpi4py/mpi4py) to develop parallel applications that 
 exploit both intra-node and inter-node parallelism.
 
-If you use **OMP4Py**, please cite the following works:
-
-* [OMP4Py: A pure Python implementation of openMP](https://doi.org/10.1016/j.future.2025.108035)  
-César Piñeiro and Juan C. Pichel.  
-Future Generation Computer Systems, Volume 175, 2025
-
 ## Features
 
-- Native Python library
+- Native Python library (dual-runtime architecture: pure and native C-based runtime using Cython)
+- 4 modes of operation: pure, hybrid, compiled and compiled with data types
 - Simplified parallelization of loops and code sections
 - Efficient thread management and synchronization
 - API compliant with [OpenMP 3.0 standard](https://www.openmp.org/wp-content/uploads/spec30.pdf)
