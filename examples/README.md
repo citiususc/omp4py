@@ -8,7 +8,7 @@ Run: ``python3 main.py  <mode> <test> <threads> [args...]``
 
 Available modes: 0 -> pure, 1 -> hybrid, 2 -> compiled, 3 -> compiled with data types
 
-Available tests: fft, graphc, fib, jacobi, lud, maze, md, pi, qsort, wordcount
+Available tests: fft, graphc, jacobi, lud, maze, md, pi, qsort, wordcount
 
 ### 1. **Fast Fourier Transform**
 This experiment evaluates the performance of the Fast Fourier Transform (FFT), an efficient algorithm used to compute the Discrete Fourier Transform (DFT) of a sequence. FFT allows for the conversion of a signal from the time domain to the frequency domain. The tests were conducted using a complex data vector of 4 million numbers.
