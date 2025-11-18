@@ -70,13 +70,13 @@ This is the standard mode when importing OMP4Py with:
   ```python
   from omp4py import *
   ````
-- **Compiled mode**: In this mode, both the runtime and the user’s function are compiled to native code using Cython. This removes Python interpreter overhead and provides substantial acceleration for numerical workloads.
+- **Compiled mode**: In this mode, both the runtime and the user’s function are compiled to native code using Cython. This removes Python interpreter overhead and provides improved performance for numerical workloads.
 
   ```python
   @omp(compile=True)
   ````
   
-- **Compiled-with-types mode**: A more optimized version of the previous mode, where the programmer also supplies static type annotations, enabling Cython to generate more efficient native code.
+- **Compiled-with-types mode**: A more optimized version of the previous mode, where the programmer also provides static type annotations, allowing Cython to generate more efficient native code. This can result in substantial speed-ups, up to three orders of magnitude compared with Pure mode.
 	```python
 	@omp(compile=True)
 	def pi(n: int): ...
