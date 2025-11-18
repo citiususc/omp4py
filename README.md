@@ -57,7 +57,33 @@ Here's a basic example of how to use OMP4Py to calculate $\pi$:
     print(pi(10000000))  
 ```
 
-More examples can be found in the **examples** folder.
+OMP4Py can be executed in four different modes:
+
+- **Pure mode**:  
+  Executes using the pure Python runtime. To enable it, users must explicitly import the pure runtime module:  
+  ```python
+  from omp4py.pure import *
+  ````
+  
+- **Hybrid mode (default)**:  
+This is the standard mode when importing OMP4Py with:
+  ```python
+  from omp4py import *
+  ````
+- **Compiled mode**: In this mode, both the runtime and the user’s function are compiled to native code using Cython. This removes Python interpreter overhead and provides substantial acceleration for numerical workloads.
+
+  ```python
+  @omp(compile=True)
+  ````
+  
+- **Compiled-with-types mode**: A more optimized version of the previous mode, where the programmer also supplies static type annotations, enabling Cython to generate more efficient native code.
+	```python
+	@omp(compile=True)
+	def pi(n: int): ...
+	````
+All versions of the pi implementation using these execution modes can be found in [https://github.com/citiususc/omp4py/blob/main/examples/pi.py](https://github.com/citiususc/omp4py/blob/main/examples/pi.py)
+
+The rest of the examples can be found in the **examples** folder.
 
 You can try **OMP4Py** using the following Docker image: [https://hub.docker.com/r/cesarpomar/omp4py](https://hub.docker.com/r/cesarpomar/omp4py)
 
