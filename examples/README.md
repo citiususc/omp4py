@@ -22,14 +22,6 @@ The clustering coefficient of a node in an unweighted graph is the fraction of p
 ``python3 main.py 1 graphc 2 [n=300000] [seed=0]``
 
 
-### 2. **Fibonacci Sequence**
-
-This experiment evaluates the performance of algorithms used to compute the **Fibonacci sequence**, a series of numbers where each term is the sum of the two preceding ones. The sequence is fundamental in mathematics and computer science, appearing in various applications such as algorithm analysis, dynamic programming, and modeling natural phenomena. The sequence is defined recursively as:
-`F(0) = 0 ` `F(1) = 1 ` `F(n) = F(n−1) + F(n−2), for n > 1`
-
-``python3 main.py 1 fib 2 [n=30]``
-
-
 ### 3. **Jacobi Method**
 The Jacobi method is an iterative algorithm used for solving systems of linear equations of the form `A · x = b`, where `A` is a matrix, and `x` and `b` are vectors. At each iteration, the solution vector is updated based on values from the previous iteration. For this experiment, a square matrix `A` of size `1k × 1k` was used, performing up to 1,000 iterations with a stopping criterion set to an error tolerance of `1 × 10^(-6)`.
 
