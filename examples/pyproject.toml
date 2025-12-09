@@ -1,13 +1,13 @@
-[tool.poetry]
+[project]
 name = "omp4py-examples"
 version = "0.1"
 description = "OMP4Py examples"
 license = "LGPL-3.0-only"
 authors = [
-    "César Pomar <cesaralfredo.pineiro@usc.es>",
-    "Juan C. Pichel <juancarlos.pichel@usc.es>"
+    { name = "César Pomar", email = "cesaralfredo.pineiro@usc.es" },
+    { name = "Juan C. Pichel", email = "juancarlos.pichel@usc.es" },
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 
 [tool.poetry.dependencies]
 numpy = "^2.3"
