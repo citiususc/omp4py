@@ -1,6 +1,6 @@
 # **OMP4Py Examples**
 
-Install Poetry (first time): ``pip install poetry``
+Install Poetry (first time): ``pip install poetry``, ``poetry env use <python_binary>`` and ``poetry install --no-root``
 
 Use Poetry environment: ``eval $(poetry env activate)``
 
