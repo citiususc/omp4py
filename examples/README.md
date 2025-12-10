@@ -40,7 +40,7 @@ LU decomposition is a method for factorizing a matrix `A` into the product of a 
 
 Solved via breadth-first search on a grid (entrance at the top-left, exit at the bottom-right). Zeros are paths and ones are walls; moves are allowed only between 0-cells, and each feasible move spawns a task
 
-``python3 main.py 1 maze 2 [n=10] [seed=0] [file_cache=None]``
+``python3 main.py 1 maze 2 [n=10] [seed=0] [file_cache=\"maze\"]``
 
 
 ### 6. **Molecular Dynamics Simulation**

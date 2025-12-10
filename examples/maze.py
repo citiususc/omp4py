@@ -153,13 +153,13 @@ def _gen_maze(n, seed):
     return maze
 
 
-def maze(n=2100, seed=0, cache=None):
+def maze(n=2100, seed=0, cache="maze"):
     if cache is not None and os.path.exists(f"{cache}.npy"):
-        maze = np.load(f"{cache}.npy")
+        maze = np.load(f"{cache}-{n}-{seed}.npy")
     else:
         maze = _gen_maze(n, seed)
         if cache is not None:
-            np.save(f"{cache}.npy", maze)
+            np.save(f"{cache}-{n}-{seed}.npy", maze)
 
     print(f"maze : n={len(maze)}, seed={seed}, cache={cache}")
 
