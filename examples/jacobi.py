@@ -216,7 +216,7 @@ def _omp4py_mpi_jacobi_types(a2, x2, b2, max_iter: int, tol: float):
     return iter, norm
 
 
-def jacobi(n=1000, max_iter=1000, tol=1e-6, seed=0):
+def jacobi(n=3000, max_iter=1000, tol=1e-6, seed=0):
     procs = mpi4py.MPI.COMM_WORLD.size if has_mpi4py else 1
     if procs > 1:
         raise RuntimeError('PyOmp cannot handle more than one process')

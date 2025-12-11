@@ -91,7 +91,7 @@ def _omp4py_qsort_types(array2, limit: int):
             _omp4py_quicksort(array, 0, len(array) - 1, limit)
 
 
-def qsort(n=40000000, limit=100000):
+def qsort(n=400000000, limit=100000):
     print(f"qsort: n={n}, limit={limit}")
     array = np.random.rand(n)
 

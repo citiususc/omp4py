@@ -161,7 +161,7 @@ def _omp4py_step_types(n: int, mj: int, a2, b2, c2, d2, w2, sgn: float):
                     d[(jd + k) * 2 + 1] = wjw1 * ambr + wjw0 * ambu
 
 
-def fft(ln2_max=22, nits=10000, seed=331):
+def fft(ln2_max=24, nits=10000, seed=331):
     print(f"fft: ln2_max={ln2_max}, nits={nits}, seed={seed}")
     # https://people.math.sc.edu/Burkardt/cpp_src/fft_openmp/fft_openmp.html
     print("  Accuracy check:")

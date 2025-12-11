@@ -195,7 +195,7 @@ def _omp4py_update_types(n: int, nd: int, pos2, vel2, f2, a2, mass: float, dt: f
                 a[i][j] = f[i][j] * rmass
 
 
-def md(n=2000, steps=10, seed=0):
+def md(n=8000, steps=10, seed=0):
     print(f"md: n={n}, steps={steps}, seed={seed}")
     mass = 1.0
     dt = 1.0e-4

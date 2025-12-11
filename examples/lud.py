@@ -94,7 +94,7 @@ def _omp4py_lud_types(a2, l2, u2):
                 l[k][k] = 1.0
 
 
-def lud(n=1000, seed=0):
+def lud(n=2000, seed=0):
     print(f"lud: n={n}, seed={seed}")
     gen = np.random.default_rng(seed)
 
