@@ -12,6 +12,8 @@ Available tests: fft, graphc, jacobi, lud, maze, md, pi, qsort, wordcount
 
 Arguments: the arguments are positional values rather than parameter=value pairs. In the examples, the [parameter=value] notation only indicates the default values and the meaning of each argument.
 
+**Important**: Default sizes used in the benchmarks of the paper are large enough to evaluate scalability in a realistic HPC scenario.
+
 ### 1. **Fast Fourier Transform**
 This experiment evaluates the performance of the Fast Fourier Transform (FFT), an efficient algorithm used to compute the Discrete Fourier Transform (DFT) of a sequence. FFT allows for the conversion of a signal from the time domain to the frequency domain. The tests were conducted using a complex data vector of 16 million numbers.
 
