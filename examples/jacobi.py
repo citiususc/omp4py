@@ -52,10 +52,14 @@ def _pyomp_jacobi(a, x, b, max_iter, tol):
                 break
             with pyomp("barrier"):
                 pass
+   
             with pyomp("single"):
                 x, x_new = x_new, x
                 norm = 0.0
-                iter += 1
+                iter += 1        
+            #pyomp bug: There is not an implicit barrier at the end
+            with pyomp("barrier"):
+                pass
 
     return iter, norm
 
@@ -216,7 +220,7 @@ def _omp4py_mpi_jacobi_types(a2, x2, b2, max_iter: int, tol: float):
     return iter, norm
 
 
-def jacobi(n=3000, max_iter=1000, tol=1e-6, seed=0):
+def jacobi(n=3000, max_iter=1000**2, tol=1e-6, seed=0 ):
     procs = mpi4py.MPI.COMM_WORLD.size if has_mpi4py else 1
     if procs > 1:
         raise RuntimeError('PyOmp cannot handle more than one process')
