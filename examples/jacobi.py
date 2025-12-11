@@ -54,6 +54,8 @@ def _pyomp_jacobi(a, x, b, max_iter, tol):
                 pass
    
             with pyomp("single"):
+                if norm == -1:
+                    print(norm)
                 x, x_new = x_new, x
                 norm = 0.0
                 iter += 1        
