@@ -1,7 +1,12 @@
+# BEGIN_CYTHON_IMPORTS: Add 'cython.imports' prefix to omp4py packages
 from omp4py.runtime.basics.types import *
 from omp4py.runtime.basics import array, math, atomic
 from omp4py.runtime.common import controlvars, thread, tasks, enums
-from omp4py.runtime.basics.casting import *
+
+# END_CYTHON_IMPORTS
+
+
+from cython import cast
 
 _static: pyint = cast(pyint, enums.omp_sched_static)
 _dynamic: pyint = cast(pyint, enums.omp_sched_dynamic)

@@ -14,14 +14,11 @@ import importlib.util
 import importlib.machinery
 import importlib.metadata
 
+import omp4py
 from omp4py.core.processor.nodes import ParserArgs
 
-__all__ = ['build', 'search_cache', 'get_cache_dir', 'gen_cache_key', '__version__']
+__all__ = ['build', 'search_cache', 'get_cache_dir', 'gen_cache_key']
 
-try:
-    __version__ = importlib.metadata.version(__package__ or __name__)
-except importlib.metadata.PackageNotFoundError:
-    __version__ = "0.0.0"
 
 try:
     import Cython.Build.Inline as cython_inline
@@ -43,9 +40,9 @@ def gen_cache_key(code: str, _compile: bool, options: dict):
     value: str
     if _compile:
         check_cython()
-        value = str((code, _compile, options, __version__, sys.version_info, cython_inline.Cython.__version__))
+        value = str((code, _compile, options, omp4py.__version__, sys.version_info, cython_inline.Cython.__version__))
     else:
-        value = str((code, _compile, options, __version__))
+        value = str((code, _compile, options, omp4py.__version__))
 
     return '__omp4py__' + hashlib.sha256(value.encode('utf-8')).hexdigest()
 
@@ -71,9 +68,7 @@ def get_cache_dir():
 
 
 def env(module: types.ModuleType):
-    import omp4py.runtime as __pure_omp
-    from omp4py import _runtime as __omp
-    module.__dict__['__ompp'] = __pure_omp
+    import omp4py.runtime as __omp
     module.__dict__['__omp'] = __omp
 
 
@@ -207,16 +202,13 @@ def _resolve_imports(args: ParserArgs, f: typing.TextIO, module: types.ModuleTyp
     symbols -= set(__builtins__.keys())
     symbols &= set(module.__dict__.keys())
 
-    cimport: str = ''
-    if not args.pure:
-        cimport = 'cython.cimports.'
-        f.write(f'import {cimport}omp4py.cruntime as __omp\n')
+    cimport: str = 'cython.cimports.'
+    f.write(f'import {cimport}omp4py.cruntime as __omp\n')
 
-        if gen_native_types(ann):
-            f.write(f'from {cimport}omp4py.cruntime.basics.compilertypes import *\n')
+    if gen_native_types(ann):
+        f.write(f'from {cimport}omp4py.cruntime.basics.compilertypes import *\n')
 
-    else:
-        f.write('import omp4py.runtime as __ompp\n')
+
 
     if 'numpy' in sys.modules:
         import numpy
@@ -237,7 +229,7 @@ def _resolve_imports(args: ParserArgs, f: typing.TextIO, module: types.ModuleTyp
         prefix: str = ''
 
         if symbols_name in sys.modules and symbols_name.split('.')[0] in copy_imports:  # import .. as ..
-            if symbols_name.startswith('omp4py.cruntime'):
+            if symbols_name.startswith('omp4py.runtime'):
                 if not prefix:
                     continue
                 prefix += cimport
@@ -247,7 +239,7 @@ def _resolve_imports(args: ParserArgs, f: typing.TextIO, module: types.ModuleTyp
             f.write(f'import {prefix}{symbols_name} as {alias}\n')
         elif hasattr(import_, '__module__') and import_.__module__.split('.')[0] in copy_imports:
             # from .. import ..
-            if import_.__module__.startswith('omp4py.cruntime'):
+            if import_.__module__.startswith('omp4py.runtime'):
                 if not prefix:
                     continue
                 prefix += cimport

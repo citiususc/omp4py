@@ -1,8 +1,11 @@
+[build-system]
+requires = ["setuptools>=78", "Cython>=3.1.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "omp4py"
-version = "1.0"
 description = "An OpenMP Implementation for Python"
-license = { text = "LGPL-3.0-only" }
+license = "GPL-3.0-only"
 authors = [
     { name = "César Pomar", email = "cesaralfredo.pineiro@usc.es" },
     { name = "Juan C. Pichel", email = "juancarlos.pichel@usc.es" },
@@ -11,54 +14,61 @@ keywords = ["HPC", "OpenMP", "Programming models"]
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
+dynamic = ["version"]
 
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX",
+    "Operating System :: Unix",
+    "Operating System :: MacOS",
+    "Programming Language :: Cython",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
+    "Programming Language :: Python :: Free Threading",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Software Development :: Compilers"
+]
 
-[tool.poetry.group.test.dependencies]
-pytest = "^8.3.5"
-pytest-cov = "^6.0.0"
-tblib = "^3.0.0"
+[project.urls]
+Repository = "https://github.com/citiususc/omp4py.git"
+Issues = "https://github.com/citiususc/omp4py/issues"
+
+[project.optional-dependencies]
+compile = ["setuptools>=78", "Cython>=3.1.0"]
+all = []
+
+[dependency-groups]
+dev = ["omp4py[all]", "pytest>=9.0.0", "pytest-cov>=7.0.0", "tblib>=3.2.0"]
 
 [tool.pytest.ini_options]
-addopts = "-v --cov --cov-report=html"
-testpaths = [
-    "test",
-]
-timeout = 3
+addopts = "-v --cov --cov-report=html --timeout 3"
+testpaths = ["test"]
 
 [tool.coverage.run]
 branch = true
+patch = ["subprocess"]
 include = ["omp4py/*"]
-
 
 [tool.coverage.html]
 directory = "coverage_html_report"
-
 
 [tool.coverage.report]
 show_missing = true
 exclude_also = ["^import", "^from", "^\\s*pass"]
 
+[tool.setuptools.dynamic]
+version = {attr = "omp4py.__version__"}
 
-[tool.poetry]
-requires-poetry = ">=2.0"
-packages = [
-    { include = "omp4py" },
-    { include = "omp4py/cruntime", from = "build/libs", format = "wheel" },
-]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["omp4py*"]
 
-include = [
-    { path = "omp4py/cruntime", format = "sdist" },
-    { path = "build/libs/omp4py/cruntime/**/*", format = "wheel" },
-]
-
-exclude = [
-    "omp4py/cruntime",
-]
-
-[tool.poetry.build]
-script = "scripts/compile.py"
-
-
-[build-system]
-requires = ["poetry-core", "setuptools>=78", "Cython>=3.1.0"]
-build-backend = "poetry.core.masonry.api"
+[tool.setuptools.package-data]
+"*" = ["*.py", "*.pyx", "*.pxd"]

@@ -1,6 +1,10 @@
 from __future__ import annotations
 import typing
+# BEGIN_CYTHON_IMPORTS: Add 'cython.imports' prefix to omp4py packages
 from omp4py.runtime.basics.types import *
+
+# END_CYTHON_IMPORTS
+
 
 __all__ = ['omp_sched_t',
            'omp_sched_static',

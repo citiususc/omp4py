@@ -48,6 +48,7 @@ def _timeout(n: float, q: mp.Queue) -> None:
         pickling_support.install()
         q.put((False, ex))
         q.close()
+        q.join_thread()
         _end__coverage()
         os._exit(1)
 

@@ -1,5 +1,4 @@
 import pytest
-
 from omp4py import *
 from queue import Queue
 

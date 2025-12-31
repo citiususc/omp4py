@@ -1,9 +1,12 @@
 import typing
 import itertools
-
+# BEGIN_CYTHON_IMPORTS: Add 'cython.imports' prefix to omp4py packages
 from omp4py.runtime.basics import array, lock, atomic
 from omp4py.runtime.common import controlvars, threadshared
 from omp4py.runtime.basics.types import *
+
+# END_CYTHON_IMPORTS
+
 
 __all__ = ['Task', 'ParallelTask', 'ParallelTaskID', 'TeamsTask', 'TeamsTaskID', 'ForTask', 'ForTaskID', 'SectionsTask',
            'SectionsTaskID', 'SingleTask', 'SingleTaskID', 'BarrierTask', 'BarrierTaskID', 'CustomTask', 'CustomTaskID']
@@ -77,6 +80,7 @@ class SingleTask(Task):
         task.executed = executed
         return task
 
+
 class BarrierTask(Task):
     parties: pyint
     count: atomic.AtomicInt
@@ -92,6 +96,7 @@ class BarrierTask(Task):
         task.context = context.__copy__()
 
         return task
+
 
 class CustomTask(Task):
     f: typing.Callable[[], None]

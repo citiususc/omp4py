@@ -1,8 +1,12 @@
+# BEGIN_CYTHON_IMPORTS: Add 'cython.imports' prefix to omp4py packages
 import omp4py.runtime.common.tasks as tasks
 import omp4py.runtime.basics.threadlocal as threadlocal
 import omp4py.runtime.common.controlvars as controlvars
 import omp4py.runtime.common.threadshared as threadshared
-from omp4py.runtime.basics.casting import *
+# END_CYTHON_IMPORTS
+
+
+from cython import cast
 
 __all__ = ['OmpThread', 'init', 'current', 'cvars']
 

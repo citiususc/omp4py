@@ -1,7 +1,11 @@
+# BEGIN_CYTHON_IMPORTS: Add 'cython.imports' prefix to omp4py packages
 from omp4py.runtime.basics import lock, atomic
 from omp4py.runtime.common import tasks, threadshared, thread
 from omp4py.runtime.basics.types import *
-from omp4py.runtime.basics.casting import *
+# END_CYTHON_IMPORTS
+
+
+from cython import cast
 
 
 class BarrierContext:
@@ -10,7 +14,7 @@ class BarrierContext:
 
     @staticmethod
     def new() -> 'BarrierContext':
-        bc:BarrierContext = BarrierContext.__new__(BarrierContext)
+        bc: BarrierContext = BarrierContext.__new__(BarrierContext)
         bc.ctx = threadshared.SharedContext.new()
         bc.count = atomic.AtomicInt.new(0)
 
@@ -23,7 +27,7 @@ class BarrierShared:
 
     @staticmethod
     def new() -> 'BarrierShared':
-        bs:BarrierShared = BarrierShared.__new__(BarrierShared)
+        bs: BarrierShared = BarrierShared.__new__(BarrierShared)
         bs.notify_event = False
         bs.event = lock.Event.new()
 

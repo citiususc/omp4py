@@ -1,23 +1,26 @@
+[build-system]
+requires = ["setuptools>=78"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "omp4py-examples"
-version = "0.1"
+name = "omp4py_examples"
+version = "1.0-fixed"
 description = "OMP4Py examples"
-license = "LGPL-3.0-only"
+license = "GPL-3.0-only"
 authors = [
     { name = "César Pomar", email = "cesaralfredo.pineiro@usc.es" },
     { name = "Juan C. Pichel", email = "juancarlos.pichel@usc.es" },
 ]
+
+readme = "README.md"
 requires-python = ">=3.12"
+dependencies = ["omp4py[all]", "numpy>=2.3", "networkx>=3.3"]
 
-[tool.poetry.dependencies]
-numpy = "^2.3"
-#mpi4py = "^4.0.0"
-networkx = "^3.3"
-Cython = "^3.1"
-setuptools = "^80"
-omp4py = {path = ".."}
+[project.optional-dependencies]
+mpi4py = ["mpi4py>=4.0"]
 
+[tool.uv.sources]
+omp4py = { path = ".." }
 
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+[project.scripts]
+omp4pyex = "main:main"

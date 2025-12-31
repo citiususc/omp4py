@@ -1,7 +1,6 @@
 import sys
 
-from omputils import set_omp_threads, set_omp_mode
-
+from omp4py_examples.omputils import set_omp_threads, set_omp_mode
 
 def main():
     if len(sys.argv) < 4:
@@ -14,6 +13,7 @@ def main():
         mode = int(sys.argv[1])
         if mode < -1 or mode > 3:
             raise ValueError()
+
         set_omp_mode(mode)
     except ValueError:
         print("mode must be a valid number", file=sys.stderr)
@@ -30,38 +30,38 @@ def main():
     set_omp_threads(threads)
 
     if test == "fft":
-        import fft
-        fft.fft(*args)
+        import omp4py_examples.fft
+        omp4py_examples.fft.fft(*args)
     elif test == "graphc":
-        import graphc
-        graphc.graphc(*args)
+        import omp4py_examples.graphc
+        omp4py_examples.graphc.graphc(*args)
     elif test == "fib":
-        import fib
-        fib.fib(*args)
+        import omp4py_examples.fib
+        omp4py_examples.fib.fib(*args)
     elif test == "jacobi":
-        import jacobi
-        jacobi.jacobi(*args)
+        import omp4py_examples.jacobi
+        omp4py_examples.jacobi.jacobi(*args)
     elif test == "lud":
-        import lud
-        lud.lud(*args)
+        import omp4py_examples.lud
+        omp4py_examples.lud.lud(*args)
     elif test == "maze":
-        import maze
-        maze.maze(*args)
+        import omp4py_examples.maze
+        omp4py_examples.maze.maze(*args)
     elif test == "md":
-        import md
-        md.md(*args)
+        import omp4py_examples.md
+        omp4py_examples.md.md(*args)
     elif test == "pi":
-        import pi
-        pi.pi(*args)
+        import omp4py_examples.pi
+        omp4py_examples.pi.pi(*args)
     elif test == "qsort":
-        import qsort
-        qsort.qsort(*args)
+        import omp4py_examples.qsort
+        omp4py_examples.qsort.qsort(*args)
     elif test == "quad":
-        import quad
-        quad.quad(*args)
+        import omp4py_examples.quad
+        omp4py_examples.quad.quad(*args)
     elif test == "wordcount":
-        import wordcount
-        wordcount.wordcount(*args)
+        import omp4py_examples.wordcount
+        omp4py_examples.wordcount.wordcount(*args)
 
 
 if __name__ == '__main__':

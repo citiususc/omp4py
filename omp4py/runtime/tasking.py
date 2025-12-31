@@ -1,7 +1,10 @@
 import typing
-
+# BEGIN_CYTHON_IMPORTS: Add 'cython.imports' prefix to omp4py packages
 from omp4py.runtime.common import thread, tasks, barrier, threadshared
-from omp4py.runtime.basics.casting import *
+# END_CYTHON_IMPORTS
+
+
+from cython import cast
 
 
 def task_submit(f: typing.Callable[[], None]) -> None:

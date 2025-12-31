@@ -1,10 +1,13 @@
 import typing
 import threading
 
+# BEGIN_CYTHON_IMPORTS: Add 'cython.imports' prefix to omp4py packages
 from omp4py.runtime.common import threadshared, controlvars, thread, tasks, barrier
 from omp4py.runtime.basics import array
 from omp4py.runtime.basics.types import *
 
+
+# END_CYTHON_IMPORTS
 
 def omp_parallel(num: pyint, f: typing.Callable[[], None], cvars: controlvars.ControlVars, parent: tasks.Task,
                  shared: threadshared.SharedFactory) -> None:

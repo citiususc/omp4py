@@ -1,10 +1,14 @@
 import os
 import re
 import typing
+# BEGIN_CYTHON_IMPORTS: Add 'cython.imports' prefix to omp4py packages
 import omp4py.runtime.basics.array as array
 import omp4py.runtime.common.enums as enums
 from omp4py.runtime.basics.types import *
-from omp4py.runtime.basics.casting import *
+# END_CYTHON_IMPORTS
+
+
+from cython import cast
 
 __all__ = ['ScheduleVar', 'GlobalVars', 'DataEnvVars', 'DeviceVars', 'ITaskVars', 'ControlVars']
 
@@ -178,7 +182,7 @@ class DataEnvVars:
         self.thread_limit = getenv('OMP_THREAD_LIMIT', 2 ** 31, int)
         self.thread_num = 0
 
-    def __copy__(self) ->'DataEnvVars':
+    def __copy__(self) -> 'DataEnvVars':
         other: DataEnvVars = DataEnvVars()
         other.active_levels = self.active_levels
         other.bind = self.bind
@@ -227,7 +231,7 @@ class DeviceVars:
                                   p_match(lambda v: v.lower() in ['active', 'passive'])).lower()
 
     def __copy__(self) -> 'DeviceVars':
-        other:DeviceVars = DeviceVars.new()
+        other: DeviceVars = DeviceVars.new()
         other.affinity_format = self.affinity_format
         other.device_num = self.device_num
         other.nteams = self.nteams
@@ -251,7 +255,7 @@ class ITaskVars:
         self.def_allocator = getenv('OMP_ALLOCATOR', '', str)  # TODO
         self.place_assignment = ''  # TODO
 
-    def __copy__(self) ->'ITaskVars':
+    def __copy__(self) -> 'ITaskVars':
         other: ITaskVars = ITaskVars.new()
         other.def_allocator = self.def_allocator
         other.place_assignment = self.place_assignment
@@ -279,7 +283,7 @@ class ControlVars:
         self.itask = ITaskVars.new()
         self.itask.default()
 
-    def __copy__(self)-> 'ControlVars':
+    def __copy__(self) -> 'ControlVars':
         other: ControlVars = ControlVars.new()
         other.global_ = self.global_
         other.dataenv = self.dataenv

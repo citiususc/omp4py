@@ -19,7 +19,6 @@ class ParserArgs:
     force: bool
     cache_dir: str
     options: dict
-    pure: bool
 
 
 @dataclasses.dataclass

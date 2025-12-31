@@ -1,8 +1,12 @@
 import typing
+# BEGIN_CYTHON_IMPORTS: Add 'cython.imports' prefix to omp4py packages
 from omp4py.runtime.basics import atomic, lock
 from omp4py.runtime.common import controlvars
 from omp4py.runtime.basics.types import *
-from omp4py.runtime.basics.casting import *
+# END_CYTHON_IMPORTS
+
+
+from cython import cast
 
 
 class _SharedEntry:

@@ -9,11 +9,11 @@ from contextlib import contextmanager
 
 from omp4py.core.directive import OmpDirective, OmpClause, tokenizer
 from omp4py.core.processor.processor import OMP_PROCESSOR
-from omp4py.core.processor.builder import build, search_cache, get_cache_dir, gen_cache_key, __version__
+from omp4py.core.processor.builder import build, search_cache, get_cache_dir, gen_cache_key
 from omp4py.core.processor.nodes import NodeContext, directive_node, Variables, ParserArgs, node_name
 from omp4py.core.processor.common import OmpItemError
 
-__all__ = ['omp', 'omp4py_force_pure', '__version__']
+__all__ = ['omp']
 
 T = typing.TypeVar('T')
 
@@ -33,7 +33,7 @@ _cache_dir: str = get_cache_dir()
 _debug: bool = get_bool_config('OMP4PY_DEBUG', False)
 _compile: bool = get_bool_config('OMP4PY_COMPILE', False)
 _pure: bool = get_bool_config('OMP4PY_PURE', False)
-omp4py_force_pure: bool = get_bool_config('OMP4PY_FORCE_PURE', False)
+
 try:
     _options: dict = json.loads(os.environ.get("OMP4PY_OPTIONS", "{}"))
 except:
@@ -42,6 +42,9 @@ try:
     _doptions: dict = json.loads(os.environ.get("OMP4PY_DOPTIONS", "{}"))
 except:
     _doptions: dict = {}
+
+if _pure:
+    import omp4py.core.importer.pure
 
 
 @typing.overload
@@ -121,9 +124,8 @@ def omp(arg: Any = None, /, *, alias: str = "", cache: bool = _cache, dump: bool
         compile: bool = _compile, force: bool = _force, cache_dir: str = _cache_dir, **options) -> Any:
     def wrap(arg):
         try:
-            pure: bool = options.pop('__omp4py_pure', False)
             options2: dict = _doptions | _options | options
-            return omp_parse(arg, ParserArgs(alias, cache, dump, debug, compile, force, cache_dir, options2, pure))
+            return omp_parse(arg, ParserArgs(alias, cache, dump, debug, compile, force, cache_dir, options2))
         except SyntaxError as ex:
             if not debug:
                 try:
@@ -220,7 +222,7 @@ class OmpTransformer(ast.NodeTransformer):
     attibutes: bool
 
     def __init__(self, filename: str, src_lines: list[str], parser_args: ParserArgs, global_parse: bool) -> None:
-        self.ctx = NodeContext(filename, src_lines, parser_args, '__ompp' if parser_args.pure else '__omp',
+        self.ctx = NodeContext(filename, src_lines, parser_args, '__omp',
                                global_parse)
         self.attibutes = False
 
