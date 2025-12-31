@@ -23,4 +23,4 @@ mpi4py = ["mpi4py>=4.0"]
 omp4py = { path = ".." }
 
 [project.scripts]
-omp4pyex = "main:main"
+omp4pyex = "omp4py_examples.main:main"
