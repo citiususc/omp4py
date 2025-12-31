@@ -42,7 +42,7 @@ Issues = "https://github.com/citiususc/omp4py/issues"
 
 [project.optional-dependencies]
 compile = ["setuptools>=78", "Cython>=3.1.0"]
-all = []
+all = ['omp4py[compile]']
 
 [dependency-groups]
 dev = ["omp4py[all]", "pytest>=9.0.0", "pytest-cov>=7.0.0", "tblib>=3.2.0"]

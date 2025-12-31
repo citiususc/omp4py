@@ -60,29 +60,33 @@ Here's a basic example of how to use OMP4Py to calculate $\pi$:
 OMP4Py can be executed in four different modes:
 
 - **Pure mode**:  
-  Executes using the pure Python runtime. To enable it, users must explicitly sets and enviroment variable before importing OMP4Py:  
+  Executes using the pure Python runtime. To enable it, users must explicitly sets and enviroment variable before 
+- importing OMP4Py:  
   ```python
   import os
-  os.environ['OMP4PY_PURE'] = True
+  os.environ['OMP4PY_PURE'] = 'True'
   from omp4py import *
-  ````
+  ```
   
 - **Hybrid mode (default)**:  
 This is the standard mode when importing OMP4Py with:
   ```python
   from omp4py import *
-  ````
-- **Compiled mode**: In this mode, both the runtime and the user’s function are compiled to native code using Cython. This removes Python interpreter overhead and provides improved performance for numerical workloads.
+  ```
+- **Compiled mode**: In this mode, both the runtime and the user’s function are compiled to native code using Cython. 
+- This removes Python interpreter overhead and provides improved performance for numerical workloads.
 
   ```python
   @omp(compile=True)
-  ````
+  ```
   
-- **Compiled-with-types mode**: A more optimized version of the previous mode, where the programmer also provides static type annotations, allowing Cython to generate more efficient native code. This can result in substantial speed-ups, up to three orders of magnitude compared with Pure mode.
+- **Compiled-with-types mode**: A more optimized version of the previous mode, where the programmer also provides 
+- static type annotations, allowing Cython to generate more efficient native code. This can result in substantial 
+- speed-ups, up to three orders of magnitude compared with Pure mode.
 	```python
 	@omp(compile=True)
 	def pi(n: int): ...
-	````
+	```
 All versions of the pi implementation using these execution modes can be found in [https://github.com/citiususc/omp4py/blob/main/examples/pi.py](https://github.com/citiususc/omp4py/blob/main/examples/pi.py)
 
 The rest of the examples can be found in the **examples** folder.
@@ -94,8 +98,9 @@ You can download OMP4Py and then run with [uv](https://docs.astral.sh/uv/getting
 uv run -p <python_version>+freethreaded python3 <file.py>
 ```
 
-* ``<python_version>``: Replace this with the specific Python version you want to test (e.g., 3.13, 1.14, etc.). If the specified version is not found on your system, ``uv`` will automatically download and set it up in the environment.
-* ``<file.py>``: This is the Python file you want to execute
+* `<python_version>`: Replace this with the specific Python version you want to test (e.g., 3.13, 1.14, etc.). If the 
+* specified version is not found on your system, `uv` will automatically download and set it up in the environment.
+* `<file.py>`: This is the Python file you want to execute
 
 ## Tests
 
@@ -104,9 +109,11 @@ To run the unit tests and check the coverage, you can use the following command:
 pytest [--pure]
 ```
 
-Use ``--pure`` to ignore compiled runtime files and use pure Python files to provide easier coverage and test the pure files. Note that if no build has been performed, this parameter has no effect, as only pure runtime exist.
+Use `--pure` to ignore compiled runtime files and use pure Python files to provide easier coverage and test the pure 
+files. Note that if no build has been performed, this parameter has no effect, as only pure runtime exist.
 
-\* Test dependencies are required, and pip only installs project dependencies. Use ``pip install --group test`` to install them.
+\* Test dependencies are required, and pip only installs project dependencies. Use `pip install --group test` to 
+install them.
 
 To manage all dependencies, it is recommended to run the tests with [uv](https://docs.astral.sh/uv/getting-started/installation/): 
 ```bash
@@ -115,7 +122,7 @@ uv run [-p <python_version>+freethreaded] pytest [--pure]
 
 ## Development Guide (uv)
 
-Install dependencies and [re-]compile the runtime: ``uv sync --reinstall-package omp4py``
+Install dependencies and [re-]compile the runtime: `uv sync --reinstall-package omp4py`
 
-Build the project and generate the wheel: ``uv build``
+Build the project and generate the wheel: `uv build`
 
