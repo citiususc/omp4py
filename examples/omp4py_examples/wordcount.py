@@ -1,7 +1,7 @@
 import random
 import time
 import string
-from omputils import njit, pyomp, omp, use_pyomp, use_pure, use_compiled, use_compiled_types
+from omp4py_examples.omputils import njit, pyomp, omp, use_pyomp, use_pure, use_compiled, use_compiled_types
 
 
 def random_word(min_length=3, max_length=10):

@@ -1,6 +1,6 @@
 import math
 import time
-from omputils import njit, pyomp, omp, use_pyomp, use_compiled, use_compiled_types
+from omp4py_examples.omputils import njit, pyomp, omp, use_pyomp, use_compiled, use_compiled_types
 
 @njit
 def _pyomp_pi(n):

@@ -2,7 +2,7 @@ import numpy as np
 import math
 import time
 import random
-from omputils import njit, pyomp, omp, use_pyomp, use_compiled, use_compiled_types
+from omp4py_examples.omputils import njit, pyomp, omp, use_pyomp, use_compiled, use_compiled_types
 
 _PI_2 = math.pi / 2
 

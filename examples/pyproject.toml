@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omp4py_examples"
-version = "1.0-fixed"
+version = "1.0+fixed"
 description = "OMP4Py examples"
 license = "GPL-3.0-only"
 authors = [
