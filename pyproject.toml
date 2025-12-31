@@ -64,7 +64,7 @@ show_missing = true
 exclude_also = ["^import", "^from", "^\\s*pass"]
 
 [tool.setuptools.dynamic]
-version = {attr = "omp4py.__version__"}
+version = { attr = "omp4py.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -72,3 +72,16 @@ include = ["omp4py*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.py", "*.pyx", "*.pxd"]
+
+
+
+# From here on, everything is for cibuildwheel configuration
+[tool.cibuildwheel]
+build = "cp3??t-*" # Only free-threading builds
+enable = ["cpython-freethreading"] # Enable free-threaded support for CPython 3.13
+
+[tool.cibuildwheel.windows]
+archs = ['auto64'] # Avoid 32-bit Windows builds
+
+[tool.cibuildwheel.macos]
+environment = { MACOSX_DEPLOYMENT_TARGET = "13" }
