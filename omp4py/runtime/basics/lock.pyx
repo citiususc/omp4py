@@ -17,7 +17,7 @@ cdef class Mutex:
         PyMutex_Unlock(&self._mutex)
 
     cdef bint test(self):
-        return PyMutex_LockFast(&self._mutex)
+        return PyMutex_LockFast_(&self._mutex)
 
     def __enter__(self):
         self.lock()
@@ -52,7 +52,7 @@ cdef class RMutex:
 
     cdef bint test(self):
         if self._own == -1:
-            result: int = PyMutex_LockFast(&self._mutex)
+            result: int = PyMutex_LockFast_(&self._mutex)
             if result:
                 self._level += 1
             return result

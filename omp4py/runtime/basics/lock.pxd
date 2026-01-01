@@ -1,16 +1,25 @@
 from omp4py.runtime.basics.types cimport *
 
+
 cdef extern from *:
     """
     #define Py_BUILD_CORE 1
     #include <internal/pycore_lock.h>
+
+    int PyMutex_LockFast_(PyMutex *m){
+        #if PY_MINOR_VERSION < 14
+            return PyMutex_LockFast((uint8_t*)m);
+        #else
+            return PyMutex_LockFast(m);
+        #endif
+    }
     """
     ctypedef struct PyMutex:
         pass
 
     void PyMutex_Lock(PyMutex *m)
 
-    int PyMutex_LockFast(PyMutex *m)
+    int PyMutex_LockFast_(PyMutex *m)
 
     void PyMutex_Unlock(PyMutex *m)
 
