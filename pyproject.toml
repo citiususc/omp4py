@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=78", "Cython>=3.1.0"]
+requires = ["setuptools>=78", "Cython>=3.2.4"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -41,7 +41,7 @@ Repository = "https://github.com/citiususc/omp4py.git"
 Issues = "https://github.com/citiususc/omp4py/issues"
 
 [project.optional-dependencies]
-compile = ["setuptools>=78", "Cython>=3.1.0"]
+compile = ["setuptools>=78", "Cython>=3.2.4"]
 all = ['omp4py[compile]']
 
 [dependency-groups]
