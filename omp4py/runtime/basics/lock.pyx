@@ -2,8 +2,33 @@ from omp4py.runtime.basics.threadlocal cimport thread_id
 
 from omp4py.runtime.basics.types cimport *
 
-cdef class Mutex:
+cdef extern from *:
+    """
+    #undef PyEvent
+    #define Py_BUILD_CORE 1
+    #include <internal/pycore_lock.h>
 
+    int PyMutex_LockFast_(PyMutex *m){
+        #if PY_MINOR_VERSION < 14
+            return PyMutex_LockFast((uint8_t*)m);
+        #else
+            return PyMutex_LockFast(m);
+        #endif
+    }
+    """
+
+    void PyMutex_Lock(PyMutex *m)
+
+    int PyMutex_LockFast_(PyMutex *m)
+
+    void PyMutex_Unlock(PyMutex *m)
+
+    void _PyEvent_Notify(PyEvent *evt)
+
+    void PyEvent_Wait(PyEvent *evt)
+
+
+cdef class Mutex:
     @staticmethod
     cdef Mutex new():
         m: Mutex = Mutex.__new__(Mutex)
@@ -27,7 +52,6 @@ cdef class Mutex:
         return False
 
 cdef class RMutex:
-
     @staticmethod
     cdef RMutex new():
         m: RMutex = RMutex.__new__(RMutex)
@@ -67,9 +91,7 @@ cdef class RMutex:
         self.unlock()
         return False
 
-
 cdef class Event:
-
     @staticmethod
     cdef Event new():
         e: Event = Event.__new__(Event)
