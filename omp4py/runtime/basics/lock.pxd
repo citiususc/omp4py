@@ -3,10 +3,15 @@ from omp4py.runtime.basics.types cimport *
 
 cdef extern from "Python.h":
     """
-    typedef struct { // Python private API
-        uint8_t v;
-    } _PyEvent;
-    #define PyEvent _PyEvent
+    #if PY_MINOR_VERSION > 13
+        typedef struct { // Python private API
+            uint8_t v;
+        } _PyEvent;
+        #define PyEvent _PyEvent
+    #else
+        #define Py_BUILD_CORE 1
+        #include <internal/pycore_lock.h>
+    #endif
     """
     ctypedef struct PyMutex:
         pass
