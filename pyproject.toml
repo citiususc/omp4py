@@ -46,6 +46,7 @@ all = ['omp4py[compile]']
 
 [dependency-groups]
 dev = ["omp4py[all]", "pytest>=9.0.0", "pytest-cov>=7.0.0", "tblib>=3.2.0"]
+checks = [{ include-group = "dev" }, "ruff==0.14.11", "ty==0.0.11", "pydoclint==0.8.3"]
 
 [tool.pytest.ini_options]
 addopts = "-v --cov --cov-report=html --timeout 3"

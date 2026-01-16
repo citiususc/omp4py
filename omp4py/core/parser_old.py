@@ -44,7 +44,7 @@ except:
     _doptions: dict = {}
 
 if _pure:
-    import omp4py.core.importer.pure
+    import omp4py.core.imports.pure
 
 
 @typing.overload
@@ -79,7 +79,7 @@ def omp(f: typing.Callable) -> typing.Callable:
 
 
 @typing.overload
-def omp(c: type[T]) -> type[T]:
+def omp[T: (typing.Callable, type, ast.Module)](value: T) -> T:
     """
     Decorate a class to search for OpenMP directives  and generates code based on them.
 

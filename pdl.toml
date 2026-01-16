@@ -1,0 +1,12 @@
+[tool.pydoclint]
+style = 'google'
+arg-type-hints-in-docstring = true
+arg-type-hints-in-signature = true
+check-arg-order = true
+check-return-types = true
+check-yield-types = true
+ignore-underscore-args = true
+ignore-private-args = true
+check-class-attributes = true
+check-style-mismatch = true
+check-arg-defaults = true

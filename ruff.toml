@@ -1,0 +1,23 @@
+line-length = 120
+indent-width = 4
+
+[lint]
+select = ["ALL"]
+
+ignore = [
+    "D418",
+    "TD002",
+    "TD003",
+    "PTH123",
+    "TC003",
+    "TRY003",
+    "FBT001"
+]
+
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[lint.pydocstyle]
+convention = "google"
+
+[format]
+docstring-code-format = true
