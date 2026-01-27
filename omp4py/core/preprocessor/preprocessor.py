@@ -23,9 +23,8 @@ def process_object[T: Callable[..., Any] | type](arg: T, params: Params) -> T:
     filename: str
     data: str
     module: ast.Module
-    namespace: int
-    filename, data, module,namespace = obj2ast.from_object(arg)
-    module: ast.Module = process(module, namespace,data, filename, params)
+    filename, data, module = obj2ast.from_object(arg)
+    module: ast.Module = process(module, False,data, filename, params)
     globals: ModuleType = sys.modules[arg.__module__]
 
     # TODO: use importlib to use pyc cache
@@ -41,7 +40,7 @@ def process_object[T: Callable[..., Any] | type](arg: T, params: Params) -> T:
 
 
 def process_source(data: str, filename: str, params: Params) -> ast.Module:
-    return process(ast.parse(data, filename),0, data, filename, params)
+    return process(ast.parse(data, filename),True, data, filename, params)
 
 
 def process_file(filename: str, params: Params) -> str:
@@ -58,7 +57,7 @@ def process_file(filename: str, params: Params) -> str:
     return filename
 
 
-def process(module: ast.Module, namespace: int, full_source: str, filename: str, params: Params) -> ast.Module:
-    transformer: OmpTransformer = OmpTransformer(full_source, filename, module, namespace, params)
+def process(module: ast.Module, is_module: bool, full_source: str, filename: str, params: Params) -> ast.Module:
+    transformer: OmpTransformer = OmpTransformer(full_source, filename, module, is_module, params)
 
     return transformer.transform()
