@@ -1,3 +1,3 @@
-from omp4py.core.preprocessor.preprocessor import Params, process_file, process_object, process_source, set_omp_package
+from omp4py.core.preprocessor.preprocessor import process_file, process_object, process_source
 
-__all__ = ["Params", "process_file", "process_object", "process_source", "set_omp_package"]
+__all__ = ["process_file", "process_object", "process_source"]

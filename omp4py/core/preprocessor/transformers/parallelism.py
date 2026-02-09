@@ -1,12 +1,11 @@
 import ast
 from typing import cast
 
-from omp4py.core.parser.tree import Construct, Parallel
-from omp4py.core.preprocessor.transformers.context import Context
+from omp4py.core.parser.tree import Parallel
+from omp4py.core.preprocessor.transformers.transformer import Context, construct
+
+@construct.register
+def _(ctr: Parallel, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
 
 
-def parallel(ctr: Construct, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
-    ctr: Parallel = cast("Parallel", ctr)
-    a = ctr.private
-
-    return []
+    return body

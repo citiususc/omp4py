@@ -52,12 +52,13 @@ from functools import partial
 from types import ModuleType
 from typing import Any, Protocol, TypedDict, Unpack, overload
 
-from omp4py.core.preprocessor import Params, process_file, process_object, set_omp_package
+from omp4py.core.options import Options
+from omp4py.core.imports.loader import set_omp_package
 
 __all__ = ["OmpType", "omp"]
 
 
-class OmpKargs(TypedDict, total=False):
+class OmpKargs(TypedDict):
     """This class represents the set of arguments that can be passed to the `omp` function.
 
     Attributes:
@@ -241,7 +242,9 @@ def omp(value: Any = None, /, py: str | None = None, **kwargs: Unpack[OmpKargs])
         elif isinstance(value, str):
             return contextmanager(lambda: (yield))()
         elif isinstance(value, ModuleType):
-            return set_omp_package(value, Params(**kwargs))
-        return process_object(value, Params(**kwargs))
+            return set_omp_package(value, Options(**kwargs))
+        from omp4py.core.preprocessor import process_object # Lazy import, only when needed
+        return process_object(value, Options(**kwargs))
     else:
-        return process_file(py, Params(**kwargs))
+        from omp4py.core.preprocessor import process_file # Lazy import, only when needed
+        return process_file(py, Options(**kwargs))

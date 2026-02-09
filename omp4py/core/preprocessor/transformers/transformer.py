@@ -1,34 +1,25 @@
 """TODO: write docstring."""
 
-from hashlib import new
+from __future__ import annotations
 import ast
 import typing
-from collections.abc import Callable
+from functools import singledispatch
 
 from omp4py.core.parser import syntax_error, parse
-from omp4py.core.parser.tree import Directive, Construct, Parallel, Span
-from omp4py.core.preprocessor.transformers import parallelism
-from omp4py.core.preprocessor.transformers.context import Context, Params, SymbolTable, global_symtable
+from omp4py.core.parser.tree import Directive, Construct, Span
+from omp4py.core.preprocessor.transformers.context import Context, SymbolTable, global_symtable
+from omp4py.core.options import Options
 
-__all__ = ["OmpTransformer", "Params"]
-
-
-constructs: dict[type[Construct], Callable[[Construct, list[ast.stmt], Context], list[ast.stmt]]] = {
-    Parallel: parallelism.parallel,
-}
+__all__ = ["OmpTransformer", "construct", "Context"]
 
 
-def not_implemented(ctr: Construct, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
-    msg: str = f"{ctr.name} not implemented"
+@singledispatch
+def construct(ctr: Construct, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
+    msg: str = f"'{ctr.name}' not implemented"
     raise syntax_error(msg, ctr.span, ctx.full_source, ctx.filename)
 
 
-def get_construct(d: Directive) -> Callable[[Construct, list[ast.stmt], Context], list[ast.stmt]]:
-    return constructs.get(d.construct.__class__, not_implemented)
-
-
 def take_decorator(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef, ctx: Context) -> ast.expr | None:
-    i: int
     child: ast.expr
     name: str
     for i, child in enumerate(node.decorator_list):
@@ -42,7 +33,7 @@ def take_decorator(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef, 
             name = child.attr
         else:
             continue
-        if name == ctx.params.alias:
+        if name == ctx.opt.alias:
             if ctx.decorator is not None:
                 pass  # TODO: raise multiple omp decorator error or module with multiple omp
             ctx.decorator = node.decorator_list.pop(i)
@@ -52,8 +43,8 @@ def take_decorator(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef, 
 class OmpTransformer(ast.NodeTransformer):
     ctx: Context
 
-    def __init__(self, full_source: str, filename: str, module: ast.Module, is_module: bool, params: Params):
-        self.ctx = Context(full_source, filename, module, is_module, params)
+    def __init__(self, full_source: str, filename: str, module: ast.Module, is_module: bool, opt: Options):
+        self.ctx = Context(full_source, filename, module, is_module, opt)
 
     def transform(self) -> ast.Module:
         if len(self.ctx.node_stack) > 0:
@@ -69,7 +60,6 @@ class OmpTransformer(ast.NodeTransformer):
 
     def multiple_visit(self, nodes: list[ast.AST]) -> list[ast.AST]:
         new_values: list[ast.AST] = []
-        node: ast.AST
         for node in nodes:
             value: ast.AST = self.visit(node)
             if value is None:
@@ -116,7 +106,7 @@ class OmpTransformer(ast.NodeTransformer):
         if self.ctx.directive is not None:
             directive: Directive = self.ctx.directive
             self.ctx.directive = None
-            node.body = get_construct(directive)(directive.construct, node.body, self.ctx)
+            node.body = construct(directive.construct, node.body, self.ctx)
             self.multiple_visit(typing.cast("list[ast.AST]", node.body))
             return node.body
         return node
@@ -126,25 +116,25 @@ class OmpTransformer(ast.NodeTransformer):
         if self.ctx.directive is not None:
             directive: Directive = self.ctx.directive
             self.ctx.directive = None
-            return get_construct(directive)(directive.construct, [], self.ctx)
+            return construct(directive.construct, [], self.ctx)
         return node
 
     def visit_Call(self, node: ast.Call) -> ast.Call:
-        name: str = ""
+        name = ""
         if isinstance(node.func, ast.Name):
             name = node.func.id
         elif isinstance(node.func, ast.Attribute):
             name = node.func.attr
-        if name != self.ctx.params.alias:
+        if name != self.ctx.opt.alias:
             return node
 
         if len(node.args) != 1:
-            msg: str = f"{name} () takes exactly one argument ({len(node.args)} given)"
+            msg = f"{name} () takes exactly one argument ({len(node.args)} given)"
             raise syntax_error(msg, Span.from_ast(node), self.ctx.full_source, self.ctx.filename)
 
         expr: ast.expr = node.args[0]
         if not isinstance(expr, ast.Constant) or not isinstance(expr.value, str):
-            msg: str = f"{name} () argument needs constant string expression"
+            msg = f"{name} () argument needs constant string expression"
             raise syntax_error(msg, Span.from_ast(node), self.ctx.full_source, self.ctx.filename)
 
         if isinstance(self.ctx.node_stack[-2], ast.Expr):
@@ -155,16 +145,22 @@ class OmpTransformer(ast.NodeTransformer):
             withitem_node: ast.withitem = typing.cast("ast.withitem", self.ctx.node_stack[-2])
 
             if len(with_node.items) > 1:
-                msg: str = "cannot use more than one directive item in a 'with' statement"
+                msg = "cannot use more than one directive item in a 'with' statement"
                 raise syntax_error(msg, Span.from_ast(node), self.ctx.full_source, self.ctx.filename)
             if withitem_node.optional_vars is not None:
-                msg: str = "'as' is not allowed in a directive item"
+                msg = "'as' is not allowed in a directive item"
                 raise syntax_error(
                     msg, Span.from_ast(withitem_node.optional_vars), self.ctx.full_source, self.ctx.filename
                 )
 
-        directive: str = typing.cast("str", ast.get_source_segment(self.ctx.full_source, expr))
+        raw_directive: str | None = ast.get_source_segment(self.ctx.full_source, expr)
+        if raw_directive is None:
+            msg = "directive source not found"
+            raise syntax_error(msg, Span.from_ast(expr), self.ctx.full_source, self.ctx.filename)
 
-        self.ctx.directive = parse(directive, expr.lineno, expr.col_offset)
+        if len(raw_directive) - 2 == len(expr.value):
+            self.ctx.directive = parse(self.ctx.filename, f" {expr.value} ", expr.lineno, expr.col_offset, False)
+        else:
+            self.ctx.directive = parse(self.ctx.filename, raw_directive, expr.lineno, expr.col_offset, True)
 
         return node

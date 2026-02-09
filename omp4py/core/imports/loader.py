@@ -22,14 +22,13 @@ from threading import Lock
 from types import ModuleType
 from typing import Any
 
-from omp4py.core import preprocessor
-from omp4py.core.preprocessor.transformers import Params
+from omp4py.core.options import Options
 
-__all__ = ["_OMP", "set_omp_package"]
+__all__ = ["FOMP", "set_omp_package"]
 
-_OMP: str = "__omp__"
+FOMP: str = "__omp__"
 _init_lock: Lock = Lock()
-omp_packages: dict[str, Params] = {}
+omp_packages: dict[str, Options] = {}
 
 
 class Omp4pyFinder:
@@ -115,8 +114,9 @@ class Omp4pyLoader(SourceFileLoader):
             types.CodeType: Compiled code object produced from the
             transformed AST.
         """
-        params: Params = omp_packages[self.name]
-        module: ast.Module  = preprocessor.process_source(data, path, params)
+        from omp4py.core import preprocessor # Lazy import, only when needed (no cache available)
+        opt: Options = omp_packages[self.name]
+        module: ast.Module  = preprocessor.process_source(data, path, opt)
         return super().source_to_code(module, path, *args, **kwargs)
 
     def get_code(self, fullname: str) -> types.CodeType | None:
@@ -136,7 +136,7 @@ class Omp4pyLoader(SourceFileLoader):
             module, or `None` if the module cannot be loaded.
         """
         py_path: str = self.path
-        omp_path: str = str(Path(py_path).parent / _OMP / Path(py_path).name)
+        omp_path: str = str(Path(py_path).parent / FOMP / Path(py_path).name)
 
         class DummyLoader(Omp4pyLoader):
             def get_data(self, path: str) -> bytes:
@@ -149,7 +149,7 @@ class Omp4pyLoader(SourceFileLoader):
         return SourceFileLoader.get_code(opl, fullname)
 
 
-def set_omp_package(mod: ModuleType, params: Params) -> ModuleType:
+def set_omp_package(mod: ModuleType, opt: Options) -> ModuleType:
     """Register a package for import-time OpenMP preprocessing.
 
     This function marks a package as OpenMP-aware by associating it with
@@ -163,7 +163,7 @@ def set_omp_package(mod: ModuleType, params: Params) -> ModuleType:
     Args:
         mod (ModuleType): The package module to register. Typically, this
             is the result of importing the package's top-level module.
-        params (Params): Preprocessing parameters controlling how OpenMP
+        opt (Options): Preprocessing options controlling how OpenMP
             directives are applied within the package.
 
     Returns:
@@ -174,5 +174,5 @@ def set_omp_package(mod: ModuleType, params: Params) -> ModuleType:
         with _init_lock:
             if len(omp_packages) == 0:
                 sys.meta_path.insert(0, Omp4pyFinder())
-    omp_packages[mod.__name__] = params
+    omp_packages[mod.__name__] = opt
     return mod

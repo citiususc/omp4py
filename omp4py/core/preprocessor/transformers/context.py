@@ -1,31 +1,21 @@
+from __future__ import annotations
+
 import ast
-import os
-from dataclasses import dataclass, field
 from symtable import symtable as native_symtable
 
 from omp4py.core.parser import Directive
 from omp4py.core.preprocessor.transformers.symtable import SymbolTable
+from omp4py.core.options import Options
 
-__all__ = ["Context", "Params", "SymbolTable", "global_symtable"]
+__all__ = ["Context", "SymbolTable", "global_symtable"]
 
 
-def global_symtable(data: str, filename: str) -> "SymbolTable":
+def global_symtable(data: str, filename: str) -> SymbolTable:
     return SymbolTable(list(native_symtable(data, filename, "exec").get_identifiers()))
 
 
-def environ_bool(key: str, default: bool) -> bool:
-    return os.environ.get(key, str(default)).strip().lower() in {"1", "true", "yes", "on"}
-
-
-@dataclass
-class Params:
-    pure: bool = field(init=False, default=environ_bool("OMP4PY_PURE", default=False))
-    alias: str = "omp"
-    debug: bool = environ_bool("OMP4PY_DEBUG", default=False)
-
-
 class Context:
-    params: Params
+    opt: Options
     filename: str
     full_source: str
     module: ast.Module
@@ -41,9 +31,9 @@ class Context:
         filename: str,
         module: ast.Module,
         is_module: bool,
-        params: Params,
+        opt: Options,
     ) -> None:
-        self.params = params
+        self.opt = opt
         self.filename = filename
         self.module = module
         self.is_module = is_module

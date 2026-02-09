@@ -1,8 +1,9 @@
+from __future__ import annotations
+
 import ast
 import re
-from collections.abc import Callable, KeysView
+from collections.abc import KeysView
 from dataclasses import dataclass
-from typing import Optional
 
 PREFIX: str = "_omp_"
 
@@ -21,6 +22,10 @@ class SymbolEntry:
     assigned: bool = False
     annotation: ast.expr | None = None
 
+    @property
+    def renamed(self):
+        return self.scope_name != self.old_name
+
 
 class SymbolTableVisitor(ast.NodeVisitor):
     symbols: dict[str, SymbolEntry]
@@ -34,9 +39,9 @@ class SymbolTableVisitor(ast.NodeVisitor):
         if global_vars is not None:
             name: str
             for name in global_vars:
-                self.update_symbol(name, lambda x: None).assigned = True
+                self.update_symbol(name).assigned = True
 
-    def update_symbol(self, name: str, rename: Callable[[str], None]) -> SymbolEntry:
+    def update_symbol(self, name: str) -> SymbolEntry:
         match: re.Match[str] | None = var_check.match(name)
         if not match:
             return SymbolEntry("", "")
@@ -50,14 +55,14 @@ class SymbolTableVisitor(ast.NodeVisitor):
         if real_name in self.symbols:
             symbol = self.symbols[real_name]
         else:
-            old_name: str = real_name if n is None else (PREFIX + str(int(n) - 1) + real_name)
+            old_name: str = real_name if n is None or n == 1 else (PREFIX + str(int(n) - 1) + real_name)
             symbol = self.symbols[real_name] = SymbolEntry(name, old_name)
 
         if real_name in self.to_rename:
             new_name: str = PREFIX + str(1 if n is None else (int(n) + 1)) + real_name
             symbol.old_name = symbol.scope_name
             symbol.scope_name = new_name
-            rename(new_name)
+
         return symbol
 
     def check(self, node: ast.AST, namespace: bool = False) -> None:
@@ -82,62 +87,74 @@ class SymbolTableVisitor(ast.NodeVisitor):
         pass
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
-        self.update_symbol(node.name, lambda x: setattr(node, "name", x)).assigned = True
+        if (s := self.update_symbol(node.name)).renamed:
+            node.name = s.scope_name
+        s.assigned = True
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        self.update_symbol(node.name, lambda x: setattr(node, "name", x)).assigned = True
+        if (s := self.update_symbol(node.name)).renamed:
+            node.name = s.scope_name
+        s.assigned = True
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        self.update_symbol(node.name, lambda x: setattr(node, "name", x)).assigned = True
+        if (s := self.update_symbol(node.name)).renamed:
+            node.name = s.scope_name
+        s.assigned = True
 
     def visit_Import(self, node: ast.Import) -> None:
-        alias: ast.alias
         for alias in node.names:
-            name: str = alias.name if alias.asname is None else alias.asname
-            self.update_symbol(name, lambda x: setattr(node, "asname", x)).assigned = True
+            if (s := self.update_symbol(alias.name if alias.asname is None else alias.asname)).renamed:
+                alias.asname = s.scope_name
+            s.assigned = True
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        alias: ast.alias
         for alias in node.names:
-            name: str = alias.name if alias.asname is None else alias.asname
-            self.update_symbol(name, lambda x: setattr(alias, "asname", x)).assigned = True  # noqa: B023
+            if (s := self.update_symbol(alias.name if alias.asname is None else alias.asname)).renamed:
+                alias.asname = s.scope_name
+            s.assigned = True
 
     def visit_Global(self, node: ast.Global) -> None:
-        i: int
-        name: str
         for i, name in enumerate(node.names):
-            self.update_symbol(name, lambda x: node.names.__setitem__(i, x)).assigned = True  # noqa: B023
+            if (s := self.update_symbol(name)).renamed:
+                node.names[i] = s.scope_name
+            s.assigned = True
 
     def visit_Nonlocal(self, node: ast.Nonlocal) -> None:
-        i: int
-        name: str
         for i, name in enumerate(node.names):
-            self.update_symbol(name, lambda x: node.names.__setitem__(i, x)).assigned = True  # noqa: B023
+            if (s := self.update_symbol(name)).renamed:
+                node.names[i] = s.scope_name
+            s.assigned = True
 
     def visit_Name(self, node: ast.Name) -> None:
+        if (s := self.update_symbol(node.id)).renamed:
+            node.id = s.scope_name
+
         if isinstance(node.ctx, ast.Load):
-            self.update_symbol(node.id, lambda x: setattr(node, "id", x)).used = True
+            s.used = True
         else:
-            self.update_symbol(node.id, lambda x: setattr(node, "id", x)).assigned = True
+            s.assigned = True
 
     def visit_arg(self, node: ast.arg) -> None:
-        s: SymbolEntry = self.update_symbol(node.arg, lambda x: setattr(node, "arg", x))
+        if (s := self.update_symbol(node.arg)).renamed:
+            node.arg = s.scope_name
         s.assigned = True
         s.annotation = node.annotation
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
         if isinstance(node.target, ast.Name):
-            self.update_symbol(node.target.id, lambda x: setattr(node.target, "id", x)).annotation = node.annotation
+            if (s := self.update_symbol(node.target.id)).renamed:
+                node.target.id = s.scope_name
+            s.annotation = node.annotation
 
 
 class SymbolTable:
-    _parent: Optional["SymbolTable"]
+    _parent: SymbolTable | None
     _visitor: SymbolTableVisitor
 
     def __init__(self, global_vars: list[str] | None = None):
         self._visitor = SymbolTableVisitor(global_vars)
 
-    def check_namespace(self, node: ast.AST) -> "SymbolTable":
+    def check_namespace(self, node: ast.AST) -> SymbolTable:
         child: SymbolTable = self.new_child()
         child._visitor.check(node, namespace=True)
         return child
@@ -145,7 +162,7 @@ class SymbolTable:
     def update(self, node: ast.AST) -> None:
         self._visitor.check(node)
 
-    def new_child(self) -> "SymbolTable":
+    def new_child(self) -> SymbolTable:
         child: SymbolTable = SymbolTable()
         child._parent = self
         return child
