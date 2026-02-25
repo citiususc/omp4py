@@ -13,7 +13,7 @@ OMP4Py code can be combined with [mpi4py](https://github.com/mpi4py/mpi4py) to d
 exploit both intra-node and inter-node parallelism.
 
 If you use **OMP4Py**, please cite the following works:
-* César Piñeiro and Juan C. Pichel. Unlocking Python Multithreading Capabilities using OpenMP-Based Programming with OMP4Py IEEE/ACM International Symposium on Code Generation and Optimization (CGO), 2026.
+* César Piñeiro and Juan C. Pichel. [Unlocking Python Multithreading Capabilities using OpenMP-Based Programming with OMP4Py](https://doi.org/10.1109/CGO68049.2026.11395224). IEEE/ACM International Symposium on Code Generation and Optimization (CGO), 2026.
 * César Piñeiro and Juan C. Pichel. [OMP4Py: A pure Python implementation of OpenMP](https://doi.org/10.1016/j.future.2025.108035). Future Generation Computer Systems, Vol. 175, 2026.
 
 ## Features
