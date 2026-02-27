@@ -6,8 +6,6 @@ from io import StringIO
 from collections.abc import Callable, Iterator
 from typing import Any
 
-from omp4py.core.parser import Span, syntax_error
-
 __all__ = ["from_object"]
 
 

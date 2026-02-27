@@ -52,13 +52,13 @@ from functools import partial
 from types import ModuleType
 from typing import Any, Protocol, TypedDict, Unpack, overload
 
-from omp4py.core.options import Options
 from omp4py.core.imports.loader import set_omp_package
+from omp4py.core.options import Options
 
 __all__ = ["OmpType", "omp"]
 
 
-class OmpKargs(TypedDict):
+class OmpKargs(TypedDict, total=False):
     """This class represents the set of arguments that can be passed to the `omp` function.
 
     Attributes:
@@ -66,6 +66,7 @@ class OmpKargs(TypedDict):
     """
 
     alias: str  # omp
+    dump: str
 
 
 class OmpType(Protocol):

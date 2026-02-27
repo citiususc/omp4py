@@ -7,9 +7,9 @@ from types import CodeType, ModuleType
 from typing import Any
 
 from omp4py.core.imports.loader import FOMP as __OMP__
+from omp4py.core.options import Options
 from omp4py.core.preprocessor import obj2ast
 from omp4py.core.preprocessor.transformers import OmpTransformer
-from omp4py.core.options import Options
 
 __all__ = ["process_file", "process_object", "process_source"]
 
@@ -27,9 +27,9 @@ def process_object[T: Callable[..., Any] | type](arg: T, opt: Options) -> T:
     result: dict[str, Any] = {}
     exec(code, globals.__dict__, result)  # noqa: S102
 
-    import omp4py.runtime as __omp  # noqa: PLC0415
+    import omp4py.runtime as _omp  # noqa: PLC0415
 
-    globals.__dict__["__omp"] = __omp
+    globals.__dict__["_omp"] = _omp
 
     return result[arg.__name__]
 
@@ -54,5 +54,8 @@ def process_file(filename: str, opt: Options) -> str:
 
 def process(module: ast.Module, is_module: bool, full_source: str, filename: str, opt: Options) -> ast.Module:
     transformer: OmpTransformer = OmpTransformer(full_source, filename, module, is_module, opt)
-
-    return transformer.transform()
+    new_module = transformer.transform()
+    if opt.dump is not None:
+        with open(opt.dump, "w") as f:
+            f.write(ast.unparse(new_module))
+    return new_module

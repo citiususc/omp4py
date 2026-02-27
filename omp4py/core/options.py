@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import os
-from typing import ClassVar
 from dataclasses import dataclass
+from typing import ClassVar
 
 __all__ = ["Options"]
 
@@ -17,5 +17,6 @@ class Options:
     pure: ClassVar[bool] = environ_bool("OMP4PY_PURE", default=False)
     alias: str = "omp"
     debug: bool = environ_bool("OMP4PY_DEBUG", default=False)
+    dump: str | None = None
 
 
