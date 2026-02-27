@@ -13,7 +13,7 @@ authors = [
 ]
 
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dependencies = ["omp4py[all]", "numpy>=2.3", "networkx>=3.3"]
 
 [project.optional-dependencies]
