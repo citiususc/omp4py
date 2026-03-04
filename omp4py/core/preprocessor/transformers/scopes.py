@@ -15,12 +15,11 @@ if TYPE_CHECKING:
         Default,
         FirstPrivate,
         Private,
-        PyName,
         Reduction,
         ReductionOp,
         Shared,
     )
-    from omp4py.core.preprocessor.transformers.symtable import SymbolTable
+    from omp4py.core.preprocessor.transformers.symtable import SymbolTable, SymbolEntry
 
 __all__ = ["check_scopes", "create_scope", "get_scopes", "modify_scope", "scope_names"]
 
@@ -34,8 +33,12 @@ def check_scopes(ctx: Context, *scopes: DataScope) -> set[str]:
 
     for scope in scopes:
         for var in scope.targets:
+            if var.string in ctx.module_storage.threadprivate:
+                msg = f"'{var.string}' is predetermined 'threadprivate'"
+                raise syntax_error_ctx(msg, var.span, ctx)
+
             if not ctx.symtable.get(var.string, True, True):
-                msg = f"'{var.string}' undeclared "
+                msg = f"name '{var.string}' is not defined"
                 raise syntax_error_ctx(msg, var.span, ctx)
 
             if var.string in used:
@@ -115,14 +118,19 @@ def _variable_scope(
 
     f_inits: list[ast.stmt] = []
     if new_scope:
-        non_local: list[str] = [
-            symbol.old_name
+        freevars: list[SymbolEntry] = [
+            symbol
             for symbol in ctx.symtable.check_namespace(f_ast).symbols()
-            if symbol.real_name in reduction_op
-            or (symbol.real_name not in set_private and symbol.assigned and ctx.symtable.get(symbol.old_name, True))
+            if symbol.real_name not in ctx.module_storage.threadprivate and (symbol.real_name in reduction_op
+            or (symbol.real_name not in set_private and symbol.assigned and ctx.symtable.get(symbol.old_name, True)))
         ]
-        if non_local:
-            f_inits.append(ast.Nonlocal(non_local))
+        if freevars:
+            non_local_vars: list[str] = [symbol.old_name for symbol in freevars if not symbol.global_]
+            if non_local_vars:
+                f_inits.append(ast.Nonlocal(non_local_vars))
+            global_vars: list[str] = [symbol.old_name for symbol in freevars if symbol.global_]
+            if global_vars:
+                f_inits.append(ast.Global(global_vars))
 
     for name in sorted(set_private):
         if s := f_symbols.get(name):

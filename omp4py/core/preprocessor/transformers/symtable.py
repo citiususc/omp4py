@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from omp4py.core.preprocessor.transformers.context import Context
 
-__all__ = ["SymbolTable", "global_symtable", "new_omp_name", "new_omp_uname", "runtime_ast"]
+__all__ = ["SymbolEntry", "SymbolTable", "global_symtable", "new_omp_name", "new_omp_uname", "runtime_ast"]
 
 PREFIX: str = "_omp_"
 

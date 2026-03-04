@@ -1,7 +1,7 @@
-from omp4py.core.parser import PyName, Private
 import ast
 
-from omp4py.core.parser.tree import For, ParallelFor, Span, Name
+from omp4py.core.parser import Private, PyName
+from omp4py.core.parser.tree import For, Name, ParallelFor, ParallelSections, Section, Sections, Span
 from omp4py.core.preprocessor.transformers.scopes import check_scopes, get_scopes, modify_scope
 from omp4py.core.preprocessor.transformers.symtable import SymbolTable, new_omp_uname, runtime_ast
 from omp4py.core.preprocessor.transformers.transformer import Context, construct, syntax_error_ctx
@@ -178,3 +178,85 @@ def for_checks(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.For]:
             inner = stmt
 
     return for_list
+
+
+@construct.register
+def _(ctr: ParallelSections, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
+    unpack: ast.If = unpack_if(body)
+    body = construct(ctr.parallel, [unpack], ctx)
+    old_symtable, ctx.symtable = ctx.symtable, ctx.symtable.new_child()
+    unpack.body = construct(ctr.sections, unpack.body, ctx)
+    ctx.symtable = old_symtable
+    return body
+
+
+@construct.register
+def _(ctr: Section, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
+    msg = "'omp section' may only be used in 'omp sections' construct"
+    raise syntax_error_ctx(msg, ctr.span, ctx)
+
+
+def section_checks(ctr: Sections, body: list[ast.stmt], ctx: Context) -> list[ast.With]:
+    sections_list: list[ast.With] = []
+    for i, child in enumerate(body):
+        section: ast.With
+        if isinstance(child, ast.With) and (d := ctx.directives.get(child)) and isinstance(d.construct, Section):
+            section = child
+        elif i == 0:
+            section = ast.With([ast.withitem(ast.Constant(True))], [child])
+        else:
+            msg = "expected 'omp section'"
+            raise syntax_error_ctx(msg, Span.from_ast(child), ctx)
+        sections_list.append(section)
+    return sections_list
+
+
+@construct.register
+def _(ctr: Sections, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
+    sections_list = section_checks(ctr, body, ctx)
+    first_private = ctr.first_private
+    private = ctr.private
+
+    sec_id: str = new_omp_uname(ctx, "sections_id")
+    sec_id_ann: ast.stmt = ctr.span.to_ast(ast.AnnAssign(ast.Name(sec_id, ast.Store()), runtime_ast("pyint"), simple=1))
+    sec_init: ast.stmt = ctr.span.to_ast(ast.Expr(sec_initc := ast.Call(runtime_ast("sections_init"))))
+    sec_next: ast.stmt = ctr.span.to_ast(sec_loop := ast.While(sec_nextc := ast.Call(runtime_ast("sections_next"))))
+    sec_end: ast.stmt = ctr.span.to_ast(ast.Expr(sec_endc := ast.Call(runtime_ast("sections_end"))))
+
+    body = [sec_id_ann, sec_init, sec_next, sec_end]
+
+    sec_initc.args.append(ast.Constant(len(sections_list)))
+    sec_loop.test = ast.NamedExpr(ast.Name(sec_id, ast.Store()), sec_nextc)
+
+    for i in range(len(sections_list)):
+        sec_loop.body.append(
+            ast.copy_location(
+                ast.If(ast.Compare(ast.Name(sec_id), [ast.Eq()], [ast.Constant(i)]), sections_list[i].body),
+                sections_list[i],
+            ),
+        )
+
+    if ctr.no_wait is None:
+        sec_endc.args.append(ast.Constant("parallel" in ctr.name.string.lower()))
+    elif ctr.no_wait.expr is None:
+        sec_endc.args.append(ast.Constant(True))
+    else:
+        sec_endc.args.append(ctr.no_wait.expr.value)
+
+    if ctr.last_private:
+        check_scopes(ctx, *ctr.last_private)
+        all_private_names: set[str] = get_scopes(*ctr.private, *ctr.first_private)
+        for scope in ctr.last_private:
+            targets: list[PyName] = [name for name in scope.targets if name.string not in all_private_names]
+            if targets:
+                private.append(Private(scope.span, scope.name, targets))
+
+    f_table: SymbolTable = modify_scope(ctr, ctx, body, private, first_private, ctr.reduction)
+    for scope in ctr.last_private:
+        for var in scope.str_targets:
+            if (s := f_table.get(var)) and s.assigned:
+                sections_list[-1].body.append(
+                    scope.span.to_ast(ast.Assign([ast.Name(s.old_name, ast.Store())], ast.Name(s.scope_name))),
+                )
+
+    return fix_body_locations(body)

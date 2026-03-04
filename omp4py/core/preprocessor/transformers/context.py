@@ -4,7 +4,7 @@ import ast
 import typing
 from dataclasses import dataclass, field
 
-from omp4py.core.preprocessor.transformers.symtable import SymbolTable, global_symtable
+from omp4py.core.preprocessor.transformers.symtable import SymbolEntry, SymbolTable, global_symtable
 
 if typing.TYPE_CHECKING:
     from omp4py.core.options import Options
@@ -19,6 +19,7 @@ _module_storage: dict[str, ModuleStorage] = {}
 @dataclass
 class ModuleStorage:
     reductions: dict[str, tuple[ast.stmt, ast.stmt]] = field(default_factory=dict)
+    threadprivate: dict[str, SymbolEntry] = field(default_factory=dict)
 
 
 class Context:
@@ -30,6 +31,7 @@ class Context:
     symtable: SymbolTable
     uname_i: int
     node_stack: list[ast.AST]
+    scope_node: ast.AST
     module_storage: ModuleStorage
     directives: dict[ast.With | ast.Expr, Directive]
 
@@ -53,4 +55,5 @@ class Context:
         else:
             self.module_storage = _module_storage.setdefault(self.filename, ModuleStorage())
         self.node_stack = [module]
+        self.scope_node = module
         self.directives = {}

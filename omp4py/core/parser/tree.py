@@ -33,6 +33,7 @@ __all__ = [
     "Ordered",
     "Parallel",
     "ParallelFor",
+    "ParallelSections",
     "Private",
     "PyExpr",
     "PyInt",
@@ -42,8 +43,11 @@ __all__ = [
     "ReductionOp",
     "Schedule",
     "ScheduleType",
+    "Section",
+    "Sections",
     "Shared",
     "Span",
+    "ThreadPrivate",
 ]
 
 
@@ -136,6 +140,28 @@ class For(Construct):
     schedule: Schedule | None = None
 
 
+@dataclass
+class Section(Construct):
+    pass
+
+
+@dataclass
+class Sections(Construct):
+    first_private: list[FirstPrivate] = field(default_factory=list)
+    last_private: list[LastPrivate] = field(default_factory=list)
+    no_wait: NoWait | None = None
+    private: list[Private] = field(default_factory=list)
+    reduction: list[Reduction] = field(default_factory=list)
+
+
+@dataclass
+class ThreadPrivate(Construct):
+    targets: list[PyName]
+
+    @property
+    def str_targets(self) -> list[str]:
+        return [v.string for v in self.targets]
+
 #######################################################################################################################
 ################################################# Combined Constructs #################################################
 #######################################################################################################################
@@ -145,6 +171,12 @@ class For(Construct):
 class ParallelFor(Construct):
     parallel: Parallel
     for_: For
+
+
+@dataclass
+class ParallelSections(Construct):
+    parallel: Parallel
+    sections: Sections
 
 
 #######################################################################################################################
