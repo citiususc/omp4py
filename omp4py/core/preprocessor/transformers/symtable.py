@@ -34,6 +34,7 @@ class SymbolEntry:
     used: bool = False
     assigned: bool = False
     global_: bool = False
+    threadprivate: bool = False
     annotation: ast.expr | None = None
 
     @property
@@ -220,11 +221,21 @@ class SymbolTable:
     def __getitem__(self, name: str) -> SymbolEntry:
         return self._visitor.symbols[name]
 
-    def get(self, name: str, parents: bool = False, module: bool = False) -> SymbolEntry | None:
+    def get(self, name: str, parents: bool = False, module: bool = False, ann: bool = False) -> SymbolEntry | None:
         if name in self._visitor.symbols:
-            return self._visitor.symbols[name]
+            s = self._visitor.symbols[name]
+            if ann and not s.annotation:
+                s.annotation = self.getAnnotation(name)
+            return s
         if parents and self._parent and (not self._parent._visitor.global_ or module):
             return self._parent.get(name, parents)
+        return None
+
+    def getAnnotation(self, name: str) -> ast.expr | None:
+        if name in self._visitor.symbols and (ann := self._visitor.symbols[name].annotation):
+            return ann
+        if self._parent:
+            return self._parent.getAnnotation(name)
         return None
 
     def __contains__(self, name: str) -> bool:

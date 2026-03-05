@@ -1,9 +1,9 @@
 import ast
 
 from omp4py.core.parser.tree import Parallel
-from omp4py.core.preprocessor.transformers.scopes import create_scope
+from omp4py.core.preprocessor.transformers.scopes import create_scope, check_scopes
 from omp4py.core.preprocessor.transformers.symtable import new_omp_name, new_omp_uname, runtime_ast
-from omp4py.core.preprocessor.transformers.transformer import Context, construct
+from omp4py.core.preprocessor.transformers.transformer import Context, construct, syntax_error_ctx
 from omp4py.core.preprocessor.transformers.utils import fix_body_locations
 
 __all__ = []
@@ -18,9 +18,11 @@ def _(ctr: Parallel, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
 
     if_ast: ast.expr = ast.Constant(True)
     num_threads_ast = ast.Tuple()
+    proc_bind_ast = ast.Constant(0)
+    copyin_ast = ast.Tuple()
 
     if ctr.if_:
-        if_ast = ast.Call(ast.Name("bool"), [ctr.if_.expr.value])
+        if_ast = ctr.if_.span.to_ast(ast.Call(ast.Name("bool"), [ctr.if_.expr.value]))
 
     if ctr.num_threads:
         expr: ast.expr = ctr.num_threads.expr.value
@@ -42,11 +44,29 @@ def _(ctr: Parallel, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
                     orelse=ast.Tuple([ast.Name(tvar)]),
                 )
 
+    if ctr.proc_bind:
+        proc_bind_ast = ctr.proc_bind.span.to_ast(ast.Constant(ord(ctr.proc_bind.ntype.string.lower()[0])))
+
+    if ctr.copyin:
+        check_scopes(ctx, *ctr.copyin, allow_threadprivate=True)
+        for dataclause in ctr.copyin:
+            dataclause.span.to_ast(proc_bind_ast)
+            for var in dataclause.targets:
+                if var.string not in ctx.module_storage.threadprivate:
+                    msg = f"'{var}' must be 'threadprivate' for 'copyin'"
+                    raise syntax_error_ctx(msg, var.span, ctx)
+
+                s = ctx.symtable.get(var.string, True, True)
+                if not s or not s.threadprivate:
+                    msg = f"'{var}' is not 'threadprivate' in the current scope"
+                    raise syntax_error_ctx(msg, var.span, ctx)
+                copyin_ast.elts.append(var.span.to_ast(ast.Constant(var.string)))
+
     parallel_run: ast.Expr = ctr.span.to_ast(
         ast.Expr(
             ast.Call(
-                runtime_ast("parallel_run"),
-                [ast.Name(f_name), if_ast, num_threads_ast],
+                runtime_ast("parallel"),
+                [ast.Name(f_name), if_ast, num_threads_ast, proc_bind_ast, copyin_ast],
             ),
         ),
     )

@@ -131,6 +131,7 @@ class OmpTransformer(ast.NodeTransformer):
             self.ctx.node_stack.pop()
             OmpParser(self.ctx).visit(self.ctx.module)
             self.visit(self.ctx.module)
+            [f() for f in self.ctx.finalizers]
         return self.ctx.module
 
     def visit(self, node: ast.AST) -> ast.AST:
@@ -142,7 +143,9 @@ class OmpTransformer(ast.NodeTransformer):
 
     def visit_new_scope[T: ast.AST](self, node: T) -> T:
         old_symtable, self.ctx.symtable = self.ctx.symtable, self.ctx.symtable.new_child()
+        old_scope, self.ctx.scope_node = self.ctx.scope_node, node
         self.generic_visit(node)
+        self.ctx.scope_node = old_scope
         self.ctx.symtable = old_symtable
         return node
 

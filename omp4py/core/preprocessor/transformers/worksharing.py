@@ -1,9 +1,21 @@
 import ast
 
-from omp4py.core.parser import Private, PyName
-from omp4py.core.parser.tree import For, Name, ParallelFor, ParallelSections, Section, Sections, Span
-from omp4py.core.preprocessor.transformers.scopes import check_scopes, get_scopes, modify_scope
-from omp4py.core.preprocessor.transformers.symtable import SymbolTable, new_omp_uname, runtime_ast
+from omp4py.core.parser.tree import (
+    CopyPrivate,
+    For,
+    Name,
+    ParallelFor,
+    ParallelSections,
+    Private,
+    PyName,
+    Section,
+    Sections,
+    Single,
+    Span,
+)
+from omp4py.core.preprocessor.transformers.operators import get_reduction, resolve_names
+from omp4py.core.preprocessor.transformers.scopes import check_scopes, get_scopes, modify_scope, dec_annotation
+from omp4py.core.preprocessor.transformers.symtable import SymbolTable, new_omp_uname, runtime_ast, new_omp_name
 from omp4py.core.preprocessor.transformers.transformer import Context, construct, syntax_error_ctx
 from omp4py.core.preprocessor.transformers.utils import fix_body_locations, unpack_if, walk
 
@@ -46,7 +58,7 @@ def _(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
     # Collapse, bounds, modifier, kind, chunk, ordered
     for_initc.args.append(ast.Constant(collapse_num))
     for_initc.args.append(ast.Name(bounds_name))
-    for_initc.args.append(ast.Constant(ord(ctr.schedule.name.string.lower()[0] if ctr.schedule else "s")))
+    for_initc.args.append(ast.Constant(ord(ctr.schedule.type.nkind.string[0] if ctr.schedule else "s")))
     for_initc.args.append(ctr.schedule.chunk.value if ctr.schedule and ctr.schedule.chunk else ast.Constant(-1))
     for_initc.args.append(ast.Constant(0 if not ctr.ordered else (ctr.ordered.n.value if ctr.ordered.n else 1)))
 
@@ -260,3 +272,74 @@ def _(ctr: Sections, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
                 )
 
     return fix_body_locations(body)
+
+
+@construct.register
+def _(ctr: Single, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
+    modify_scope(ctr, ctx, body, ctr.private, ctr.first_private, [])
+
+    single_ast = ctr.span.to_ast(ast.If(ast.Call(runtime_ast("single")), body))
+    single_end: ast.stmt = ctr.span.to_ast(ast.Expr(single_endc := ast.Call(runtime_ast("single_end"))))
+
+    if ctr.no_wait and ctr.copyprivate:
+        msg = "'nowait' clause must not be used together with 'copyprivate'"
+        raise syntax_error_ctx(msg, ctr.copyprivate[0].span, ctx)
+
+    if ctr.no_wait is None:
+        single_endc.args.append(ast.Constant(False))
+    elif ctr.no_wait.expr is None:
+        single_endc.args.append(ast.Constant(True))
+    else:
+        single_endc.args.append(ctr.no_wait.expr.value)
+
+    body: list[ast.stmt] = [single_ast]
+    if ctr.copyprivate:
+        body.extend(copyprivate(ctr.copyprivate, ctx))
+    body.append(single_end)
+
+    return fix_body_locations(body)
+
+
+def copyprivate(dataclauses: list[CopyPrivate], ctx: Context) -> list[ast.stmt]:
+    check_scopes(ctx, *dataclauses, allow_threadprivate=True)
+    span = dataclauses[0].span
+
+    return_types: list[ast.expr] = []
+    return_names: list[ast.expr] = []
+    var_names: list[ast.expr] = []
+    types_ast = ast.Subscript(ast.Name("tuple"), ast.Tuple(return_types))
+    copyprivate_name = new_omp_uname(ctx, "copyprivate")
+    copyprivate_ast = span.to_ast(ast.FunctionDef(copyprivate_name, ast.arguments(), returns=types_ast))
+
+    for dataclause in dataclauses:
+        for var in dataclause.targets:
+            if s := ctx.symtable.get(var.string, True, True, True):
+                stmt = get_reduction(ctx, "__new__", s.annotation)
+                if stmt is None:  # never for __new__
+                    continue
+                new_name = new_omp_name(ctx, s.scope_name)
+                assign = dec_annotation(ctx, s, new_name)
+                copyprivate_ast.body.append(assign)
+                copyprivate_ast.body.append(resolve_names(stmt[1], omp_out=new_name, omp_in=s.scope_name))
+
+                var_names.append(ast.Name(s.scope_name, ast.Store()))
+                return_names.append(ast.Name(new_name))
+                return_types.append(assign.annotation)
+
+    copyprivate_ast.body.append(ast.Return(ast.Tuple(return_names)))
+
+    copy_wait_ast: ast.stmt = span.to_ast(
+        ast.AnnAssign(
+            ast.Name(copyprivate_name, ast.Store()),
+            ast.Call(runtime_ast("cy_typeof"), [ast.Name(copyprivate_name)]),
+            ast.Call(runtime_ast("copyprivate_wait"), [ast.Name(copyprivate_name)]),
+            simple=1,
+        ),
+    )
+    update_ast = span.to_ast(
+        ast.Assign(
+            [ast.Tuple(var_names, ast.Store())], ast.Call(ast.Name(copyprivate_name), [ast.Name(copyprivate_name)], [])
+        ),
+    )
+
+    return [copyprivate_ast, copy_wait_ast, update_ast]

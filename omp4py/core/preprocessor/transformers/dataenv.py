@@ -5,6 +5,7 @@ from omp4py.core.parser.tree import Span, ThreadPrivate
 from omp4py.core.preprocessor.transformers.symtable import runtime_ast
 from omp4py.core.preprocessor.transformers.transformer import Context, construct, syntax_error_ctx
 
+__all__ = []
 
 @construct.register
 def _(ctr: ThreadPrivate, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
@@ -20,9 +21,14 @@ def _(ctr: ThreadPrivate, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
             raise syntax_error_ctx(msg, var.span, ctx)
 
         ctx.module_storage.threadprivate[var.string] = s
+        if ctx.symtable.get(var.string) is None:
+            ctx.symtable.update(ast.Name(var.string))
+            s = ctx.symtable[var.string]
+
         target = ast.Name(var.string, ast.Store())
         ctx.symtable.rename({var.string}, target)
         new_names[var.string] = target.id
+        s.threadprivate = True
         tp_vars.append(
             ast.fix_missing_locations(
                 var.span.to_ast(
@@ -63,10 +69,11 @@ def _(ctr: ThreadPrivate, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
             if isinstance(node.ctx, ast.Load):
                 ann: ast.expr | None = copy.deepcopy(ctx.module_storage.threadprivate[node.id].annotation)
                 if ann:
-                    new_node = ast.Call(runtime_ast("cast"), [ann, new_node])
+                    new_node = ast.Call(runtime_ast("cy_cast"), [ann, new_node])
 
             return new_node
 
-    Replace().visit(ctx.scope_node)
+    scope_node = ctx.scope_node
+    ctx.finalizers.append(lambda:Replace().visit(scope_node))
 
     return tp_vars + body

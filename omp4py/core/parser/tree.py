@@ -17,6 +17,8 @@ __all__ = [
     "Clause",
     "Collapse",
     "Construct",
+    "CopyIn",
+    "CopyPrivate",
     "DataScope",
     "DeclareReduction",
     "Default",
@@ -35,6 +37,7 @@ __all__ = [
     "ParallelFor",
     "ParallelSections",
     "Private",
+    "ProcBind",
     "PyExpr",
     "PyInt",
     "PyName",
@@ -46,8 +49,9 @@ __all__ = [
     "Section",
     "Sections",
     "Shared",
+    "Single",
     "Span",
-    "ThreadPrivate",
+    "ThreadPrivate"
 ]
 
 
@@ -119,11 +123,13 @@ class DeclareReduction(Construct):
 
 @dataclass
 class Parallel(Construct):
+    copyin: list[CopyIn] = field(default_factory=list)
     default: Default | None = None
     first_private: list[FirstPrivate] = field(default_factory=list)
     if_: If | None = None
     num_threads: NumThreads | None = None
     private: list[Private] = field(default_factory=list)
+    proc_bind: ProcBind | None = None
     reduction: list[Reduction] = field(default_factory=list)
     shared: list[Shared] = field(default_factory=list)
 
@@ -155,12 +161,21 @@ class Sections(Construct):
 
 
 @dataclass
+class Single(Construct):
+    first_private: list[FirstPrivate] = field(default_factory=list)
+    no_wait: NoWait | None = None
+    private: list[Private] = field(default_factory=list)
+    copyprivate: list[CopyPrivate] = field(default_factory=list)
+
+
+@dataclass
 class ThreadPrivate(Construct):
     targets: list[PyName]
 
     @property
     def str_targets(self) -> list[str]:
         return [v.string for v in self.targets]
+
 
 #######################################################################################################################
 ################################################# Combined Constructs #################################################
@@ -210,6 +225,15 @@ class Combiner(Clause):
     id: ClassVar[str] = "combiner"
     stmt: PyStmt
 
+
+@dataclass
+class CopyIn(DataScope):
+    id: ClassVar[str] = "copyin"
+
+
+@dataclass
+class CopyPrivate(DataScope):
+    id: ClassVar[str] = "copyprivate"
 
 @dataclass
 class Default(Clause):
@@ -274,12 +298,36 @@ class NumThreads(Clause):
 @dataclass
 class Ordered(Clause):
     id: ClassVar[str] = "ordered"
-    n: PyInt | None
+    n: PyInt | None = None
 
 
 @dataclass
 class Private(DataScope):
     id: ClassVar[str] = "private"
+
+
+@dataclass
+class ProcBind(Clause):
+    id: ClassVar[str] = "proc_bind"
+    ntype: Name
+
+    class Type(Enum):
+        MASTER = 0
+        CLOSE = 1
+        SPREAD = 2
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "kind",
+            {
+                "master": self.Type.MASTER,
+                "close": self.Type.CLOSE,
+                "spread": self.Type.SPREAD,
+            }[self.ntype.string.lower()],
+        )
+
+    type: Type = field(init=False)
 
 
 @dataclass
@@ -319,7 +367,7 @@ class ReductionOp(Modifier):
 @dataclass
 class ScheduleType(Modifier):
     id: ClassVar[str] = "type"
-    name: Name
+    nkind: Name
 
     class Kind(Enum):
         STATIC = 0
@@ -331,14 +379,14 @@ class ScheduleType(Modifier):
     def __post_init__(self) -> None:
         object.__setattr__(
             self,
-            "type",
+            "kind",
             {
                 "static": self.Kind.STATIC,
                 "dynamic": self.Kind.DYNAMIC,
                 "guided": self.Kind.GUIDED,
                 "auto": self.Kind.AUTO,
                 "runtime": self.Kind.RUNTIME,
-            }[self.name.string.lower()],
+            }[self.nkind.string.lower()],
         )
 
     kind: Kind = field(init=False)

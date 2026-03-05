@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import typing
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from omp4py.core.preprocessor.transformers.symtable import SymbolEntry, SymbolTable, global_symtable
@@ -33,6 +34,7 @@ class Context:
     node_stack: list[ast.AST]
     scope_node: ast.AST
     module_storage: ModuleStorage
+    finalizers: list[Callable[[], None]]
     directives: dict[ast.With | ast.Expr, Directive]
 
     def __init__(
@@ -56,4 +58,5 @@ class Context:
             self.module_storage = _module_storage.setdefault(self.filename, ModuleStorage())
         self.node_stack = [module]
         self.scope_node = module
+        self.finalizers = []
         self.directives = {}

@@ -6,6 +6,7 @@ import operator
 from typing import TYPE_CHECKING
 
 from omp4py.core.preprocessor.transformers.operators import get_reduction, resolve_names
+from omp4py.core.preprocessor.transformers.symtable import runtime_ast
 from omp4py.core.preprocessor.transformers.transformer import Context, syntax_error_ctx
 
 if TYPE_CHECKING:
@@ -19,26 +20,26 @@ if TYPE_CHECKING:
         ReductionOp,
         Shared,
     )
-    from omp4py.core.preprocessor.transformers.symtable import SymbolTable, SymbolEntry
+    from omp4py.core.preprocessor.transformers.symtable import SymbolEntry, SymbolTable
 
-__all__ = ["check_scopes", "create_scope", "get_scopes", "modify_scope", "scope_names"]
+__all__ = ["check_scopes", "create_scope", "dec_annotation", "get_scopes", "modify_scope", "scope_names"]
 
 
 def get_scopes(*scopes: DataScope) -> set[str]:
     return {name.string for scope in scopes for name in scope.targets}
 
 
-def check_scopes(ctx: Context, *scopes: DataScope) -> set[str]:
+def check_scopes(ctx: Context, *scopes: DataScope, allow_threadprivate: bool = False) -> set[str]:
     used: set[str] = set()
 
     for scope in scopes:
         for var in scope.targets:
-            if var.string in ctx.module_storage.threadprivate:
-                msg = f"'{var.string}' is predetermined 'threadprivate'"
+            if not (s := ctx.symtable.get(var.string, True, True)):
+                msg = f"name '{var.string}' is not defined"
                 raise syntax_error_ctx(msg, var.span, ctx)
 
-            if not ctx.symtable.get(var.string, True, True):
-                msg = f"name '{var.string}' is not defined"
+            if not allow_threadprivate and s.threadprivate:
+                msg = f"'{var.string}' is predetermined 'threadprivate'"
                 raise syntax_error_ctx(msg, var.span, ctx)
 
             if var.string in used:
@@ -121,22 +122,27 @@ def _variable_scope(
         freevars: list[SymbolEntry] = [
             symbol
             for symbol in ctx.symtable.check_namespace(f_ast).symbols()
-            if symbol.real_name not in ctx.module_storage.threadprivate and (symbol.real_name in reduction_op
-            or (symbol.real_name not in set_private and symbol.assigned and ctx.symtable.get(symbol.old_name, True)))
+            if symbol.real_name not in ctx.module_storage.threadprivate
+            and (
+                symbol.real_name in reduction_op
+                or (symbol.real_name not in set_private and symbol.assigned and ctx.symtable.get(symbol.old_name, True))
+            )
         ]
         if freevars:
             non_local_vars: list[str] = [symbol.old_name for symbol in freevars if not symbol.global_]
+            global_vars: list[str] = [symbol.old_name for symbol in freevars if symbol.global_]
+
             if non_local_vars:
                 f_inits.append(ast.Nonlocal(non_local_vars))
-            global_vars: list[str] = [symbol.old_name for symbol in freevars if symbol.global_]
             if global_vars:
                 f_inits.append(ast.Global(global_vars))
 
     for name in sorted(set_private):
         if s := f_symbols.get(name):
             ann: ast.expr | None = None
-            if (s2 := ctx.symtable.get(name, True)) and (ann := s2.annotation):
-                f_inits.append(ast.AnnAssign(ast.Name(s.scope_name, ast.Store()), ann, simple=1))
+            if s2 := ctx.symtable.get(name, True, True):
+                ann = s2.annotation
+                f_inits.append(dec_annotation(ctx, s2))
 
             if name in first_private:
                 stmt = get_reduction(ctx, "__new__", ann)
@@ -157,3 +163,10 @@ def _variable_scope(
 
 def scope_names(*scopes: DataScope) -> list[str]:
     return functools.reduce(operator.iadd, [x.str_targets for x in scopes], [])
+
+
+def dec_annotation(ctx: Context, s: SymbolEntry, new_name: str | None = None) -> ast.AnnAssign:
+    ann = s.annotation
+    if ann is None:
+        ann = ast.Call(runtime_ast("cy_typeof"), [ast.Name(s.old_name)])
+    return ast.AnnAssign(ast.Name(new_name if new_name else s.scope_name, ast.Store()), ann, simple=1)
