@@ -14,11 +14,13 @@ from enum import Enum
 from typing import ClassVar
 
 __all__ = [
+    "Barrier",
     "Clause",
     "Collapse",
     "Construct",
     "CopyIn",
     "CopyPrivate",
+    "Critical",
     "DataScope",
     "DeclareReduction",
     "Default",
@@ -27,11 +29,13 @@ __all__ = [
     "For",
     "If",
     "LastPrivate",
+    "Master",
     "Modifier",
     "Name",
     "NoWait",
     "NumThreads",
     "OmpNode",
+    "Ordered",
     "Ordered",
     "Parallel",
     "ParallelFor",
@@ -114,11 +118,43 @@ class Construct(OmpNode):
 
 
 @dataclass
+class Barrier(Construct):
+    pass
+
+
+@dataclass
+class Critical(Construct):
+    pass
+
+
+@dataclass
 class DeclareReduction(Construct):
     id: ReductionOp
     ann_list: list[PyExpr]
     combiner: Combiner
     initializer: Initializer | None = None
+
+
+@dataclass
+class For(Construct):
+    collapse: Collapse | None = None
+    first_private: list[FirstPrivate] = field(default_factory=list)
+    last_private: list[LastPrivate] = field(default_factory=list)
+    no_wait: NoWait | None = None
+    ordered: Ordered | None = None
+    private: list[Private] = field(default_factory=list)
+    reduction: list[Reduction] = field(default_factory=list)
+    schedule: Schedule | None = None
+
+
+@dataclass
+class Master(Construct):
+    pass
+
+
+@dataclass
+class Ordered(Construct):
+    pass
 
 
 @dataclass
@@ -132,18 +168,6 @@ class Parallel(Construct):
     proc_bind: ProcBind | None = None
     reduction: list[Reduction] = field(default_factory=list)
     shared: list[Shared] = field(default_factory=list)
-
-
-@dataclass
-class For(Construct):
-    collapse: Collapse | None = None
-    first_private: list[FirstPrivate] = field(default_factory=list)
-    last_private: list[LastPrivate] = field(default_factory=list)
-    no_wait: NoWait | None = None
-    ordered: Ordered | None = None
-    private: list[Private] = field(default_factory=list)
-    reduction: list[Reduction] = field(default_factory=list)
-    schedule: Schedule | None = None
 
 
 @dataclass
@@ -234,6 +258,7 @@ class CopyIn(DataScope):
 @dataclass
 class CopyPrivate(DataScope):
     id: ClassVar[str] = "copyprivate"
+
 
 @dataclass
 class Default(Clause):
