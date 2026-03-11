@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from omp4py.core.preprocessor.transformers.context import Context
 
-__all__ = ["SymbolEntry", "SymbolTable", "global_symtable", "new_omp_name", "new_omp_uname", "runtime_ast"]
+__all__ = ["SymbolEntry", "SymbolTable", "global_symtable", "omp_name", "runtime_ast"]
 
 PREFIX: str = "_omp_"
 
@@ -246,12 +246,15 @@ def runtime_ast(name: str) -> ast.Attribute:
     return ast.Attribute(ast.Name("_omp"), name)
 
 
-def new_omp_name(ctx: Context, raw_name: str) -> str:
-    return PREFIX + raw_name
+def omp_name(ctx: Context, raw_name: str = "") -> str:
+    if len(raw_name) == 0:
+        raw_name = "v"
+    new_name = PREFIX + raw_name
 
+    if (last := ctx.scope.omp_names.get(new_name, None)) is None:
+        ctx.scope.omp_names[new_name] = 0
+        return new_name
 
-def new_omp_uname(ctx: Context, raw_name: str = "") -> str:
-    i: int = ctx.uname_i
-    ctx.uname_i += 1
-    raw_name = "v" if len(raw_name) == 0 else raw_name
-    return new_omp_name(ctx, raw_name) + str(i)
+    ctx.scope.omp_names[new_name] += 1
+    return new_name + str(last + 1)
+

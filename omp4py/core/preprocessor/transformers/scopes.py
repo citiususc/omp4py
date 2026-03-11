@@ -133,16 +133,14 @@ def _variable_scope(
             global_vars: list[str] = [symbol.old_name for symbol in freevars if symbol.global_]
 
             if non_local_vars:
-                f_inits.append(ast.Nonlocal(non_local_vars))
+                f_inits.append(ctr.span.to_ast(ast.Nonlocal(non_local_vars)))
             if global_vars:
-                f_inits.append(ast.Global(global_vars))
+                f_inits.append(ctr.span.to_ast(ast.Global(global_vars)))
 
     for name in sorted(set_private):
-        if s := f_symbols.get(name):
+        if s := f_symbols.get(name, ann=True):
             ann: ast.expr | None = None
-            if s2 := ctx.symtable.get(name, True, True):
-                ann = s2.annotation
-                f_inits.append(dec_annotation(ctx, s2))
+            f_inits.append(dec_annotation(ctx, s))
 
             if name in first_private:
                 stmt = get_reduction(ctx, "__new__", ann)

@@ -1,8 +1,8 @@
 import ast
 
 from omp4py.core.parser.tree import Parallel
-from omp4py.core.preprocessor.transformers.scopes import create_scope, check_scopes
-from omp4py.core.preprocessor.transformers.symtable import new_omp_name, new_omp_uname, runtime_ast
+from omp4py.core.preprocessor.transformers.scopes import check_scopes, create_scope
+from omp4py.core.preprocessor.transformers.symtable import omp_name, runtime_ast
 from omp4py.core.preprocessor.transformers.transformer import Context, construct, syntax_error_ctx
 from omp4py.core.preprocessor.transformers.utils import fix_body_locations
 
@@ -11,7 +11,7 @@ __all__ = []
 
 @construct.register
 def _(ctr: Parallel, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
-    f_name: str = new_omp_name(ctx, "parallel")
+    f_name: str = omp_name(ctx, "parallel")
     f_ast: ast.FunctionDef = ctr.span.to_ast(ast.FunctionDef(f_name, ast.arguments(), body=body))
 
     create_scope(ctr, ctx, f_ast, ctr.default, ctr.shared, ctr.private, ctr.first_private, ctr.reduction)
@@ -34,7 +34,7 @@ def _(ctr: Parallel, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
             case ast.List():
                 num_threads_ast = ast.Tuple(expr.elts)
             case _:  # dynamic check
-                tvar = new_omp_uname(ctx)
+                tvar = omp_name(ctx)
                 num_threads_ast = ast.IfExp(
                     test=ast.Call(
                         ast.Name(id="isinstance"),

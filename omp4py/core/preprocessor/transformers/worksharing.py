@@ -8,14 +8,15 @@ from omp4py.core.parser.tree import (
     ParallelSections,
     Private,
     PyName,
+    ScheduleType,
     Section,
     Sections,
     Single,
     Span,
 )
 from omp4py.core.preprocessor.transformers.operators import get_reduction, resolve_names
-from omp4py.core.preprocessor.transformers.scopes import check_scopes, get_scopes, modify_scope, dec_annotation
-from omp4py.core.preprocessor.transformers.symtable import SymbolTable, new_omp_uname, runtime_ast, new_omp_name
+from omp4py.core.preprocessor.transformers.scopes import check_scopes, dec_annotation, get_scopes, modify_scope
+from omp4py.core.preprocessor.transformers.symtable import SymbolTable, omp_name, runtime_ast
 from omp4py.core.preprocessor.transformers.transformer import Context, construct, syntax_error_ctx
 from omp4py.core.preprocessor.transformers.utils import fix_body_locations, unpack_if, walk
 
@@ -26,9 +27,9 @@ __all__ = []
 def _(ctr: ParallelFor, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
     unpack: ast.If = unpack_if(body)
     body = construct(ctr.parallel, [unpack], ctx)
-    old_symtable, ctx.symtable = ctx.symtable, ctx.symtable.new_child()
+    old_scope, ctx.scope = ctx.scope, ctx.scope.new_child(ctx.scope.node)
     unpack.body = construct(ctr.for_, unpack.body, ctx)
-    ctx.symtable = old_symtable
+    ctx.scope = old_scope
     return body
 
 
@@ -39,7 +40,7 @@ def _(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
     first_private = ctr.first_private
     private = ctr.private
 
-    bounds_name: str = new_omp_uname(ctx, "bounds")
+    bounds_name: str = omp_name(ctx, "bounds")
     bounds_value: list[ast.expr]
     bounds_ast: ast.AnnAssign = ctr.span.to_ast(
         ast.AnnAssign(
@@ -50,15 +51,26 @@ def _(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
         ),
     )
 
+    schedule_name: str = "static"
+    for_next: str = "for_next"
+    if ctr.schedule:
+        kind = ctr.schedule.type.kind
+        if ctr.schedule.type.kind == ScheduleType.Kind.AUTO:
+            kind = ScheduleType.Kind.STATIC
+        schedule = ctr.schedule.type.nkind.string.lower()
+        match kind:
+            case ScheduleType.Kind.STATIC | ScheduleType.Kind.DYNAMIC | ScheduleType.Kind.GUIDED:
+                for_next = f"{for_next}_{schedule}"
+
     for_init: ast.stmt = ctr.span.to_ast(ast.Expr(for_initc := ast.Call(runtime_ast("for_init"))))
-    for_next: ast.stmt = ctr.span.to_ast(ast.While(for_nextc := ast.Call(runtime_ast("for_next")), body))
+    for_next: ast.stmt = ctr.span.to_ast(ast.While(for_nextc := ast.Call(runtime_ast(for_next)), body))
     for_end: ast.stmt = ctr.span.to_ast(ast.Expr(for_endc := ast.Call(runtime_ast("for_end"))))
     body = [bounds_ast, for_init, for_next, for_end]
 
     # Collapse, bounds, modifier, kind, chunk, ordered
     for_initc.args.append(ast.Constant(collapse_num))
     for_initc.args.append(ast.Name(bounds_name))
-    for_initc.args.append(ast.Constant(ord(ctr.schedule.type.nkind.string[0] if ctr.schedule else "s")))
+    for_initc.args.append(ast.Constant(ord(schedule_name[0])))
     for_initc.args.append(ctr.schedule.chunk.value if ctr.schedule and ctr.schedule.chunk else ast.Constant(-1))
     for_initc.args.append(ast.Constant(0 if not ctr.ordered else (ctr.ordered.n.value if ctr.ordered.n else 1)))
 
@@ -196,9 +208,9 @@ def for_checks(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.For]:
 def _(ctr: ParallelSections, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
     unpack: ast.If = unpack_if(body)
     body = construct(ctr.parallel, [unpack], ctx)
-    old_symtable, ctx.symtable = ctx.symtable, ctx.symtable.new_child()
+    old_scope, ctx.scope = ctx.scope, ctx.scope.new_child(ctx.scope.node)
     unpack.body = construct(ctr.sections, unpack.body, ctx)
-    ctx.symtable = old_symtable
+    ctx.scope = old_scope
     return body
 
 
@@ -229,7 +241,7 @@ def _(ctr: Sections, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
     first_private = ctr.first_private
     private = ctr.private
 
-    sec_id: str = new_omp_uname(ctx, "sections_id")
+    sec_id: str = omp_name(ctx, "sections_id")
     sec_id_ann: ast.stmt = ctr.span.to_ast(ast.AnnAssign(ast.Name(sec_id, ast.Store()), runtime_ast("pyint"), simple=1))
     sec_init: ast.stmt = ctr.span.to_ast(ast.Expr(sec_initc := ast.Call(runtime_ast("sections_init"))))
     sec_next: ast.stmt = ctr.span.to_ast(sec_loop := ast.While(sec_nextc := ast.Call(runtime_ast("sections_next"))))
@@ -308,7 +320,7 @@ def copyprivate(dataclauses: list[CopyPrivate], ctx: Context) -> list[ast.stmt]:
     return_names: list[ast.expr] = []
     var_names: list[ast.expr] = []
     types_ast = ast.Subscript(ast.Name("tuple"), ast.Tuple(return_types))
-    copyprivate_name = new_omp_uname(ctx, "copyprivate")
+    copyprivate_name = omp_name(ctx, "copyprivate")
     copyprivate_ast = span.to_ast(ast.FunctionDef(copyprivate_name, ast.arguments(), returns=types_ast))
 
     for dataclause in dataclauses:
@@ -317,7 +329,7 @@ def copyprivate(dataclauses: list[CopyPrivate], ctx: Context) -> list[ast.stmt]:
                 stmt = get_reduction(ctx, "__new__", s.annotation)
                 if stmt is None:  # never for __new__
                     continue
-                new_name = new_omp_name(ctx, s.scope_name)
+                new_name = omp_name(ctx, s.scope_name)
                 assign = dec_annotation(ctx, s, new_name)
                 copyprivate_ast.body.append(assign)
                 copyprivate_ast.body.append(resolve_names(stmt[1], omp_out=new_name, omp_in=s.scope_name))

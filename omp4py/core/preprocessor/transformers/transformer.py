@@ -142,11 +142,9 @@ class OmpTransformer(ast.NodeTransformer):
         return new_node
 
     def visit_new_scope[T: ast.AST](self, node: T) -> T:
-        old_symtable, self.ctx.symtable = self.ctx.symtable, self.ctx.symtable.new_child()
-        old_scope, self.ctx.scope_node = self.ctx.scope_node, node
+        old_scope, self.ctx.scope =  self.ctx.scope, self.ctx.scope.new_child(node)
         self.generic_visit(node)
-        self.ctx.scope_node = old_scope
-        self.ctx.symtable = old_symtable
+        self.ctx.scope = old_scope
         return node
 
     def visit_If(self, node: ast.If) -> ast.If | list[ast.stmt]:

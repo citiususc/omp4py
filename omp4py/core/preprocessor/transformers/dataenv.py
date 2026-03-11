@@ -73,7 +73,7 @@ def _(ctr: ThreadPrivate, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
 
             return new_node
 
-    scope_node = ctx.scope_node
+    scope_node = ctx.scope.node
     ctx.finalizers.append(lambda:Replace().visit(scope_node))
 
     return tp_vars + body
