@@ -17,6 +17,7 @@ __all__ = [
     "Barrier",
     "Clause",
     "Collapse",
+    "Combiner",
     "Construct",
     "CopyIn",
     "CopyPrivate",
@@ -28,6 +29,7 @@ __all__ = [
     "FirstPrivate",
     "For",
     "If",
+    "Initializer",
     "LastPrivate",
     "Master",
     "Modifier",
@@ -36,7 +38,7 @@ __all__ = [
     "NumThreads",
     "OmpNode",
     "Ordered",
-    "Ordered",
+    "OrderedClause",
     "Parallel",
     "ParallelFor",
     "ParallelSections",
@@ -141,7 +143,7 @@ class For(Construct):
     first_private: list[FirstPrivate] = field(default_factory=list)
     last_private: list[LastPrivate] = field(default_factory=list)
     no_wait: NoWait | None = None
-    ordered: Ordered | None = None
+    ordered: OrderedClause | None = None
     private: list[Private] = field(default_factory=list)
     reduction: list[Reduction] = field(default_factory=list)
     schedule: Schedule | None = None
@@ -321,7 +323,7 @@ class NumThreads(Clause):
 
 
 @dataclass
-class Ordered(Clause):
+class OrderedClause(Clause):
     id: ClassVar[str] = "ordered"
     n: PyInt | None = None
 
