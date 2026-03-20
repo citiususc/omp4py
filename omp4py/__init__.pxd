@@ -1,1 +1,1 @@
-from omp4py.cruntime.api cimport *
+from omp4py.runtime.api cimport *
