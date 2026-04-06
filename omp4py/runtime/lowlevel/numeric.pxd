@@ -1,4 +1,4 @@
-import cython
+from cpython cimport array
 
 # Integer
 ctypedef long long pyint
@@ -8,14 +8,13 @@ ctypedef pyint[:] pyint_array
 ctypedef double pyfloat
 ctypedef pyfloat[:] pyfloat_array
 
-# Complex
-ctypedef double complex pycomplex
-
 
 # New Integer Array
+cdef array.array _pyint_array_template
 cdef inline pyint_array new_pyint_array(pyint n):
-    return cython.view(shape=(n,), itemsize=sizeof(pyint), format="q")
+    return array.clone(_pyint_array_template, n, True)
 
 # New Floating point Array
+cdef array.array _pyfloat_array_template
 cdef inline pyfloat_array new_pyfloat_array(pyint n):
-    return cython.view(shape=(n,), itemsize=sizeof(pyfloat), format="d")
+    return array.clone(_pyfloat_array_template, n, True)

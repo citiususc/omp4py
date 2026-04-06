@@ -16,15 +16,21 @@ Initialization is performed at import time by calling `set_defaults()`,
 which sets base values and then applies environment-based overrides.
 """
 
+from __future__ import annotations
+
 import os
 import re
 import sys
 
+# BEGIN_CYTHON_IMPORTS
 from omp4py.runtime.icvs import icvs
-from omp4py.runtime.icvs.places import parse as parse_places
 from omp4py.runtime.lowlevel.numeric import new_pyint_array
 
+# END_CYTHON_IMPORTS
+
 __all__ = []
+
+from omp4py.runtime.icvs.places import parse as parse_places
 
 
 def parse(name: str, regex: str, sensitive: bool = False) -> tuple[str | None, ...]:
@@ -32,16 +38,16 @@ def parse(name: str, regex: str, sensitive: bool = False) -> tuple[str | None, .
         return ()
     if result := re.match(regex, os.environ[name].strip(), 0 if sensitive else re.IGNORECASE):
         return result.groups()
-    print(f"omp4py: Unknown value for environment variable {name}", file=sys.stderr) # noqa: T201
+    print(f"omp4py: Unknown value for environment variable {name}", file=sys.stderr)  # noqa: T201
     return ()
 
 
 def display(txt: str) -> None:
-    print(txt, file=sys.stderr) # noqa: T201
+    print(txt, file=sys.stderr)  # noqa: T201
 
 
 def display_var(name: str, value: str) -> None:
-    print(f"  {name} = '{value}'".upper(), file=sys.stderr) # noqa: T201
+    print(f"  {name} = '{value}'".upper(), file=sys.stderr)  # noqa: T201
 
 
 def set_run_sched(verbose: bool) -> None:
@@ -55,7 +61,7 @@ def set_run_sched(verbose: bool) -> None:
         icvs.defaults.run_sched.chunksize = int(result[2]) if result[2] is not None else -1
     else:
         icvs.defaults.run_sched.monotonic = True
-        icvs.defaults.run_sched.type = ord("d")
+        icvs.defaults.run_sched.type = ord("s")
         icvs.defaults.run_sched.chunksize = -1
 
     if verbose:
@@ -212,6 +218,7 @@ def set_max_task_priority(verbose: bool) -> None:
     if verbose:
         display_var("OMP_MAX_TASK_PRIORITY", str(icvs.defaults.default_device))
 
+
 def set_env() -> None:
     verbose: int = 0
     if result := parse("OMP_DISPLAY_ENV", r"^(true|false|verbose)$"):
@@ -241,13 +248,17 @@ def set_env() -> None:
     if verbose:
         display("OPENMP DISPLAY ENVIRONMENT END")
 
+
 def set_defaults() -> None:
     icvs.defaults.active_levels = 0
     icvs.defaults.levels = 0
+    icvs.defaults.team_size = 1
+    icvs.defaults.thread_num = 0
     icvs.defaults.device_vars = icvs.Device.__new__(icvs.Device)
     icvs.defaults.global_vars = icvs.Global.__new__(icvs.Global)
     icvs.defaults.implicit_task_vars = icvs.ImplicitTask.__new__(icvs.ImplicitTask)
 
     set_env()
+
 
 set_defaults()

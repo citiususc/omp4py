@@ -11,7 +11,7 @@ cdef class Global:
     cdef bint cancel
     cdef pyint max_task_priority
 
-    cdef Device copy(self)
+    cdef Global copy(self)
 
 cdef class PlacePartition:
     cdef pyint_array values
@@ -21,14 +21,14 @@ cdef class PlacePartition:
 cdef class ImplicitTask:
     cdef PlacePartition place_partition
 
-    cdef Device copy(self)
+    cdef ImplicitTask copy(self)
 
 cdef class RunSched:
     cdef bint monotonic
     cdef pyint type
     cdef pyint chunksize
 
-    cdef Device copy(self)
+    cdef RunSched copy(self)
 
 cdef class Data:
     cdef bint dyn
@@ -42,10 +42,13 @@ cdef class Data:
     cdef pyint levels
     cdef pyint default_device
     ##
+    cdef pyint team_size
+    cdef pyint thread_num
+    ##
     cdef Device device_vars
     cdef Global global_vars
     cdef ImplicitTask implicit_task_vars
 
-    cdef Device copy(self)
+    cdef Data copy(self)
 
 cdef Data defaults

@@ -15,7 +15,9 @@ The module also defines simple array aliases and helper constructors for
 creating numeric arrays used by the runtime.
 """
 
-__all__ = ["new_pyfloat_array", "new_pyint_array", "pycomplex", "pyfloat", "pyint", "pyint_array"]
+from __future__ import annotations
+
+__all__ = ["new_pyfloat_array", "new_pyint_array", "pyfloat", "pyint", "pyint_array"]
 
 # Integer
 type pyint = int  # noqa: PYI042
@@ -25,10 +27,6 @@ type pyint_array = list[pyint]  # noqa: PYI042
 # Floating point
 type pyfloat = float  # noqa: PYI042
 type pyfloat_array = list[pyfloat]  # noqa: PYI042
-
-
-# Complex
-type pycomplex = complex  # noqa: PYI042
 
 
 def new_pyfloat_array(n: pyint) -> pyfloat_array:

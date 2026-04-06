@@ -19,14 +19,19 @@ Supported features include:
 Invalid values are reported to stderr following OpenMP behavior.
 """
 
+from __future__ import annotations
+
 import os
 import re
 import sys
 from collections.abc import Generator
 from dataclasses import dataclass, field
 
+# BEGIN_CYTHON_IMPORTS
 from omp4py.runtime.icvs import icvs
 from omp4py.runtime.lowlevel.numeric import new_pyint_array
+
+# END_CYTHON_IMPORTS
 
 __all__ = ["parse"]
 
@@ -82,7 +87,7 @@ class Parser:
     tokenizer: Generator[tuple[str, str]]
     token: tuple[str, str]
 
-    def __init__(self, text: str):
+    def __init__(self, text: str) -> None:
         self.tokenizer = tokenize(text)
         self.token = next(self.tokenizer)
 
@@ -234,5 +239,5 @@ def parse(var: str) -> icvs.PlacePartition | None:
         if text := os.environ.get(var, None):
             return Parser(text).parse()
     except ValueError as ex:
-        print(f"omp4py: Unknown value '{ex}' for environment variable {var}", file=sys.stderr) # noqa: T201
+        print(f"omp4py: Unknown value '{ex}' for environment variable {var}", file=sys.stderr)  # noqa: T201
     return None

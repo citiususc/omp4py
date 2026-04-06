@@ -1,18 +1,22 @@
-import os
+import ast
+import contextlib
 import re
 import sys
 import sysconfig
-from setuptools import setup, Extension
+from pathlib import Path
+
 from Cython.Build import cythonize
 from Cython.Build.Dependencies import safe_makedirs_once
+from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
 
 free_threading: bool = sysconfig.get_config_vars().get("Py_GIL_DISABLED") == 1
-compiler_directives: dict = {'freethreading_compatible': free_threading,
-                             'annotation_typing': True}
+compiler_directives: dict = {"freethreading_compatible": free_threading, "annotation_typing": True}
 
-extensions: list[str] = [
-    "omp4py/runtime/api.py",
+__all__ = []
+
+old_extensions: list[str] = [
+    "omp4py/runtime/api_.py",
     "omp4py/runtime/basics/array.pyx",
     "omp4py/runtime/basics/atomic.pyx",
     "omp4py/runtime/basics/casting.py",
@@ -30,47 +34,104 @@ extensions: list[str] = [
     "omp4py/runtime/synchronization.py",
     "omp4py/runtime/tasking.py",
     "omp4py/runtime/variables.py",
-    "omp4py/runtime/workdistribution.py"
+    "omp4py/runtime/workdistribution.py",
 ]
 
-pattern: re.Pattern[str] = re.compile(r"(# BEGIN_CYTHON_IMPORTS.*?# END_CYTHON_IMPORTS)", flags=re.DOTALL)
+new_extensions: list[str] = [
+    # api
+    "omp4py/runtime/api/threadteam.py",
+    # icvs
+    "omp4py/runtime/icvs/defaults.py",
+    "omp4py/runtime/icvs/icvs.py",
+    "omp4py/runtime/icvs/places.py",
+    # lowlevel
+    "omp4py/runtime/lowlevel/atomic.pyx",
+    "omp4py/runtime/lowlevel/mutex.pyx",
+    "omp4py/runtime/lowlevel/numeric.pyx",
+    "omp4py/runtime/lowlevel/threadlocal.py",
+    # tasks
+    "omp4py/runtime/tasks/context.py",
+]
+
+extensions = old_extensions
+#extensions = new_extensions
+
+preproc_pattern: re.Pattern[str] = re.compile(
+    r"\s*#\s*BEGIN_CYTHON_(?P<name>\w+)[^\n]*\n(?P<body>[\s\S]*?)\n\s*#\s*END_CYTHON_(?P=name)",
+    flags=re.IGNORECASE,
+)
+
+
+def preprocessor(m: re.Match[str], file: str) -> str:
+    result = ""
+    match m.group("name").upper():
+        case "IMPORTS":
+            imports: list[tuple[int, int]] = []
+            lines = m.group("body").splitlines(keepends=True)
+            try:
+                module: ast.Module = ast.parse(m.group("body"), file)
+            except IndentationError:
+                msg = f"{file} 'BEGIN_CYTHON_IMPORTS' cannot be placed inside indented lines"
+                raise ValueError(msg) from None
+            except SyntaxError:
+                msg = f"{file} syntax error"
+                raise ValueError(msg) from None
+
+            for node in ast.walk(module):
+                if isinstance(node, ast.Import):
+                    imports.extend((alias.lineno - 1, alias.col_offset) for alias in node.names)
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    imports.append((node.lineno - 1, node.col_offset + 4))  # col_offset + from
+
+            for module in imports[::-1]:
+                lines[module[0]] = lines[module[0]][: module[1]] + " cython.cimports." + lines[module[0]][module[1]:]
+
+            result = "\n" + ("".join(lines))
+        case "IGNORE":
+            result = ""
+        case _:
+            msg = f"{file} unrecognized cython preprocessor '{m.group('name')}'"
+            raise ValueError(msg)
+    old_lines = m.group(0).count("\n")
+    new_lines = result.count("\n")
+    return result + ("\n" * (old_lines - new_lines))
 
 
 class Build(build_ext):
-
-    def parse_imports(self, ext):
-        with open(ext.sources[0], "r") as file:
+    def parse_imports(self, ext: Extension) -> None:
+        with open(ext.sources[0]) as file:
             source: str = file.read()
 
-        new_path: str = os.path.join("build", ext.name.replace(".", "/") + os.path.splitext(ext.sources[0])[1])
-        safe_makedirs_once(os.path.dirname(new_path))
-
-        def f(m: re.Match[str]) -> str:
-            return m.group(0).replace("omp4py.", 'cython.cimports.omp4py.')
+        new_path = Path("build") / Path().joinpath(*ext.name.split(".")).with_suffix(Path(ext.sources[0]).suffix)
+        safe_makedirs_once(new_path.parent)
 
         with open(new_path, "w") as file:
-            file.write(pattern.sub(f, source, count=1))
-        ext.sources[0] = new_path
-        return True
+            file.write(preproc_pattern.sub(lambda m: preprocessor(m, ext.sources[0]), source))
 
-    def build_extension(self, ext) -> None:
+    def build_extension(self, ext: Extension) -> None:
         self.parse_imports(ext)
-        ext.sources = cythonize(ext, language_level="3", annotate=self.editable_mode,
-                                compiler_directives=compiler_directives)[0].sources
+        with contextlib.chdir("build"):
+            ext.sources = [str(Path("build") / file) for file in cythonize(
+                ext, language_level="3", annotate=self.editable_mode, compiler_directives=compiler_directives,
+                include_path=[".."],
+            )[0].sources]
         if self.compiler.compiler_type == "msvc":
-            ext.extra_compile_args += ['/std:c11', '/experimental:c11atomics']
+            ext.extra_compile_args += ["/std:c11", "/experimental:c11atomics"]
 
         super().build_extension(ext)
 
 
 def ext_name(path: str) -> str:
-    return os.path.splitext(path)[0].replace('/', '.')
+    return ".".join(Path(path).with_suffix("").parts)
 
 
-if free_threading and sys.version_info[1] >= 13:
+if free_threading and sys.version_info >= (3, 13):
     setup(
-        cmdclass={'build_ext': Build},
+        cmdclass={"build_ext": Build},
         ext_modules=[Extension(name=ext_name(path), sources=[path]) for path in extensions],
     )
 else:
     setup()
+
+if __name__ == "__main__":
+    pass

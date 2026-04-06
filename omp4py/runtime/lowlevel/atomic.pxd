@@ -21,6 +21,7 @@ cdef class AtomicFlag:
 
     cdef void clear(self)
 
+
 cdef class AtomicObject:
     cdef object _holder
     cdef atomic_uintptr_t _value
@@ -31,6 +32,7 @@ cdef class AtomicObject:
     cdef object get(self)
 
     cdef bint set(self, object value)
+
 
 cdef class AtomicInt:
     cdef atomic_llong _value

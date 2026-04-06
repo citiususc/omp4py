@@ -33,6 +33,7 @@ cdef class Mutex:
 
     cdef bint test(self)
 
+
 cdef class RMutex:
     cdef PyMutex _mutex
     cdef cython.ulong _own
@@ -46,6 +47,7 @@ cdef class RMutex:
     cdef void unlock(self)
 
     cdef bint test(self)
+
 
 cdef class Event:
     cdef PyEvent _event

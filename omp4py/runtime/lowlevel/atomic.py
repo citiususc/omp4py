@@ -16,6 +16,7 @@ These implementations are designed to behave similarly to their C atomic
 counterparts while remaining compatible with the pure Python runtime and
 the compiled runtime.
 """
+
 from __future__ import annotations
 
 import threading

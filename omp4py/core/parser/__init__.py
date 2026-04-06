@@ -8,3 +8,5 @@ from omp4py.core.parser.error import syntax_error
 def parse(filename: str, directive: str, lineno: int, col: int, raw_source: bool) -> Directive:
     msg = "New parser is not implemented yet"
     raise NotImplementedError(msg)
+
+from omp4py.core.parser.lark.parser import parse

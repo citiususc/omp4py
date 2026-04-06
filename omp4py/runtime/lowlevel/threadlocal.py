@@ -5,49 +5,75 @@ internally by the runtime. It exposes a simple interface to store and
 retrieve a value associated with the current thread.
 
 The default implementation relies on Python's `threading.local`. When
-`omp4py` is compiled with Cython, this module may be replaced by a
-compiled implementation providing the same interface but using a more
-efficient low-level mechanism.
+`omp4py` is compiled with Cython, this module is optimized by providing
+a more efficient low-level mechanism defined in the `.pxd`.
 """
+
+from __future__ import annotations
+
 import threading
+from collections.abc import Callable
 
 import cython
 
 if cython.compiled:
-    import cython.imports.omp4py.runtime.lowlevel.threadlocal0  # type:ignore[unresolved-import]
+    from cython.cimports.omp4py.runtime.lowlevel.threadlocal0 import omp4py_local0_ptr  # type:ignore[unresolved-import]
 
+    threadlocal_link = omp4py_local0_ptr
 
-__all__ = ["ThreadLocal"]
-
+# BEGIN_CYTHON_IGNORE
+__all__ = ["threadlocal_get", "threadlocal_init", "threadlocal_set"]
+# END_CYTHON_IGNORE
 _local: threading.local = threading.local()
 
 
-class ThreadLocal:
-    """Utility class providing access to thread-local storage."""
+def threadlocal_default_set(value: object) -> None:
+    """Store a value for the current thread.
 
-    @staticmethod
-    def default_set(value: object) -> None:
-        """Store a value for the current thread.
+    Args:
+        value (object): Value to store.
+    """
+    _local.value = value
 
-        Args:
-            value (object): Value to store.
-        """
-        _local.value = value
 
-    @staticmethod
-    def set(value: object) -> None:
-        """Store a value for the current thread.
+# BEGIN_CYTHON_IGNORE
 
-        Args:
-            value (object): Value to store.
-        """
-        ThreadLocal.default_set(value)
 
-    @staticmethod
-    def get() -> object | None:
-        """Return the value associated with the current thread.
+def threadlocal_set(value: object) -> None:
+    """Store a value for the current thread.
 
-        Returns:
-            object | None: Stored value, or `None` if not set.
-        """
+    Args:
+        value (object): Value to store.
+    """
+    threadlocal_default_set(value)
+
+
+def threadlocal_get() -> object | None:
+    """Return the value associated with the current thread.
+
+    If no value is currently stored, the thread-local storage is initialized
+    by calling `threadlocal_init`.
+
+    Returns:
+        object | None: Stored value, or `None` if not set.
+    """
+    value: object = getattr(_local, "value", None)
+    if value is None:
+        threadlocal_init()
         return getattr(_local, "value", None)
+    return value
+
+
+# END_CYTHON_IGNORE
+
+
+def threadlocal_init_none() -> None:
+    """Default thread-local initializer that sets no initial value."""
+    msg = "threadlocal_init_none() should never be called"
+    raise ValueError(msg)
+
+
+# BEGIN_CYTHON_IGNORE
+threadlocal_init: Callable[[], None]
+# END_CYTHON_IGNORE
+threadlocal_init = threadlocal_init_none

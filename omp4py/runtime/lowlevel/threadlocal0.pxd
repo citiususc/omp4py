@@ -1,19 +1,27 @@
 """Definition of the `omp4py` thread-local runtime variable.
 
 This module declares and defines the C thread-local variable
-`omp4py_local` used by the compiled `omp4py` runtime to store the
-current thread-local value.
+`omp4py_local0`, which is used by the compiled `omp4py` runtime to store
+the current thread-specific state.
 
-The variable is initialized to `PyNone` so that it always contains a
-valid Python object when accessed. This definition is included when
-compiling Python modules with Cython, ensuring that the thread-local
-storage used by `ThreadLocal` has a proper initial value in each thread.
+Each module defines its own static thread-local variable, `omp4py_local`,
+which stores a pointer to `omp4py_local0`. This pointer is initialized
+via `omp4py_local0_ptr`, allowing each module to maintain a local copy
+of the reference.
 
-This small module exists solely to provide the definition of the
-thread-local symbol so it can be safely referenced from other compiled
-runtime modules.
+This design provides direct access to the thread-local variable without
+incurring function call overhead, while also avoiding cross-module
+symbol library linking.
 """
+from cpython.object cimport PyObject
+
 cdef extern from *:
     """
-    thread_local PyObject* omp4py_local = PyNone;
+    thread_local PyObject* omp4py_local0 = NULL;
+
+    PyObject** omp4py_local0_ptr(){
+        return &omp4py_local0;
+    }
+
     """
+    cdef PyObject** omp4py_local0_ptr()

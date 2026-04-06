@@ -12,6 +12,7 @@ The following primitives are defined:
 - `Event`: Thread synchronization event used for signaling.
 
 """
+
 from __future__ import annotations
 
 import threading
