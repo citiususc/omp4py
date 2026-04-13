@@ -1,6 +1,6 @@
 [project]
 name = "omp4py"
-version = "1.0"
+version = "0.2"
 description = "An OpenMP Implementation for Python"
 license = { text = "LGPL-3.0-only" }
 authors = [
