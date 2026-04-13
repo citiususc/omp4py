@@ -60,9 +60,9 @@ def _(ctr: ThreadPrivate, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
             return ast.fix_missing_locations(ast.copy_location(new_node, node))
 
         def replaced(self, node: ast.Name) -> ast.Subscript | ast.Call:
-            new_node = ast.Subscript(
-                ast.Call(runtime_ast("threadprivates")),
-                ast.Name(new_names[node.id]),
+            new_node = ast.Attribute(
+                ast.Call(runtime_ast("threadprivates"), [ast.Name(new_names[node.id])]),
+                "v",
                 node.ctx,
             )
 

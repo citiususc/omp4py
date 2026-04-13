@@ -50,7 +50,11 @@ new_extensions: list[str] = [
     "omp4py/runtime/lowlevel/numeric.pyx",
     "omp4py/runtime/lowlevel/threadlocal.py",
     # tasks
+    "omp4py/runtime/tasks/barrier.py",
     "omp4py/runtime/tasks/context.py",
+    "omp4py/runtime/tasks/parallelism.py",
+    "omp4py/runtime/tasks/task.py",
+    "omp4py/runtime/tasks/threadprivate.py",
 ]
 
 extensions = old_extensions
