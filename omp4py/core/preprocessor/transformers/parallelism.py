@@ -1,16 +1,66 @@
-import ast
+"""Parallel region constructs for the `omp4py` preprocessor.
 
-from omp4py.core.parser.tree import Parallel
+This module implements the OpenMP `parallel` construct, which defines
+a region of code to be executed by multiple threads.
+
+The transformation rewrites a parallel region into a callable function
+and a corresponding runtime invocation that manages thread creation,
+execution, and synchronization.
+
+It handles:
+
+- Creation of a new variable scope with OpenMP data-sharing semantics
+- Evaluation of clauses such as `if`, `num_threads`, `proc_bind`, and `copyin`
+- Integration with runtime primitives via generated AST calls
+- Validation of threadprivate variables for `copyin`
+
+All constructs are registered through the `construct` dispatcher and
+applied during the transformation phase of the preprocessor.
+"""
+
+from __future__ import annotations
+
+import ast
+import typing
+
 from omp4py.core.preprocessor.transformers.scopes import check_scopes, create_scope
 from omp4py.core.preprocessor.transformers.symtable import omp_name, runtime_ast
 from omp4py.core.preprocessor.transformers.transformer import Context, construct, syntax_error_ctx
 from omp4py.core.preprocessor.transformers.utils import fix_body_locations
+
+if typing.TYPE_CHECKING:
+    from omp4py.core.parser.tree import Parallel
 
 __all__ = []
 
 
 @construct.register
 def _(ctr: Parallel, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
+    """Transform an OpenMP `parallel` construct.
+
+    This transformation encapsulates the parallel region body into a
+    generated function and emits a runtime call to execute it in parallel.
+
+    It also processes and validates the following clauses:
+
+    - `if`: Conditional parallel execution
+    - `num_threads`: Number of threads to use
+    - `proc_bind`: Thread affinity policy
+    - `copyin`: Initialization of threadprivate variables
+
+    A new variable scope is created to enforce OpenMP data-sharing rules,
+    including handling of `shared`, `private`, `firstprivate`, and
+    `reduction` clauses.
+
+    Args:
+        ctr (Parallel): Parsed `parallel` construct.
+        body (list[ast.stmt]): Body of the parallel region.
+        ctx (Context): Transformation context.
+
+    Returns:
+        list[ast.stmt]: Transformed AST statements including the generated
+        function and runtime invocation.
+    """
     f_name: str = omp_name(ctx, "parallel")
     f_ast: ast.FunctionDef = ctr.span.to_ast(ast.FunctionDef(f_name, ast.arguments(), body=body))
 

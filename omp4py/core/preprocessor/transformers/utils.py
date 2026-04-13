@@ -1,3 +1,11 @@
+"""Utility helpers for AST transformations in the `omp4py` preprocessor.
+
+This module provides a collection of helper functions used across the
+preprocessor to simplify AST manipulation and traversal.
+"""
+
+from __future__ import annotations
+
 import ast
 from collections.abc import Callable, Generator
 
@@ -40,10 +48,37 @@ def fix_body_locations(body: list[ast.stmt]) -> list[ast.stmt]:
 
 
 def unpack_if(body: list[ast.stmt]) -> ast.If:
+    """Wrap a list of statements in a temporary `if` block.
+
+    This function creates a synthetic `if` statement with a constant
+    condition used as a marker. It is used to temporarily group multiple
+    statements into a single block so they can be processed uniformly
+    by transformation passes.
+
+    The condition value (`"_omp_unpack"`) is not meant to be executed,
+    but rather to identify the node as an internal construct.
+
+    Args:
+        body (list[ast.stmt]): List of statements to group.
+
+    Returns:
+        ast.If: Synthetic `if` node wrapping the given body.
+    """
     return ast.fix_missing_locations(ast.If(ast.Constant("_omp_unpack"), body))
 
 
 def is_unpack_if(if_: ast.If) -> bool:
+    """Check whether an `if` node is a temporary unpack block.
+
+    This function detects `if` nodes created by `unpack_if` by checking
+    for the special marker condition.
+
+    Args:
+        if_ (ast.If): AST node to check.
+
+    Returns:
+        bool: True if the node is an internal unpack block, False otherwise.
+    """
     match if_.test:
         case ast.Constant(value="_omp_unpack"):
             return True

@@ -1,3 +1,18 @@
+"""OpenMP-like data scoping and variable transformation utilities.
+
+This module implements the handling of data-sharing attributes in the
+`omp4py` preprocessor, such as `private`, `firstprivate`, `shared`, and
+`reduction`.
+
+It is responsible for validating scope clauses, creating transformed
+execution scopes, and generating the necessary AST constructs to enforce
+OpenMP-like semantics.
+
+The module also provides utilities to resolve variable initialization,
+handle reductions, and propagate type annotations across transformed
+variables.
+"""
+
 from __future__ import annotations
 
 import ast
@@ -26,10 +41,36 @@ __all__ = ["check_scopes", "create_scope", "dec_annotation", "get_scopes", "modi
 
 
 def get_scopes(*scopes: DataScope) -> set[str]:
+    """Extract variable names from a collection of data scopes.
+
+    Args:
+        *scopes (DataScope): Data scope clauses.
+
+    Returns:
+        set[str]: Set of variable names referenced in the scopes.
+    """
     return {name.string for scope in scopes for name in scope.targets}
 
 
 def check_scopes(ctx: Context, *scopes: DataScope, allow_threadprivate: bool = False) -> set[str]:
+    """Validate variables used in data scope clauses.
+
+    This function ensures that all variables referenced in scope clauses:
+    - Exist in the current or enclosing scopes
+    - Are not duplicated across clauses
+    - Respect thread-private restrictions
+
+    Args:
+        ctx (Context): Active transformation context.
+        *scopes (DataScope): Data scope clauses to validate.
+        allow_threadprivate (bool): Whether threadprivate variables are allowed.
+
+    Returns:
+        set[str]: Set of validated variable names.
+
+    Raises:
+        SyntaxError: If any validation rule is violated.
+    """
     used: set[str] = set()
 
     for scope in scopes:
@@ -59,6 +100,25 @@ def create_scope(
     first_private_ds: list[FirstPrivate],
     reduction_ds: list[Reduction],
 ) -> SymbolTable:
+    """Create a new variable scope for a construct.
+
+    This function initializes a new scope based on OpenMP-like data-sharing
+    clauses and applies the corresponding transformations to the function
+    body.
+
+    Args:
+        ctr (Construct): Construct being processed.
+        ctx (Context): Active transformation context.
+        f_ast (ast.FunctionDef): Function node representing the new scope.
+        default (Default | None): Default data-sharing clause.
+        shared_ds (list[Shared]): Shared variable clauses.
+        private_ds (list[Private]): Private variable clauses.
+        first_private_ds (list[FirstPrivate]): Firstprivate clauses.
+        reduction_ds (list[Reduction]): Reduction clauses.
+
+    Returns:
+        SymbolTable: Symbol table associated with the new scope.
+    """
     return _variable_scope(ctr, ctx, f_ast, default, shared_ds, private_ds, first_private_ds, reduction_ds)
 
 
@@ -70,6 +130,23 @@ def modify_scope(
     first_private_ds: list[FirstPrivate],
     reduction_ds: list[Reduction],
 ) -> SymbolTable:
+    """Modify an existing scope with additional data-sharing clauses.
+
+    Unlike `create_scope`, this function operates on an existing body,
+    applying private, firstprivate, and reduction semantics without
+    introducing a full new function scope.
+
+    Args:
+        ctr (Construct): Construct being processed.
+        ctx (Context): Active transformation context.
+        body (list[ast.stmt]): AST body to transform.
+        private_ds (list[Private]): Private clauses.
+        first_private_ds (list[FirstPrivate]): Firstprivate clauses.
+        reduction_ds (list[Reduction]): Reduction clauses.
+
+    Returns:
+        SymbolTable: Updated symbol table for the modified scope.
+    """
     f_ast = ast.FunctionDef("", ast.arguments(), body)
     return _variable_scope(ctr, ctx, f_ast, None, [], private_ds, first_private_ds, reduction_ds)
 
@@ -84,6 +161,34 @@ def _variable_scope(
     first_private_ds: list[FirstPrivate],
     reduction_ds: list[Reduction],
 ) -> SymbolTable:
+    """Core implementation for scope creation and transformation.
+
+    This internal function applies OpenMP-like data-sharing semantics by:
+    - Validating scope clauses
+    - Determining variable classification (shared, private, etc.)
+    - Renaming variables to avoid conflicts
+    - Generating initialization code for private and reduction variables
+    - Injecting nonlocal/global declarations when required
+
+    It transforms the given function body in-place by inserting
+    initialization statements and updating variable references.
+
+    Args:
+        ctr (Construct): Construct being processed.
+        ctx (Context): Active transformation context.
+        f_ast (ast.FunctionDef): Function node representing the scope.
+        default (Default | None): Default data-sharing clause.
+        shared_ds (list[Shared]): Shared clauses.
+        private_ds (list[Private]): Private clauses.
+        first_private_ds (list[FirstPrivate]): Firstprivate clauses.
+        reduction_ds (list[Reduction]): Reduction clauses.
+
+    Returns:
+        SymbolTable: Symbol table associated with the transformed scope.
+
+    Raises:
+        SyntaxError: If scope rules are violated or reductions are invalid.
+    """
     new_scope = f_ast.name != ""
     check_scopes(ctx, *shared_ds, *private_ds, *first_private_ds, *reduction_ds)
     required = False
@@ -160,10 +265,32 @@ def _variable_scope(
 
 
 def scope_names(*scopes: DataScope) -> list[str]:
+    """Flatten variable names from multiple data scopes.
+
+    Args:
+        *scopes (DataScope): Data scope clauses.
+
+    Returns:
+        list[str]: List of variable names in declaration order.
+    """
     return functools.reduce(operator.iadd, [x.str_targets for x in scopes], [])
 
 
 def dec_annotation(ctx: Context, s: SymbolEntry, new_name: str | None = None) -> ast.AnnAssign:
+    """Generate an annotated assignment for a variable declaration.
+
+    This function creates an `AnnAssign` node that declares a variable
+    with the same type as an existing symbol. If no explicit annotation
+    is available, a runtime type inference call is used.
+
+    Args:
+        ctx (Context): Active transformation context.
+        s (SymbolEntry): Symbol entry to replicate.
+        new_name (str | None): Optional new variable name.
+
+    Returns:
+        ast.AnnAssign: Annotated assignment node.
+    """
     ann = s.annotation
     if ann is None:
         ann = ast.Call(runtime_ast("cy_typeof"), [ast.Name(s.old_name)])

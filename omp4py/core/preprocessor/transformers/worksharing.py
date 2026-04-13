@@ -1,3 +1,29 @@
+"""Worksharing constructs for the `omp4py` preprocessor.
+
+This module implements OpenMP worksharing constructs, which are used to
+distribute work among threads in a parallel region.
+
+It provides transformations for:
+
+- `for`: Parallel loop execution with scheduling and collapse support
+- `sections` / `section`: Independent code regions executed by different threads
+- `single`: Single-thread execution with optional result propagation (`copyprivate`)
+
+The module is responsible for rewriting high-level OpenMP-like directives
+into runtime-driven AST structures, handling:
+
+- Loop normalization and scheduling
+- Section dispatching
+- Data scoping (private, firstprivate, lastprivate, reduction)
+- Synchronization semantics (`nowait`, implicit barriers)
+- Integration with runtime primitives via generated AST calls
+
+All constructs are registered through the `construct` dispatcher and
+applied during the transformation phase of the preprocessor.
+"""
+
+from __future__ import annotations
+
 import ast
 
 from omp4py.core.parser.tree import (
@@ -25,6 +51,23 @@ __all__ = []
 
 @construct.register
 def _(ctr: ParallelFor, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
+    """Transform a combined `parallel for` construct.
+
+    This construct is decomposed into a nested transformation where the
+    `parallel` region is applied first, followed by the `for` worksharing
+    construct inside the parallel region.
+
+    A temporary scope is introduced to correctly handle variable scoping
+    rules inside the nested constructs.
+
+    Args:
+        ctr (ParallelFor): Parsed OpenMP combined construct.
+        body (list[ast.stmt]): Original AST body.
+        ctx (Context): Transformation context.
+
+    Returns:
+        list[ast.stmt]: Transformed AST statements.
+    """
     unpack: ast.If = unpack_if(body)
     body = construct(ctr.parallel, [unpack], ctx)
     old_scope, ctx.scope = ctx.scope, ctx.scope.new_child(ctx.scope.node)
@@ -35,6 +78,27 @@ def _(ctr: ParallelFor, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
 
 @construct.register
 def _(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
+    """Transform an OpenMP `for` worksharing construct.
+
+    This function rewrites a Python `for` loop into a runtime-driven loop
+    controlled by the OpenMP-like scheduler. It handles:
+
+    - Loop collapsing
+    - Scheduling strategies (static, dynamic, guided)
+    - Data scoping (private, firstprivate, reduction, lastprivate)
+    - Loop bounds extraction and normalization
+
+    The transformed loop uses runtime calls such as `for_init`,
+    `for_next`, and `for_end`.
+
+    Args:
+        ctr (For): Parsed `for` construct.
+        body (list[ast.stmt]): Loop body.
+        ctx (Context): Transformation context.
+
+    Returns:
+        list[ast.stmt]: Transformed AST statements implementing the loop.
+    """
     collapse_num = ctr.collapse.num.value if ctr.collapse is not None else 1
     for_list: list[ast.For] = for_checks(ctr, body, ctx)
     first_private = ctr.first_private
@@ -135,6 +199,22 @@ def _(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
 
 
 def for_range_check(for_: ast.For, ctx: Context, index: list[str] | None = None) -> None:
+    """Validate that a loop is compatible with OpenMP `for`.
+
+    Ensures that the loop:
+    - Has no `else` clause
+    - Uses a valid `range(...)` iterator
+    - Does not reference iteration variables in invalid ways
+    - Does not contain unsupported control flow (break, return, yield)
+
+    Args:
+        for_ (ast.For): Loop node to validate.
+        ctx (Context): Transformation context.
+        index (list[str] | None): List of iteration variables for nested loops.
+
+    Raises:
+        SyntaxError: If the loop is not compatible with OpenMP semantics.
+    """
     if len(for_.orelse) > 0:
         msg = "loop cannot have an else block"
         raise syntax_error_ctx(msg, Span.from_ast(for_.orelse[0]), ctx)
@@ -168,6 +248,23 @@ def for_range_check(for_: ast.For, ctx: Context, index: list[str] | None = None)
 
 
 def for_checks(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.For]:
+    """Validate and extract nested loops for a `for` construct.
+
+    This function ensures that the body contains a valid `for` loop and,
+    if the `collapse` clause is used, verifies that loops are perfectly
+    nested.
+
+    Args:
+        ctr (For): Parsed `for` construct.
+        body (list[ast.stmt]): Body to analyze.
+        ctx (Context): Transformation context.
+
+    Returns:
+        list[ast.For]: List of validated nested loops.
+
+    Raises:
+        SyntaxError: If loop structure is invalid.
+    """
     for_list: list[ast.For] = []
 
     if len(body) == 0 or not isinstance(stmt := body[0], ast.For):
@@ -206,6 +303,20 @@ def for_checks(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.For]:
 
 @construct.register
 def _(ctr: ParallelSections, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
+    """Transform a combined `parallel sections` construct.
+
+    Similar to `parallel for`, this construct is decomposed into a
+    `parallel` region containing a `sections` construct, with proper
+    scope handling.
+
+    Args:
+        ctr (ParallelSections): Parsed construct.
+        body (list[ast.stmt]): Original body.
+        ctx (Context): Transformation context.
+
+    Returns:
+        list[ast.stmt]: Transformed AST statements.
+    """
     unpack: ast.If = unpack_if(body)
     body = construct(ctr.parallel, [unpack], ctx)
     old_scope, ctx.scope = ctx.scope, ctx.scope.new_child(ctx.scope.node)
@@ -216,11 +327,40 @@ def _(ctr: ParallelSections, body: list[ast.stmt], ctx: Context) -> list[ast.stm
 
 @construct.register
 def _(ctr: Section, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
+    """Handle invalid standalone `section` usage.
+
+    The `section` construct is only valid inside a `sections` block.
+
+    Args:
+        ctr (Section): Parsed construct.
+        body (list[ast.stmt]): Body.
+        ctx (Context): Transformation context.
+
+    Raises:
+        SyntaxError: Always raised since standalone `section` is invalid.
+    """
     msg = "'omp section' may only be used in 'omp sections' construct"
     raise syntax_error_ctx(msg, ctr.span, ctx)
 
 
 def section_checks(ctr: Sections, body: list[ast.stmt], ctx: Context) -> list[ast.With]:
+    """Validate and normalize `sections` construct body.
+
+    Ensures that all elements inside a `sections` construct are valid
+    `section` blocks. If the first statement is not explicitly marked
+    as a section, it is implicitly wrapped.
+
+    Args:
+        ctr (Sections): Parsed construct.
+        body (list[ast.stmt]): Body to analyze.
+        ctx (Context): Transformation context.
+
+    Returns:
+        list[ast.With]: List of normalized section blocks.
+
+    Raises:
+        SyntaxError: If invalid structure is found.
+    """
     sections_list: list[ast.With] = []
     for i, child in enumerate(body):
         section: ast.With
@@ -237,6 +377,20 @@ def section_checks(ctr: Sections, body: list[ast.stmt], ctx: Context) -> list[as
 
 @construct.register
 def _(ctr: Sections, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
+    """Transform an OpenMP `sections` construct.
+
+    This construct distributes independent sections of code among threads.
+    The transformation generates a runtime-controlled loop where each
+    iteration executes a different section.
+
+    Args:
+        ctr (Sections): Parsed construct.
+        body (list[ast.stmt]): Sections body.
+        ctx (Context): Transformation context.
+
+    Returns:
+        list[ast.stmt]: Transformed AST statements.
+    """
     sections_list = section_checks(ctr, body, ctx)
     first_private = ctr.first_private
     private = ctr.private
@@ -288,6 +442,20 @@ def _(ctr: Sections, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
 
 @construct.register
 def _(ctr: Single, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
+    """Transform an OpenMP `single` construct.
+
+    This construct ensures that only one thread executes the enclosed
+    block, while others skip it. It optionally supports `copyprivate`
+    to broadcast values to other threads.
+
+    Args:
+        ctr (Single): Parsed construct.
+        body (list[ast.stmt]): Body of the single region.
+        ctx (Context): Transformation context.
+
+    Returns:
+        list[ast.stmt]: Transformed AST statements.
+    """
     modify_scope(ctr, ctx, body, ctr.private, ctr.first_private, [])
 
     single_ast = ctr.span.to_ast(ast.If(ast.Call(runtime_ast("single")), body))
@@ -313,6 +481,22 @@ def _(ctr: Single, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
 
 
 def copyprivate(dataclauses: list[CopyPrivate], ctx: Context) -> list[ast.stmt]:
+    """Implement the `copyprivate` clause for `single`.
+
+    This function generates a helper function that:
+    - Captures values from the executing thread
+    - Synchronizes them across threads using runtime support
+    - Updates variables in all threads
+
+    It relies on reduction-like semantics for copying values.
+
+    Args:
+        dataclauses (list[CopyPrivate]): Copyprivate clauses.
+        ctx (Context): Transformation context.
+
+    Returns:
+        list[ast.stmt]: AST statements implementing the copy operation.
+    """
     check_scopes(ctx, *dataclauses, allow_threadprivate=True)
     span = dataclauses[0].span
 
