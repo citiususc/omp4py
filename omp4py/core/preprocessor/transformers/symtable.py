@@ -3,12 +3,12 @@ from __future__ import annotations
 import ast
 import builtins
 import re
+import typing
 from collections.abc import KeysView
 from dataclasses import dataclass
 from symtable import symtable as native_symtable
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
+if typing.TYPE_CHECKING:
     from omp4py.core.preprocessor.transformers.context import Context
 
 __all__ = ["SymbolEntry", "SymbolTable", "global_symtable", "omp_name", "runtime_ast"]

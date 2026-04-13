@@ -23,11 +23,13 @@ the runtime.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import typing
 
 # BEGIN_CYTHON_IMPORTS
-if TYPE_CHECKING:
-    from omp4py.runtime.lowlevel.numeric import pyint, pyint_array
+from omp4py.runtime.lowlevel.atomic import AtomicInt
+
+if typing.TYPE_CHECKING:
+    from omp4py.runtime.lowlevel.numeric import new_pyint_array, pyint, pyint_array
 
 # END_CYTHON_IMPORTS
 
@@ -53,11 +55,16 @@ class Device:
         max_active_levels (pyint): Corresponds to the
             `max-active-levels-var` ICV. Specifies the maximum number of
             nested active parallel regions.
+
+        threads_busy (AtomicInt): Number of OpenMP threads currently executing
+            (implementation state).
     """
 
     stacksize: pyint
     wait_policy_active: bool
     max_active_levels: pyint
+    ## Implementation States
+    threads_busy: AtomicInt
 
     def copy(self) -> Device:
         """Create a shallow copy of the device ICVs.
@@ -69,6 +76,8 @@ class Device:
         obj.stacksize = self.stacksize
         obj.wait_policy_active = self.wait_policy_active
         obj.max_active_levels = self.max_active_levels
+        ## Implementation States
+        obj.threads_busy = AtomicInt.new(1)
         return obj
 
 
@@ -234,7 +243,8 @@ class Data:
         obj: Data = Data.__new__(Data)
         obj.dyn = self.dyn
         obj.nest = self.nest
-        obj.nthreads = self.nthreads
+        obj.nthreads = new_pyint_array(len(self.nthreads))
+        obj.nthreads[:] = self.nthreads[:]
         obj.run_sched = self.run_sched
         obj.bind = self.bind
         obj.thread_limit = self.thread_limit

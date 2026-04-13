@@ -3,13 +3,13 @@ from __future__ import annotations
 import ast
 import functools
 import operator
-from typing import TYPE_CHECKING
+import typing
 
 from omp4py.core.preprocessor.transformers.operators import get_reduction, resolve_names
 from omp4py.core.preprocessor.transformers.symtable import runtime_ast
 from omp4py.core.preprocessor.transformers.transformer import Context, syntax_error_ctx
 
-if TYPE_CHECKING:
+if typing.TYPE_CHECKING:
     from omp4py.core.parser.tree import (
         Construct,
         DataScope,

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import typing
 
-if TYPE_CHECKING:
+if typing.TYPE_CHECKING:
     from omp4py.core.parser.tree import Span
 
 def syntax_error(message: str, span: Span, source: str, filename: str) -> SyntaxError:

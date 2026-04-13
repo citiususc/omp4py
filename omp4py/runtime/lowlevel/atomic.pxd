@@ -23,7 +23,6 @@ cdef class AtomicFlag:
 
 
 cdef class AtomicObject:
-    cdef object _holder
     cdef atomic_uintptr_t _value
 
     @staticmethod
@@ -33,6 +32,9 @@ cdef class AtomicObject:
 
     cdef bint set(self, object value)
 
+    cdef object exchange(self, object desired)
+
+    cdef bint compare_exchange(self, object expected, object desired)
 
 cdef class AtomicInt:
     cdef atomic_llong _value

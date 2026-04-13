@@ -14,24 +14,11 @@ not yet been initialized, `threadlocal_init` is called.
 This design avoids the overhead of `threading.local` and provides faster
 access when the runtime is compiled with Cython.
 """
-
+cimport omp4py.runtime.lowlevel.threadlocalh #thread_local keyword
 from cpython.object cimport PyObject
 
-cdef extern from *: # https://stackoverflow.com/questions/18298280/how-to-declare-a-variable-as-thread-local-portably
+cdef extern from *:
     """
-    #ifndef thread_local
-    # if __STDC_VERSION__ >= 201112 && !defined __STDC_NO_THREADS__
-    #  define thread_local _Thread_local
-    # elif defined _WIN32 && ( defined _MSC_VER || defined __ICL || defined __DMC__ || defined __BORLANDC__ )
-    #  define thread_local __declspec(thread)
-    /* note that ICC (linux) and Clang are covered by __GNUC__ */
-    # elif defined __GNUC__ || defined __SUNPRO_C || defined __hpux || defined __xlC__
-    #  define thread_local __thread
-    # else
-    #  error "Cannot define thread_local"
-    # endif
-    #endif
-
     static thread_local PyObject** omp4py_local = NULL;
 
     static CYTHON_INLINE PyObject **omp4py_threadlocal_cinit(void);

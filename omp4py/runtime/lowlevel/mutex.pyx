@@ -17,6 +17,8 @@ providing faster synchronization while keeping the same public API as
 the pure Python runtime.
 """
 
+cimport omp4py.runtime.lowlevel.threadlocalh #thread_local keyword
+
 cdef extern from *:
     """
     #undef PyEvent
@@ -30,6 +32,15 @@ cdef extern from *:
             return PyMutex_LockFast(m);
         #endif
     }
+
+    thread_local unsigned long omp4py_thread_native_cache = -1;
+
+    unsigned long omp4py_thread_native_cache_get(){
+        if (omp4py_thread_native_cache != -1){ return omp4py_thread_native_cache;}
+        omp4py_thread_native_cache = PyThread_get_thread_native_id();
+        return omp4py_thread_native_cache;
+    }
+
     """
 
     void PyMutex_Lock(PyMutex *m)
@@ -42,7 +53,7 @@ cdef extern from *:
 
     void PyEvent_Wait(PyEvent *evt)
 
-    unsigned long thread_id "PyThread_get_thread_native_id"()
+    unsigned long thread_id "omp4py_thread_native_cache_get"()
 
 
 cdef class Mutex:

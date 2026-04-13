@@ -15,6 +15,7 @@ keeping the same API as the pure Python runtime.
 """
 
 from cpython.object cimport PyObject
+from cpython.ref cimport Py_INCREF, Py_XINCREF, Py_DECREF, Py_XDECREF
 from libc.stdint cimport uintptr_t
 
 cdef extern from "<stdatomic.h>":
@@ -28,6 +29,7 @@ cdef extern from "<stdatomic.h>":
 
     uintptr_t atomic_load_up "atomic_load"(atomic_uintptr_t *obj)
     void atomic_store_up "atomic_store"(atomic_uintptr_t *obj, uintptr_t desired)
+    uintptr_t atomic_exchange_up "atomic_exchange"(atomic_uintptr_t *obj, uintptr_t desired)
     bint atomic_compare_exchange_strong_up "atomic_compare_exchange_strong"(atomic_uintptr_t *obj, uintptr_t * expected,
                                                                             uintptr_t desired)
 
@@ -105,22 +107,38 @@ cdef class AtomicObject:
     @staticmethod
     cdef AtomicObject new():
         cdef AtomicObject obj = AtomicObject.__new__(AtomicObject)
-        atomic_store_up(&obj._value, 0)
-        obj._holder = None
+        cdef PyObject * none = <PyObject *> None
+        atomic_store_up(&obj._value, <uintptr_t> none)
+        Py_XINCREF(none)
         return obj
 
     def __init__(self):
         raise ValueError("use new() class method")
 
     cdef object get(self):
-        cdef uintptr_t ref = atomic_load_up(&self._value)
-        if ref == 0:
-            return None
-        return <object> <PyObject *> ref
+        return <object> <PyObject *> atomic_load_up(&self._value)
 
     cdef bint set(self, object value):
-        cdef uintptr_t ZERO = <uintptr_t> 0
-        if atomic_compare_exchange_strong_up(&self._value, &ZERO, <uintptr_t> <PyObject *> value):
-            self._holder = <object> <PyObject *> atomic_load_up(&self._value)
+        cdef PyObject * none = <PyObject *> None
+        if atomic_compare_exchange_strong_up(&self._value, <uintptr_t *> &none, <uintptr_t> <PyObject *> value):
+            Py_XDECREF(none)
+            Py_INCREF(value)
             return True
         return False
+
+    cdef object exchange(self, object desired):
+        cdef object old = <object> <PyObject *> (
+            atomic_exchange_up(&self._value, <uintptr_t> <PyObject *> desired))
+        Py_DECREF(self._value)
+        return old
+
+    cdef bint compare_exchange(self, object expected, object desired):
+        cdef PyObject * c_expected = <PyObject *> expected
+        if atomic_compare_exchange_strong_up(&self._value, <uintptr_t *> &c_expected, <uintptr_t> <PyObject *> desired):
+            Py_DECREF(expected)
+            Py_INCREF(desired)
+            return True
+        return False
+
+    def __dealloc__(self):
+        Py_XDECREF(<PyObject *>self._value)

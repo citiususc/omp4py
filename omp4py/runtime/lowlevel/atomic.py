@@ -9,8 +9,8 @@ The provided primitives include:
 - `AtomicFlag`: A boolean flag with an atomic `test_and_set` operation.
 - `AtomicInt`: An integer value supporting common atomic operations such
   as exchange, compare-and-exchange, and arithmetic updates.
-- `AtomicObject`: A container that allows a value to be set atomically
-  once.
+- `AtomicObject`: Atomic container that allows a value to be set and
+  exchange atomically.
 
 These implementations are designed to behave similarly to their C atomic
 counterparts while remaining compatible with the pure Python runtime and
@@ -222,7 +222,7 @@ class AtomicInt:
 
 
 class AtomicObject[T]:
-    """Atomic container that allows a value to be set atomically once."""
+    """Atomic container that allows a value to be set and exchange atomically."""
 
     _value: T | None
     _lock: threading.Lock
@@ -239,7 +239,7 @@ class AtomicObject[T]:
     def __init__(self) -> None:
         """Initialize the container."""
         self._value = None
-        self.lock = threading.Lock()
+        self._lock = threading.Lock()
 
     def get(self) -> T | None:
         """Return the stored value.
@@ -250,7 +250,9 @@ class AtomicObject[T]:
         return self._value
 
     def set(self, value: T) -> bool:
-        """Atomically set the value if it has not been assigned yet.
+        """Atomically set the value if it is None.
+
+        Like `compare_exchange(None, value)`.
 
         Args:
             value (T): Value to store.
@@ -260,8 +262,37 @@ class AtomicObject[T]:
         """
         if self._value is not None:
             return False
-        with self.lock:
+        with self._lock:
             if self._value is None:
                 self._value = value
+                return True
+            return False
+
+    def exchange(self, desired: T) -> object | None:
+        """Atomically replace the value.
+
+        Args:
+            desired (T): Value to store.
+
+        Returns:
+            T: old value, or `None` if not set.
+        """
+        with self._lock:
+            old_value, self._value = self._value, desired
+        return old_value
+
+    def compare_exchange(self, expected: T, desired: T) -> bool:
+        """Replace the value if it is the same as `expected`.
+
+        Args:
+            expected (T): Expected current value.
+            desired (T): New value if comparison succeeds.
+
+        Returns:
+            bool: `True` if the value was replaced.
+        """
+        with self._lock:
+            if id(self._value) == id(expected):
+                self._value = desired
                 return True
             return False
