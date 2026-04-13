@@ -14,3 +14,5 @@ and modify OpenMP ICVs in a Pythonic way, ensuring consistent behavior
 across pure Python and compiled runtimes.
 """
 import omp4py.runtime.icvs.defaults as _
+from omp4py.runtime.icvs.icvs import *  # noqa: F403
+

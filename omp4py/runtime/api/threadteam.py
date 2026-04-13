@@ -20,7 +20,7 @@ from omp4py.runtime.lowlevel.numeric import new_pyint_array, pyint, pyint_array
 from omp4py.runtime.tasks.context import omp_ctx
 
 if typing.TYPE_CHECKING:
-    from omp4py.runtime.icvs.icvs import RunSched
+    from omp4py.runtime.icvs import RunSched
 
 # END_CYTHON_IMPORTS
 

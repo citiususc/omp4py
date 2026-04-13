@@ -1,9 +1,11 @@
+from omp4py.runtime.lowlevel.atomic cimport AtomicInt
 from omp4py.runtime.lowlevel.numeric cimport pyint, pyint_array
 
 cdef class Device:
     cdef pyint stacksize
     cdef bint wait_policy_active
     cdef pyint max_active_levels
+    cdef AtomicInt threads_busy
 
     cdef Device copy(self)
 

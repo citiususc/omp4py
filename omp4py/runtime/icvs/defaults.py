@@ -31,6 +31,7 @@ from omp4py.runtime.lowlevel.numeric import new_pyint_array
 __all__ = []
 
 from omp4py.runtime.icvs.places import parse as parse_places
+from omp4py.runtime.lowlevel.atomic import AtomicInt
 
 
 def parse(name: str, regex: str, sensitive: bool = False) -> tuple[str | None, ...]:
@@ -255,6 +256,7 @@ def set_defaults() -> None:
     icvs.defaults.team_size = 1
     icvs.defaults.thread_num = 0
     icvs.defaults.device_vars = icvs.Device.__new__(icvs.Device)
+    icvs.defaults.device_vars.threads_busy = AtomicInt.new(1)
     icvs.defaults.global_vars = icvs.Global.__new__(icvs.Global)
     icvs.defaults.implicit_task_vars = icvs.ImplicitTask.__new__(icvs.ImplicitTask)
 
