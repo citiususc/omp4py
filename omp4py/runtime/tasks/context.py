@@ -23,8 +23,12 @@ from __future__ import annotations
 import typing
 
 # BEGIN_CYTHON_IMPORTS
-from omp4py.runtime.icvs.icvs import Data, defaults
+from omp4py.runtime.icvs import Data, defaults
 from omp4py.runtime.lowlevel import threadlocal
+from omp4py.runtime.tasks.task import SharedContext, Task
+
+if typing.TYPE_CHECKING:
+    from omp4py.runtime.tasks.threadprivate import TPrivRef
 
 # END_CYTHON_IMPORTS
 
@@ -38,9 +42,76 @@ class TaskContext:
 
     Attributes:
         icvs (Data): Internal control variables for the runtime.
+        task (Task): The currently executing task.
+        tpvars (list[TPrivRef]): The `threadprivate` variables stored in the runtime state.
+        all_tpvars (list[list[TPrivRef]] | None): Collection of thread-private
+            variables for all threads, preserved beyond thread team lifetime.
+    """
+    icvs: Data
+    task: Task
+    tpvars: list[TPrivRef]
+    all_tpvars: list[list[TPrivRef]] | None
+
+    @staticmethod
+    def new(task: Task, tpvars: list[TPrivRef]) -> TaskContext:
+        """Create a new `TaskContext`.
+
+        Args:
+            task (Task): The first executing task.
+            tpvars (list[TPrivRef]): The `threadprivate` variables.
+
+        Returns:
+            TaskContext: Container for per-thread runtime state.
+        """
+        obj: TaskContext = TaskContext.__new__(TaskContext)
+        obj.task = task
+        obj.icvs = task.icvs
+        obj.tpvars = tpvars
+        obj.all_tpvars = None
+        return obj
+
+    def push(self, task: Task) -> None:
+        """Switch to a new task, saving the current one.
+
+        The given task becomes the currently executing task. The previous
+        task is stored so that execution can be resumed later via `pop()`.
+
+        Args:
+            task (Task): The task to switch to.
+        """
+        task._return_to = task
+        self.task = task
+        self.icvs = task.icvs
+
+    def pop(self) -> None:
+        """Restore the previously executing task.
+
+        If a previous task was saved by `push()`, it is restored as the
+        currently executing task along with its associated runtime state.
+        """
+        if self.task._return_to is not None:
+            self.task = self.task._return_to
+            self.icvs = self.task.icvs
+
+
+class ImplicitTask(Task):
+    """Implicit task created for the initial thread and non-OpenMP created threads.
+
+    This task represents the default execution context when no explicit task
+    has been created by the OpenMP runtime.
     """
 
-    icvs: Data
+    @staticmethod
+    def new() -> ImplicitTask:
+        """Create a new implicit task instance.
+
+        Returns:
+            ImplicitTask: A newly initialized implicit task with a shared
+            context and default internal control variables (ICVs).
+        """
+        obj: ImplicitTask = ImplicitTask.__new__(ImplicitTask)
+        obj._newTask(SharedContext.new(), defaults.copy())
+        return obj
 
 
 def context_init() -> None:
@@ -51,8 +122,7 @@ def context_init() -> None:
     initializes it with default internal control variables, and stores it
     in thread-local storage.
     """
-    ctx: TaskContext = TaskContext.__new__(TaskContext)
-    ctx.icvs = defaults.copy()
+    ctx = TaskContext.new(ImplicitTask.new(), [])
     threadlocal.threadlocal_set(ctx)
 
 
