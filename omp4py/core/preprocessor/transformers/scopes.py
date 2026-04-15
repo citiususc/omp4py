@@ -243,7 +243,7 @@ def _variable_scope( # noqa: C901 PLR0912 PLR0913
                 f_inits.append(ctr.span.to_ast(ast.Global(global_vars)))
 
     for name in sorted(set_private):
-        if s := f_symbols.get(name, ann=True):
+        if s := f_symbols.get(name):
             ann: ast.expr | None = None
             f_inits.append(dec_annotation(ctx, s))
 

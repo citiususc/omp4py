@@ -85,8 +85,12 @@ class SymbolEntry:
         scope_name (str): Name used in the current scope (possibly renamed).
         old_name (str): Previous name before transformation.
         used (bool): Whether the variable is read.
-        assigned (bool): Whether the variable is assigned.
+        __assigned (bool): Whether the variable is assigned. (it uses a setter)
         global_ (bool): Whether the variable is declared as global.
+        dec_global (bool): Whether the variable has been explicitly declared
+            as `global` in the current scope.
+        dec_nonlocal (bool): Whether the variable has been explicitly declared
+            as `nonlocal` in the current scope.
         threadprivate (bool): Whether the variable is thread-private.
         annotation (ast.expr | None): Type annotation, if provided.
     """
@@ -95,10 +99,28 @@ class SymbolEntry:
     scope_name: str
     old_name: str
     used: bool = False
-    assigned: bool = False
+    __assigned: bool = False
     global_: bool = False
+    dec_global: bool = False
+    dec_nonlocal: bool = False
     threadprivate: bool = False
     annotation: ast.expr | None = None
+
+    @property
+    def assigned(self) -> bool:
+        """Whether the variable has been assigned a value.
+
+        Setting this property may affect the `global_` flag: if the symbol
+        is marked as global but has not been explicitly declared with a
+        `global` statement, assigning to it will clear the `global_` flag.
+        """
+        return self.__assigned
+
+    @assigned.setter
+    def assigned(self, value: bool) -> None:
+        if self.global_ and not self.dec_global:
+            self.global_ = False
+        self.__assigned = value
 
     @property
     def renamed(self) -> bool:
@@ -128,12 +150,14 @@ class SymbolTableVisitor(ast.NodeVisitor):
     - Propagation of global and nonlocal declarations
 
     Attributes:
+        parent (SymbolTableVisitor | None): Parent scope.
         symbols (dict[str, SymbolEntry]): Collected symbols in the current scope.
         check_namespace (bool): Whether to enforce namespace traversal rules.
         to_rename (set[str]): Set of identifiers marked for renaming.
         global_ (bool): Whether the current scope is global.
     """
 
+    parent: SymbolTableVisitor | None
     symbols: dict[str, SymbolEntry]
     check_namespace: bool
     to_rename: set[str]
@@ -154,6 +178,7 @@ class SymbolTableVisitor(ast.NodeVisitor):
                 initialize in the symbol table. If None, the visitor operates
                 in a local scope.
         """
+        self.parent = None
         self.to_rename = set()
         self.check_namespace = False
         self.symbols = {}
@@ -201,6 +226,15 @@ class SymbolTableVisitor(ast.NodeVisitor):
             else:
                 old_name: str = real_name if n is None or n == "1" else (PREFIX + str(int(n) - 1) + real_name)
             symbol = self.symbols[real_name] = SymbolEntry(real_name, name, old_name)
+            # Check symbol in parent tables
+            parent_table: SymbolTableVisitor | None = self.parent
+            while parent_table and real_name not in parent_table.symbols:
+                parent_table = parent_table.parent
+            if parent_table:
+                parent = parent_table.symbols[real_name]
+                symbol.annotation = parent.annotation
+                symbol.threadprivate = parent.threadprivate
+                symbol.global_ = parent.global_
 
         if real_name in self.to_rename and symbol.old_name == symbol.scope_name:
             new_name: str = PREFIX + str(1 if n is None else (int(n) + 1)) + real_name
@@ -208,6 +242,7 @@ class SymbolTableVisitor(ast.NodeVisitor):
             symbol.scope_name = new_name
 
         if self.global_:
+            symbol.dec_global = True
             symbol.global_ = True
 
         return symbol
@@ -367,6 +402,7 @@ class SymbolTableVisitor(ast.NodeVisitor):
                 node.names[i] = s.scope_name
             s.assigned = True
             s.global_ = True
+            s.dec_global = True
 
     def visit_Nonlocal(self, node: ast.Nonlocal) -> None:
         """Process a nonlocal declaration.
@@ -381,6 +417,7 @@ class SymbolTableVisitor(ast.NodeVisitor):
             if self.must_rename(name, s := self.update_symbol(name)):
                 node.names[i] = s.scope_name
             s.assigned = True
+            s.dec_nonlocal = True
 
     def visit_Name(self, node: ast.Name) -> None:
         """Process a variable reference.
@@ -411,6 +448,9 @@ class SymbolTableVisitor(ast.NodeVisitor):
         if self.must_rename(node.arg, s := self.update_symbol(node.arg)):
             node.arg = s.scope_name
         s.assigned = True
+        match node.annotation:
+            case ast.Attribute(value=ast.Name(id="_omp")):
+                return
         s.annotation = node.annotation
 
     def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
@@ -425,6 +465,9 @@ class SymbolTableVisitor(ast.NodeVisitor):
         if isinstance(node.target, ast.Name):
             if self.must_rename(node.target.id, s := self.update_symbol(node.target.id)):
                 node.target.id = s.scope_name
+            match node.annotation:
+                case ast.Attribute(value=ast.Name(id="_omp")):
+                    return
             s.annotation = node.annotation
 
 
@@ -507,6 +550,7 @@ class SymbolTable:
         """
         child: SymbolTable = SymbolTable()
         child._parent = self
+        child._visitor.parent = self._visitor
         return child
 
     def rename(self, names: set[str], node: ast.AST) -> SymbolTable:
@@ -562,7 +606,7 @@ class SymbolTable:
         """
         return self._visitor.symbols[name]
 
-    def get(self, name: str, parents: bool = False, module: bool = False, ann: bool = False) -> SymbolEntry | None:
+    def get(self, name: str, parents: bool = False, module: bool = False) -> SymbolEntry | None:
         """Retrieve a symbol entry by name.
 
         Supports lookup across parent scopes and optional annotation
@@ -572,36 +616,14 @@ class SymbolTable:
             name (str): Identifier name.
             parents (bool): Whether to search parent scopes.
             module (bool): Whether to allow module-level lookup.
-            ann (bool): Whether to resolve annotations using parent scopes.
 
         Returns:
             SymbolEntry | None: Matching symbol entry, if found.
         """
         if name in self._visitor.symbols:
-            s = self._visitor.symbols[name]
-            if ann and not s.annotation:
-                s.annotation = self.get_annotation(name)
-            return s
+            return self._visitor.symbols[name]
         if parents and self._parent and (not self._parent._visitor.global_ or module):  # noqa: SLF001
             return self._parent.get(name, parents)
-        return None
-
-    def get_annotation(self, name: str) -> ast.expr | None:
-        """Retrieve the type annotation associated with a symbol.
-
-        This method searches for an annotation in the current scope and,
-        if not found, recursively checks parent scopes.
-
-        Args:
-            name (str): Identifier name.
-
-        Returns:
-            ast.expr | None: Annotation node if available, otherwise None.
-        """
-        if name in self._visitor.symbols and (ann := self._visitor.symbols[name].annotation):
-            return ann
-        if self._parent:
-            return self._parent.get_annotation(name)
         return None
 
     def __contains__(self, name: str) -> bool:
