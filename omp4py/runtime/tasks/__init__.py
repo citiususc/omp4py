@@ -10,5 +10,6 @@ regions. All tasking and parallel execution logic of the OpenMP model
 is implemented within this package.
 """
 from omp4py.runtime.tasks.barrier import barrier  # noqa: F401
+from omp4py.runtime.tasks.compile import cy_cast, cy_typeof  # noqa: F401
 from omp4py.runtime.tasks.parallelism import parallel  # noqa: F401
 from omp4py.runtime.tasks.threadprivate import threadprivate, threadprivates  # noqa: F401
