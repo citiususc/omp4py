@@ -101,7 +101,7 @@ class SymbolEntry:
     annotation: ast.expr | None = None
 
     @property
-    def renamed(self):
+    def renamed(self) -> bool:
         """Check whether the symbol has been renamed in the current scope.
 
         Returns:
@@ -582,7 +582,7 @@ class SymbolTable:
             if ann and not s.annotation:
                 s.annotation = self.get_annotation(name)
             return s
-        if parents and self._parent and (not self._parent._visitor.global_ or module):
+        if parents and self._parent and (not self._parent._visitor.global_ or module):  # noqa: SLF001
             return self._parent.get(name, parents)
         return None
 

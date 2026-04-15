@@ -27,7 +27,7 @@ from omp4py.core.preprocessor.transformers.transformer import Context, construct
 __all__ = []
 
 @construct.register
-def _(ctr: ThreadPrivate, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
+def _(ctr: ThreadPrivate, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]: # noqa: C901
     """Transform the OpenMP-like `threadprivate` construct into a runtime-aware AST representation.
 
     This transformation implements thread-local storage semantics for global
@@ -117,7 +117,7 @@ def _(ctr: ThreadPrivate, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
             raise syntax_error_ctx(msg, Span.from_ast(node), ctx)
 
         def visit_Name(self, node: ast.Name) -> ast.expr:
-            if node.id not in new_names or node.lineno < ctr.span.lineno:
+            if node.id not in new_names or node.lineno <= ctr.span.lineno:
                 return node
             new_node = self.replaced(node)
 

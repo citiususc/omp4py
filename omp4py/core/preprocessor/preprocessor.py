@@ -41,30 +41,69 @@ __all__ = ["process_file", "process_object", "process_source"]
 
 
 def process_object[T: Callable[..., typing.Any] | type](arg: T, opt: Options) -> T:
+    """Preprocess a Python callable or class and return the transformed object.
+
+    The input object is converted into source code and an AST, processed by
+    the OpenMP transformation pipeline, compiled, and executed in the
+    original module namespace. The transformed definition replaces the
+    original one in the generated result.
+
+    Args:
+        arg (T): Function or class to preprocess.
+        opt (Options): Preprocessing options.
+
+    Returns:
+        T: The transformed function or class.
+    """
     filename: str
     data: str
     module: ast.Module
     filename, data, module = obj2ast.from_object(arg)
     module: ast.Module = process(module, False, data, filename, opt)
-    globals: ModuleType = sys.modules[arg.__module__]
+    module_globals: ModuleType = sys.modules[arg.__module__]
 
     # TODO: use importlib to use pyc cache
     code: CodeType = compile(source=module, filename=filename, mode="exec")
     result: dict[str, typing.Any] = {}
-    exec(code, globals.__dict__, result)  # noqa: S102
+    exec(code, module_globals.__dict__, result)  # noqa: S102
 
     import omp4py.runtime as _omp  # noqa: PLC0415
 
-    globals.__dict__["_omp"] = _omp
+    module_globals.__dict__["_omp"] = _omp
 
     return result[arg.__name__]
 
 
 def process_source(data: str, filename: str, opt: Options) -> ast.Module:
+    """Preprocess Python source code and return the transformed AST.
+
+    The source code is parsed into an abstract syntax tree and passed
+    through the OpenMP transformation pipeline.
+
+    Args:
+        data (str): Python source code.
+        filename (str): Virtual or real filename associated with the source.
+        opt (Options): Preprocessing options.
+
+    Returns:
+        ast.Module: Transformed module AST.
+    """
     return process(ast.parse(data, filename), True, data, filename, opt)
 
 
 def process_file(filename: str, opt: Options) -> str:
+    """Preprocess a Python source file and write the transformed code.
+
+    The input file is read, transformed, and written into the generated
+    `__omp__` directory using the same filename.
+
+    Args:
+        filename (str): Path to the Python file to preprocess.
+        opt (Options): Preprocessing options.
+
+    Returns:
+        str: Path to the generated transformed file.
+    """
     with open(filename) as f:
         data: str = f.read()
     module: ast.Module = process_source(data, filename, opt)
@@ -75,10 +114,26 @@ def process_file(filename: str, opt: Options) -> str:
     with target.open("w") as f:
         f.write(ast.unparse(module))
 
-    return filename
+    return str(target)
 
 
 def process(module: ast.Module, is_module: bool, full_source: str, filename: str, opt: Options) -> ast.Module:
+    """Apply the OpenMP transformation pipeline to an AST module.
+
+    This is the internal entry point used by all preprocessing modes. It
+    creates an `OmpTransformer`, applies all AST rewrites, and optionally
+    writes the transformed source to a debug dump file.
+
+    Args:
+        module (ast.Module): Input module AST.
+        is_module (bool): Whether the source represents a full importable module.
+        full_source (str): Original source code.
+        filename (str): Source filename.
+        opt (Options): Preprocessing options.
+
+    Returns:
+        ast.Module: Transformed module AST.
+    """
     transformer: OmpTransformer = OmpTransformer(full_source, filename, module, is_module, opt)
     new_module = transformer.transform()
     if opt.dump is not None:

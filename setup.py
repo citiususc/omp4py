@@ -11,33 +11,29 @@ from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
 
 free_threading: bool = sysconfig.get_config_vars().get("Py_GIL_DISABLED") == 1
-compiler_directives: dict = {"freethreading_compatible": free_threading, "annotation_typing": True}
+compiler_directives: dict = {
+    "binding": True,
+    "boundscheck": False,
+    "wraparound": False,
+    "initializedcheck": False,
+    "nonecheck": False,
+    "freethreading_compatible": free_threading,
+    "overflowcheck": False,
+    "overflowcheck.fold": False,
+    "embedsignature": False,
+    "cdivision": True,
+    "cpow": True,
+    "always_allow_keywords": False,
+    "profile": False,
+    "linetrace": False,
+    "infer_types": True,
+    "annotation_typing": True,
+    "emit_code_comments": True,
+}
 
 __all__ = []
 
-old_extensions: list[str] = [
-    "omp4py/runtime/api_.py",
-    "omp4py/runtime/basics/array.pyx",
-    "omp4py/runtime/basics/atomic.pyx",
-    "omp4py/runtime/basics/casting.py",
-    "omp4py/runtime/basics/lock.pyx",
-    "omp4py/runtime/basics/math.pyx",
-    "omp4py/runtime/basics/threadlocal.pyx",
-    "omp4py/runtime/basics/types.pyx",
-    "omp4py/runtime/common/barrier.py",
-    "omp4py/runtime/common/controlvars.py",
-    "omp4py/runtime/common/enums.py",
-    "omp4py/runtime/common/tasks.py",
-    "omp4py/runtime/common/thread.py",
-    "omp4py/runtime/common/threadshared.py",
-    "omp4py/runtime/parallelism.py",
-    "omp4py/runtime/synchronization.py",
-    "omp4py/runtime/tasking.py",
-    "omp4py/runtime/variables.py",
-    "omp4py/runtime/workdistribution.py",
-]
-
-new_extensions: list[str] = [
+extensions: list[str] = [
     # api
     "omp4py/runtime/api/threadteam.py",
     # icvs
@@ -56,9 +52,6 @@ new_extensions: list[str] = [
     "omp4py/runtime/tasks/task.py",
     "omp4py/runtime/tasks/threadprivate.py",
 ]
-
-extensions = old_extensions
-#extensions = new_extensions
 
 preproc_pattern: re.Pattern[str] = re.compile(
     r"\s*#\s*BEGIN_CYTHON_(?P<name>\w+)[^\n]*\n(?P<body>[\s\S]*?)\n\s*#\s*END_CYTHON_(?P=name)",
@@ -88,7 +81,7 @@ def preprocessor(m: re.Match[str], file: str) -> str:
                     imports.append((node.lineno - 1, node.col_offset + 4))  # col_offset + from
 
             for module in imports[::-1]:
-                lines[module[0]] = lines[module[0]][: module[1]] + " cython.cimports." + lines[module[0]][module[1]:]
+                lines[module[0]] = lines[module[0]][: module[1]] + " cython.cimports." + lines[module[0]][module[1] :]
 
             result = "\n" + ("".join(lines))
         case "IGNORE":
@@ -115,10 +108,16 @@ class Build(build_ext):
     def build_extension(self, ext: Extension) -> None:
         self.parse_imports(ext)
         with contextlib.chdir("build"):
-            ext.sources = [str(Path("build") / file) for file in cythonize(
-                ext, language_level="3", annotate=self.editable_mode, compiler_directives=compiler_directives,
-                include_path=[".."],
-            )[0].sources]
+            ext.sources = [
+                str(Path("build") / file)
+                for file in cythonize(
+                    ext,
+                    language_level="3",
+                    annotate=self.editable_mode,
+                    compiler_directives=compiler_directives,
+                    include_path=[".."],
+                )[0].sources
+            ]
         if self.compiler.compiler_type == "msvc":
             ext.extra_compile_args += ["/std:c11", "/experimental:c11atomics"]
 

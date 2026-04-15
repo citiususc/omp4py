@@ -23,19 +23,17 @@ from __future__ import annotations
 import ast
 import typing
 
+from omp4py.core.parser.tree import Parallel  # noqa: TC001 required
 from omp4py.core.preprocessor.transformers.scopes import check_scopes, create_scope
 from omp4py.core.preprocessor.transformers.symtable import omp_name, runtime_ast
 from omp4py.core.preprocessor.transformers.transformer import Context, construct, syntax_error_ctx
 from omp4py.core.preprocessor.transformers.utils import fix_body_locations
 
-if typing.TYPE_CHECKING:
-    from omp4py.core.parser.tree import Parallel
-
 __all__ = []
 
 
 @construct.register
-def _(ctr: Parallel, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
+def _(ctr: Parallel, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:  # noqa: C901
     """Transform an OpenMP `parallel` construct.
 
     This transformation encapsulates the parallel region body into a

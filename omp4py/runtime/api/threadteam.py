@@ -9,7 +9,6 @@ the threads participating in the current contention group.
 
 from __future__ import annotations
 
-import sys
 import typing
 from warnings import deprecated
 
@@ -327,7 +326,7 @@ _run2omp_sched[_omp_sched2run[omp_sched_dynamic] - _run2omp_sched_offset] = omp_
 _run2omp_sched[_omp_sched2run[omp_sched_guided] - _run2omp_sched_offset] = omp_sched_guided
 _run2omp_sched[_omp_sched2run[omp_sched_auto] - _run2omp_sched_offset] = omp_sched_auto
 
-if cython.compiled: # export module global variables
+if cython.compiled:  # export module global variables
     globals()["omp_sched_t"] = type(omp_sched_static)
     globals()["omp_sched_static"] = omp_sched_static
     globals()["omp_sched_dynamic"] = omp_sched_dynamic

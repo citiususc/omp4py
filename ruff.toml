@@ -1,25 +1,30 @@
 line-length = 120
 indent-width = 4
+exclude = ["cython.py", "*/parser/*", "*/compiler/*"]
 
 [lint]
 select = ["ALL"]
 
 ignore = [
+    "ARG001",
     "D418",
-    "TD002",
-    "TD003",
-    "PTH123",
-    "TC003",
-    "TRY003",
     "FBT001",
     "FBT002",
-    "FBT003"
+    "FBT003",
+    "PTH123",
+    "TC003",
+    "TD002",
+    "TD003",
+    "TRY003",
 ]
 
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 
 [lint.pydocstyle]
 convention = "google"
+
+[lint.pylint]
+max-statements = 75
 
 [format]
 docstring-code-format = true

@@ -244,8 +244,8 @@ def omp(value: Any = None, /, py: str | None = None, **kwargs: Unpack[OmpKargs])
             return contextmanager(lambda: (yield))()
         elif isinstance(value, ModuleType):
             return set_omp_package(value, Options(**kwargs))
-        from omp4py.core.preprocessor import process_object # Lazy import, only when needed
+        from omp4py.core.preprocessor import process_object  # noqa: PLC0415 Lazy import, only when needed
         return process_object(value, Options(**kwargs))
     else:
-        from omp4py.core.preprocessor import process_file # Lazy import, only when needed
+        from omp4py.core.preprocessor import process_file  # noqa: PLC0415 Lazy import, only when needed
         return process_file(py, Options(**kwargs))

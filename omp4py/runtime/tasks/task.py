@@ -73,7 +73,7 @@ class Task:
     icvs: Data
     barrier: Barrier
 
-    def _newTask(self, shared: SharedContext, icvs: Data) -> Task:
+    def _new_task(self, shared: SharedContext, icvs: Data, barrier: Barrier) -> Task:
         """Initialize a new task instance.
 
         This method sets up the execution context for a task, including
@@ -83,6 +83,7 @@ class Task:
         Args:
             shared (SharedContext): Shared execution context.
             icvs (Data): Internal control variables.
+            barrier (Barrier): Synchronization barrier for the task.
 
         Returns:
             Task: Initialized task instance.
@@ -90,7 +91,7 @@ class Task:
         self._return_to = None
         self.shared = shared
         self.icvs = icvs
-        self.barrier = Barrier.new(icvs.team_size)
+        self.barrier = barrier
         return self
 
 
@@ -242,7 +243,9 @@ class Barrier:
         my_gen = self._gen
         if self._waiting.add(1) == self._parties:
             self._gen += 1
-        cython.cast(Event, self._event.get()).wait()
+            cython.cast(Event, self._event.get()).notify()
+        else:
+            cython.cast(Event, self._event.get()).wait()
         self._waiting.sub(1)
         return my_gen < self._gen
 

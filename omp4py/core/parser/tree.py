@@ -57,7 +57,7 @@ __all__ = [
     "Shared",
     "Single",
     "Span",
-    "ThreadPrivate"
+    "ThreadPrivate",
 ]
 
 

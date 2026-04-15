@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from omp4py.core.parser.error import syntax_error
+from omp4py.core.parser.error import syntax_error as syntax_error
 from omp4py.core.parser.tree import *  # noqa: F403
 
 

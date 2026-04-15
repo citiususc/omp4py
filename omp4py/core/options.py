@@ -41,11 +41,6 @@ class Options:
     """Options container.
 
     Attributes:
-        _new_core (ClassVar[bool]):
-            (Temporary) Enables the new preprocessor core instead of the default
-            implementation. This is intended for development purposes only until
-            the new core becomes the default behavior.
-
         pure (ClassVar[bool]):
             This option forces the system to use pure Python mode, even if the
             library has been compiled with native extensions, effectively
@@ -64,7 +59,6 @@ class Options:
             Optional path to dump the transformed AST as source code
             for debugging or inspection purposes.
     """
-    _new_core: ClassVar[bool] = environ_bool("_OMP4PY_NEW_CORE", default=False)
     pure: ClassVar[bool] = environ_bool("OMP4PY_PURE", default=False)
     alias: str = "omp"
     debug: bool = environ_bool("OMP4PY_DEBUG", default=False)

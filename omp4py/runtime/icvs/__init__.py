@@ -13,6 +13,6 @@ By importing this package, users and runtime components can access
 and modify OpenMP ICVs in a Pythonic way, ensuring consistent behavior
 across pure Python and compiled runtimes.
 """
-import omp4py.runtime.icvs.defaults as _
+import omp4py.runtime.icvs.defaults as _  # noqa: F401
 from omp4py.runtime.icvs.icvs import *  # noqa: F403
 

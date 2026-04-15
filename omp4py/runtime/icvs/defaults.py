@@ -22,23 +22,23 @@ import os
 import re
 import sys
 
+import omp4py.runtime.icvs.places as icvs_places
+
 # BEGIN_CYTHON_IMPORTS
 from omp4py.runtime.icvs import icvs
+from omp4py.runtime.lowlevel.atomic import AtomicInt
 from omp4py.runtime.lowlevel.numeric import new_pyint_array
 
 # END_CYTHON_IMPORTS
 
 __all__ = []
 
-from omp4py.runtime.icvs.places import parse as parse_places
-from omp4py.runtime.lowlevel.atomic import AtomicInt
 
-
-def parse(name: str, regex: str, sensitive: bool = False) -> tuple[str | None, ...]:
+def parse(name: str, regex: str, sensitive: bool = False) -> tuple[str, ...]:
     if name not in os.environ:
         return ()
     if result := re.match(regex, os.environ[name].strip(), 0 if sensitive else re.IGNORECASE):
-        return result.groups()
+        return result.groups("")
     print(f"omp4py: Unknown value for environment variable {name}", file=sys.stderr)  # noqa: T201
     return ()
 
@@ -85,7 +85,8 @@ def set_nthreads(verbose: bool) -> None:
     if result := parse("OMP_NUM_THREADS", r"^([1-9][0-9]*(?:\s*,\s*[1-9][0-9]*)*)$"):
         values: list[int] = [int(value) for value in result[0].split(",")]
         icvs.defaults.nthreads = new_pyint_array(len(values))
-        icvs.defaults.nthreads[:] = values
+        for i in range(len(values)):
+            icvs.defaults.nthreads[i] = values[i]
     else:
         icvs.defaults.nthreads = new_pyint_array(1)
         icvs.defaults.nthreads[0] = os.process_cpu_count() or 1
@@ -113,7 +114,8 @@ def set_bind(verbose: bool) -> None:
             icvs.defaults.bind_active = True
             values: list[int] = [ord(value[0]) for value in result[0].split(",")]
             icvs.defaults.bind = new_pyint_array(len(values))
-            icvs.defaults.bind[:] = values
+            for i in range(len(values)):
+                icvs.defaults.bind[i] = values[i]
     else:
         icvs.defaults.bind_active = False
         icvs.defaults.bind = new_pyint_array(0)
@@ -126,7 +128,7 @@ def set_bind(verbose: bool) -> None:
 
 
 def set_place_partition(verbose: bool) -> None:
-    if result := parse_places("OMP_PLACES"):
+    if result := icvs_places.parse("OMP_PLACES"):
         icvs.defaults.implicit_task_vars.place_partition = result
 
         if verbose:

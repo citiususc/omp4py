@@ -114,7 +114,7 @@ class Omp4pyLoader(SourceFileLoader):
             types.CodeType: Compiled code object produced from the
             transformed AST.
         """
-        from omp4py.core import preprocessor # Lazy import, only when needed (no cache available)
+        from omp4py.core import preprocessor  # noqa: PLC0415  Lazy import, only when needed (no cache available)
         opt: Options = omp_packages[self.name]
         module: ast.Module  = preprocessor.process_source(data, path, opt)
         return super().source_to_code(module, path, *args, **kwargs)

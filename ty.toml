@@ -2,3 +2,6 @@
 include = [
     "omp4py",
 ]
+exclude = [
+    "omp4py/core/imports/cython.py",
+]

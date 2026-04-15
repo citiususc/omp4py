@@ -23,13 +23,9 @@ the runtime.
 
 from __future__ import annotations
 
-import typing
-
 # BEGIN_CYTHON_IMPORTS
 from omp4py.runtime.lowlevel.atomic import AtomicInt
-
-if typing.TYPE_CHECKING:
-    from omp4py.runtime.lowlevel.numeric import new_pyint_array, pyint, pyint_array
+from omp4py.runtime.lowlevel.numeric import new_pyint_array, pyint, pyint_array
 
 # END_CYTHON_IMPORTS
 

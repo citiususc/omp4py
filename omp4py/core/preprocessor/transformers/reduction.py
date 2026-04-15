@@ -27,11 +27,12 @@ from __future__ import annotations
 import ast
 import typing
 
+from omp4py.core.parser.tree import DeclareReduction  # noqa: TC001 required
 from omp4py.core.preprocessor.transformers.operators import new_reduction
 from omp4py.core.preprocessor.transformers.transformer import Context, construct, syntax_error_ctx
 
-if typing.TYPE_CHECKING:
-    from omp4py.core.parser.tree import DeclareReduction
+__all__ = []
+
 
 @construct.register
 def _(ctr: DeclareReduction, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:

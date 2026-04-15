@@ -1,4 +1,4 @@
-"""Pure-Python import hook for forcing source-based omp4py runtime loading.
+"""Pure-Python import hook for forcing source-based `omp4py` runtime loading.
 
 This module defines a custom importer that intercepts Python's import
 machinery to prevent loading compiled native extensions for the
@@ -30,8 +30,9 @@ class PureImport:
     """
 
     @staticmethod
-    def find_spec(name: str, import_path: Sequence[str] | None = None, target_module: types.ModuleType | None = None) \
-            -> ModuleSpec | None:
+    def find_spec(
+        name: str, import_path: Sequence[str] | None = None, target_module: types.ModuleType | None = None,
+    ) -> ModuleSpec | None:
         """Find and customize the module specification for `omp4py` runtime modules.
 
         This method is invoked by Python's import machinery as part of the
@@ -54,7 +55,7 @@ class PureImport:
         if "omp4py.runtime" in name:
             spec: ModuleSpec | None = PathFinder.find_spec(name, import_path, target_module)
             if spec is not None and isinstance(spec.loader, ExtensionFileLoader) and spec.origin is not None:
-                pure_file: str = str(Path(spec.origin).parent / (name.split(".")[-1] + ".py"))
+                pure_file: str = str(Path(spec.origin).parent / (name.rsplit(".", maxsplit=1)[-1] + ".py"))
                 spec.loader = SourceFileLoader(name, pure_file)
                 spec.origin = pure_file
 
@@ -65,4 +66,5 @@ class PureImport:
 sys.meta_path.insert(0, PureImport())
 if "cython" not in sys.modules:
     from omp4py.core.imports import cython
+
     sys.modules["cython"] = cython

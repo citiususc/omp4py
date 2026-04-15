@@ -77,7 +77,7 @@ def _(ctr: ParallelFor, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
 
 
 @construct.register
-def _(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
+def _(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]: # noqa: C901 PLR0912
     """Transform an OpenMP `for` worksharing construct.
 
     This function rewrites a Python `for` loop into a runtime-driven loop
@@ -534,7 +534,7 @@ def copyprivate(dataclauses: list[CopyPrivate], ctx: Context) -> list[ast.stmt]:
     )
     update_ast = span.to_ast(
         ast.Assign(
-            [ast.Tuple(var_names, ast.Store())], ast.Call(ast.Name(copyprivate_name), [ast.Name(copyprivate_name)], [])
+            [ast.Tuple(var_names, ast.Store())], ast.Call(ast.Name(copyprivate_name), [ast.Name(copyprivate_name)], []),
         ),
     )
 

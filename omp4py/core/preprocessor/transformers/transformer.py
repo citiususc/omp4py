@@ -183,7 +183,7 @@ class OmpParser(ast.NodeVisitor):
         find_decorator(self.ctx, node)
         self.generic_visit(node)
 
-    def visit_Call(self, node: ast.Call) -> None:  # noqa: C901
+    def visit_Call(self, node: ast.Call) -> None:  # noqa: C901 PLR0912
         """Process a potential directive call.
 
         This method detects calls to the OpenMP alias (e.g., `omp("...")`),

@@ -25,7 +25,7 @@ import typing
 # BEGIN_CYTHON_IMPORTS
 from omp4py.runtime.icvs import Data, defaults
 from omp4py.runtime.lowlevel import threadlocal
-from omp4py.runtime.tasks.task import SharedContext, Task
+from omp4py.runtime.tasks.task import Barrier, SharedContext, Task
 
 if typing.TYPE_CHECKING:
     from omp4py.runtime.tasks.threadprivate import TPrivRef
@@ -79,7 +79,7 @@ class TaskContext:
         Args:
             task (Task): The task to switch to.
         """
-        task._return_to = task
+        task._return_to = task # noqa: SLF001
         self.task = task
         self.icvs = task.icvs
 
@@ -89,8 +89,8 @@ class TaskContext:
         If a previous task was saved by `push()`, it is restored as the
         currently executing task along with its associated runtime state.
         """
-        if self.task._return_to is not None:
-            self.task = self.task._return_to
+        if self.task._return_to is not None: # noqa: SLF001
+            self.task = self.task._return_to # noqa: SLF001
             self.icvs = self.task.icvs
 
 
@@ -110,7 +110,7 @@ class ImplicitTask(Task):
             context and default internal control variables (ICVs).
         """
         obj: ImplicitTask = ImplicitTask.__new__(ImplicitTask)
-        obj._newTask(SharedContext.new(), defaults.copy())
+        obj._new_task(SharedContext.new(), defaults.copy(), Barrier.new(1))
         return obj
 
 

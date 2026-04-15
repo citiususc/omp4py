@@ -14,7 +14,7 @@ cdef class Task:
     cdef Task _return_to
     cdef Barrier barrier
 
-    cdef Task _newTask(self, SharedContext shared, Data icvs)
+    cdef Task _new_task(self, SharedContext shared, Data icvs, Barrier barrier)
 
 cdef class SharedItem:
     cdef object value

@@ -11,6 +11,7 @@ variables (`tpvars`).
 """
 
 from __future__ import annotations
+import py
 
 import threading
 import typing
@@ -23,7 +24,7 @@ from omp4py.runtime.lowlevel.numeric import new_pyint_array
 from omp4py.runtime.lowlevel.threadlocal import threadlocal_set
 from omp4py.runtime.tasks.barrier import barrier
 from omp4py.runtime.tasks.context import TaskContext, omp_ctx
-from omp4py.runtime.tasks.task import SharedContext, Task
+from omp4py.runtime.tasks.task import Barrier, SharedContext, Task
 from omp4py.runtime.tasks.threadprivate import TPrivRef, copy_private, map_privates, update_privates
 
 if typing.TYPE_CHECKING:
@@ -54,7 +55,9 @@ class ParallelTask(Task):
     f: Callable[[], None]
 
     @staticmethod
-    def new(init: Callable[[], None] | None, f: Callable[[], None], shared: SharedContext, icvs: Data) -> ParallelTask:
+    def new(
+        init: Callable[[], None] | None, f: Callable[[], None], shared: SharedContext, icvs: Data, barrier: Barrier,
+    ) -> ParallelTask:
         """Create a new parallel task instance.
 
         Args:
@@ -63,18 +66,19 @@ class ParallelTask(Task):
             f (Callable[[], None]): Function executed in the parallel region.
             shared (SharedContext): Shared execution context across threads.
             icvs (Data): Internal control variables for execution.
+            barrier (Barrier): Synchronization barrier for the task.
 
         Returns:
             ParallelTask: A newly initialized parallel task.
         """
         obj: ParallelTask = ParallelTask.__new__(ParallelTask)
-        obj._newTask(shared, icvs)
-        obj.init_f = init
+        obj._new_task(shared, icvs, barrier)
+        obj.init = init
         obj.f = f
         return obj
 
 
-def set_nthreads(ctx: TaskContext, icvs: Data, active: bool, num_threads: tuple[pyint, ...]) -> None:
+def set_nthreads(ctx: TaskContext, icvs: Data, active: bool, num_threads: tuple[pyint, ...]) -> None:  # noqa: C901
     """Determine and set the number of threads for a parallel region.
 
     This function computes the size of the thread team based on runtime
@@ -96,7 +100,7 @@ def set_nthreads(ctx: TaskContext, icvs: Data, active: bool, num_threads: tuple[
     elif ctx.icvs.nest and ctx.icvs.active_levels == ctx.icvs.device_vars.max_active_levels:
         icvs.team_size = 1
     else:
-        requested: pyint = num_threads[0] if num_threads_len > 0 else ctx.icvs.nthreads[0]
+        requested: pyint = num_threads[0] if num_threads_len > 0 and num_threads[0] > 0 else ctx.icvs.nthreads[0]
 
         while requested != 1:
             threads_busy = ctx.icvs.device_vars.threads_busy.get()
@@ -115,6 +119,7 @@ def set_nthreads(ctx: TaskContext, icvs: Data, active: bool, num_threads: tuple[
 
     if num_threads_len > 1:
         ctx.icvs.nthreads = new_pyint_array(num_threads_len - 1)
+        i: pyint
         for i in range(num_threads_len - 1):
             ctx.icvs.nthreads[i] = num_threads[i + 1]
     elif len(ctx.icvs.nthreads) > 1:
@@ -193,7 +198,7 @@ def parallel(
     f: Callable[[], None],
     active: bool,
     num_threads: tuple[pyint, ...],
-    proc_bind: pyint, # TODO: affinity
+    proc_bind: pyint,  # TODO: affinity
     copyin: tuple[str, ...],
 ) -> None:
     """Execute a function inside a parallel region.
@@ -235,11 +240,12 @@ def parallel(
 
     init: Callable[[], None] | None = get_copyin(ctx, copyin) if len(copyin) else None
     shared = SharedContext.new()
+    barrier = Barrier.new(new_icvs.team_size)
 
     i: pyint
-    for i in range(ctx.icvs.team_size - 1, -1, -1):  # TODO: affinity and timeout pool
+    for i in range(new_icvs.team_size - 1, -1, -1):  # TODO: affinity and timeout pool
         thread_ctx = TaskContext.new(ctx.task, [] if all_tpvars is None else all_tpvars[i]) if i > 0 else ctx
-        thread_ctx.push(ParallelTask.new(init, f, shared, new_icvs.copy()))
+        thread_ctx.push(ParallelTask.new(init, f, shared, new_icvs.copy(),barrier))
         thread_ctx.icvs.thread_num = i
         if i > 0:
             threading.Thread(target=_parallel_thread_init, args=(thread_ctx,)).start()

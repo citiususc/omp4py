@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=78", "Cython>=3.2.4"]
+requires = ["setuptools>=78", "Cython @ git+https://github.com/cython/cython@a94adc7"] #cython >=3.3
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -44,8 +44,8 @@ compile = ["setuptools>=78", "Cython>=3.2.4"]
 all = ['omp4py[compile]']
 
 [dependency-groups]
-dev = ["omp4py[all]", "pytest>=9.0.0", "pytest-cov>=7.0.0"]
-checks = [{ include-group = "dev" }, "ruff==0.14.11", "ty==0.0.11", "pydoclint==0.8.3"]
+dev = ["omp4py[all]", "pytest>=9.0.3", "pytest-cov>=7.1.0", "lark>=1.3.1"]
+checks = [{ include-group = "dev" }, "ruff>=0.15.10", "ty>=0.0.29"]
 
 [tool.pytest.ini_options]
 addopts = "-v --cov --cov-report=html --timeout 3"

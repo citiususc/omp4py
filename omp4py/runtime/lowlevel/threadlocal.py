@@ -17,7 +17,7 @@ from collections.abc import Callable
 import cython
 
 if cython.compiled:
-    from cython.cimports.omp4py.runtime.lowlevel.threadlocal0 import omp4py_local0_ptr  # type:ignore[unresolved-import]
+    from cython.cimports.omp4py.runtime.lowlevel.threadlocal0 import omp4py_local0_ptr  # ty:ignore[unresolved-import]
 
     threadlocal_link = omp4py_local0_ptr
 

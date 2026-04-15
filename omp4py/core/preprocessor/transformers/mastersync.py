@@ -21,13 +21,10 @@ applied during the transformation phase of the preprocessor.
 from __future__ import annotations
 
 import ast
-import typing
 
+from omp4py.core.parser.tree import Barrier, Critical, Master, Ordered  # noqa: TC001 required
 from omp4py.core.preprocessor.transformers.symtable import runtime_ast
 from omp4py.core.preprocessor.transformers.transformer import Context, construct
-
-if typing.TYPE_CHECKING:
-    from omp4py.core.parser.tree import Barrier, Critical, Master, Ordered
 
 __all__ = []
 

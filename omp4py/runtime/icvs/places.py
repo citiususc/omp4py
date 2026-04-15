@@ -60,7 +60,7 @@ class Place:
 
 def tokenize(text: str) -> Generator[tuple[str, str]]:
     for match in TOKEN_RE.finditer(text):
-        if match.lastgroup != "SKIP":
+        if match.lastgroup and match.lastgroup != "SKIP":
             yield match.lastgroup, match.group()
     yield "END", ""
 

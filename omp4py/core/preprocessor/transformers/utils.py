@@ -12,7 +12,7 @@ from collections.abc import Callable, Generator
 __all__ = ["fix_body_locations", "is_unpack_if", "unpack_if", "walk"]
 
 
-def walk(node: ast.AST, descend: Callable[[ast.AST], bool] = lambda n: True) -> Generator[ast.AST]:
+def walk(node: ast.AST, descend: Callable[[ast.AST], bool] = lambda _: True) -> Generator[ast.AST]:
     """Recursively walk the AST starting from `node`, with optional control over descent.
 
     This function behaves similarly to `ast.walk`, but allows the caller to
