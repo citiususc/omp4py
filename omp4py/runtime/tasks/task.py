@@ -241,12 +241,13 @@ class Barrier:
             cycle during this call. False if the barrier was interrupted.
         """
         my_gen = self._gen
+        event = cython.cast(Event, self._event.get())
         if self._waiting.add(1) == self._parties:
+            self._waiting.set(0)
             self._gen += 1
-            cython.cast(Event, self._event.get()).notify()
-        else:
-            cython.cast(Event, self._event.get()).wait()
-        self._waiting.sub(1)
+            self.interrupt()
+            return True
+        event.wait()
         return my_gen < self._gen
 
     def interrupt(self) -> None:
