@@ -33,6 +33,14 @@ cdef extern from *:
         #endif
     }
 
+    PyMutex PyMutex_Init_(){
+        return (PyMutex){0};
+    }
+
+    PyEvent PyEvent_Init_(){
+        return (PyEvent){0};
+    }
+
     thread_local unsigned long omp4py_thread_native_cache = -1;
 
     unsigned long omp4py_thread_native_cache_get(){
@@ -43,11 +51,17 @@ cdef extern from *:
 
     """
 
+    PyMutex PyMutex_Init_()
+
     void PyMutex_Lock(PyMutex *m)
 
     int PyMutex_LockFast_(PyMutex *m)
 
     void PyMutex_Unlock(PyMutex *m)
+
+    int PyMutex_IsLocked(PyMutex *m)
+
+    PyEvent PyEvent_Init_()
 
     void _PyEvent_Notify(PyEvent *evt)
 
@@ -60,7 +74,7 @@ cdef class Mutex:
     @staticmethod
     cdef Mutex new():
         m: Mutex = Mutex.__new__(Mutex)
-        m._mutex = PyMutex(0)
+        m._mutex = PyMutex_Init_()
         return m
 
     def __init__(self):
@@ -87,7 +101,7 @@ cdef class RMutex:
     @staticmethod
     cdef RMutex new():
         m: RMutex = RMutex.__new__(RMutex)
-        m._mutex = PyMutex(0)
+        m._mutex = PyMutex_Init_()
         m._own = -1
         m._level = 0
         return m
@@ -131,7 +145,7 @@ cdef class Event:
     @staticmethod
     cdef Event new():
         e: Event = Event.__new__(Event)
-        e._event = PyEvent(0)
+        e._event = PyEvent_Init_()
         return e
 
     def __init__(self):
