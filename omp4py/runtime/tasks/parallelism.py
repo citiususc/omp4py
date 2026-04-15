@@ -56,7 +56,11 @@ class ParallelTask(Task):
 
     @staticmethod
     def new(
-        init: Callable[[], None] | None, f: Callable[[], None], shared: SharedContext, icvs: Data, barrier: Barrier,
+        init: Callable[[], None] | None,
+        f: Callable[[], None],
+        shared: SharedContext,
+        icvs: Data,
+        barrier: Barrier,
     ) -> ParallelTask:
         """Create a new parallel task instance.
 
@@ -243,11 +247,15 @@ def parallel(
     barrier = Barrier.new(new_icvs.team_size)
 
     i: pyint
+    threads: list[threading.Thread] = []
     for i in range(new_icvs.team_size - 1, -1, -1):  # TODO: affinity and timeout pool
         thread_ctx = TaskContext.new(ctx.task, [] if all_tpvars is None else all_tpvars[i]) if i > 0 else ctx
-        thread_ctx.push(ParallelTask.new(init, f, shared, new_icvs.copy(),barrier))
+        thread_ctx.push(ParallelTask.new(init, f, shared, new_icvs.copy(), barrier))
         thread_ctx.icvs.thread_num = i
         if i > 0:
-            threading.Thread(target=_parallel_thread_init, args=(thread_ctx,)).start()
+            threads.append(threading.Thread(target=_parallel_thread_init, args=(thread_ctx,)))
+            threads[len(threads) - 1].start()
 
     _parallel_main()
+    for i in range(len(threads)):
+        threads[i].join()
