@@ -234,10 +234,11 @@ def parallel(
     new_icvs: Data = ctx.icvs.copy()
     set_nthreads(ctx, new_icvs, active, num_threads)
 
+    new_icvs.active_levels +=1
     all_tpvars: list[list[TPrivRef]] | None = None
     if new_icvs.active_levels == 1 and not ctx.icvs.dyn:
         if ctx.all_tpvars is None or len(ctx.all_tpvars) != new_icvs.team_size:
-            all_tpvars = [[] for _ in range(new_icvs.team_size)]
+            ctx.all_tpvars = all_tpvars = [[] for _ in range(new_icvs.team_size)]
             all_tpvars[0] = ctx.tpvars
         else:
             all_tpvars = ctx.all_tpvars

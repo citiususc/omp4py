@@ -79,7 +79,7 @@ class TaskContext:
         Args:
             task (Task): The task to switch to.
         """
-        task._return_to = task # noqa: SLF001
+        task._return_to = self.task # noqa: SLF001
         self.task = task
         self.icvs = task.icvs
 
