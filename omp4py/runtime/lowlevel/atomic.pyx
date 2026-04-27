@@ -90,17 +90,32 @@ cdef class AtomicInt:
     cdef pyint add(self, pyint arg):
         return atomic_fetch_add_ll(&self._value, arg) + arg
 
+    cdef pyint fetch_add(self, pyint arg):
+        return atomic_fetch_add_ll(&self._value, arg)
+
     cdef pyint sub(self, pyint arg):
         return atomic_fetch_sub_ll(&self._value, arg) - arg
+
+    cdef pyint fetch_sub(self, pyint arg):
+        return atomic_fetch_sub_ll(&self._value, arg)
 
     cdef pyint or_(self, pyint arg):
         return atomic_fetch_or_ll(&self._value, arg) | arg
 
+    cdef pyint fetch_or(self, pyint arg):
+        return atomic_fetch_or_ll(&self._value, arg)
+
     cdef pyint xor(self, pyint arg):
         return atomic_fetch_xor_ll(&self._value, arg) ^ arg
 
+    cdef pyint fetch_xor(self, pyint arg):
+        return atomic_fetch_xor_ll(&self._value, arg)
+
     cdef pyint and_(self, pyint arg):
         return atomic_fetch_and_ll(&self._value, arg) & arg
+
+    cdef pyint fetch_and(self, pyint arg):
+        return atomic_fetch_and_ll(&self._value, arg)
 
 
 cdef class AtomicObject:

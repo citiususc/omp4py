@@ -54,10 +54,20 @@ cdef class AtomicInt:
 
     cdef pyint add(self, pyint arg)
 
+    cdef pyint fetch_add(self, pyint arg)
+
     cdef pyint sub(self, pyint arg)
+
+    cdef pyint fetch_sub(self, pyint arg)
 
     cdef pyint or_(self, pyint arg)
 
+    cdef pyint fetch_or(self, pyint arg)
+
     cdef pyint xor(self, pyint arg)
 
+    cdef pyint fetch_xor(self, pyint arg)
+
     cdef pyint and_(self, pyint arg)
+
+    cdef pyint fetch_and(self, pyint arg)

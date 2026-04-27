@@ -168,6 +168,20 @@ class AtomicInt:
             self._value += arg
             return self._value
 
+    def fetch_add(self, arg: pyint) -> pyint:
+        """Atomically add to the value.
+
+        Args:
+            arg (pyint): Value to add.
+
+        Returns:
+            pyint: Value held previously.
+        """
+        with self._lock:
+            old = self._value
+            self._value += arg
+            return old
+
     def sub(self, arg: pyint) -> pyint:
         """Atomically subtract from the value.
 
@@ -180,6 +194,20 @@ class AtomicInt:
         with self._lock:
             self._value -= arg
             return self._value
+
+    def fetch_sub(self, arg: pyint) -> pyint:
+        """Atomically subtract from the value.
+
+        Args:
+            arg (pyint): Value to subtract.
+
+        Returns:
+            pyint: Value held previously.
+        """
+        with self._lock:
+            old = self._value
+            self._value -= arg
+            return old
 
     def or_(self, arg: pyint) -> pyint:
         """Atomically apply bitwise OR.
@@ -194,6 +222,20 @@ class AtomicInt:
             self._value = self._value | arg
             return self._value
 
+    def fetch_or(self, arg: pyint) -> pyint:
+        """Atomically apply bitwise OR.
+
+        Args:
+            arg (pyint): Operand.
+
+        Returns:
+            pyint: Value held previously.
+        """
+        with self._lock:
+            old = self._value
+            self._value = self._value | arg
+            return old
+
     def xor(self, arg: pyint) -> pyint:
         """Atomically apply bitwise XOR.
 
@@ -207,6 +249,20 @@ class AtomicInt:
             self._value = self._value ^ arg
             return self._value
 
+    def fetch_xor(self, arg: pyint) -> pyint:
+        """Atomically apply bitwise XOR.
+
+        Args:
+            arg (pyint): Operand.
+
+        Returns:
+            pyint: Value held previously.
+        """
+        with self._lock:
+            old = self._value
+            self._value = self._value ^ arg
+            return old
+
     def and_(self, arg: pyint) -> pyint:
         """Atomically apply bitwise AND.
 
@@ -219,6 +275,20 @@ class AtomicInt:
         with self._lock:
             self._value = self._value & arg
             return self._value
+
+    def fetch_and(self, arg: pyint) -> pyint:
+        """Atomically apply bitwise AND.
+
+        Args:
+            arg (pyint): Operand.
+
+        Returns:
+            pyint: Value held previously.
+        """
+        with self._lock:
+            old = self._value
+            self._value = self._value & arg
+            return old
 
 
 class AtomicObject[T]:
