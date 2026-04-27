@@ -18,3 +18,4 @@ internal implementation changes.
 """
 
 from omp4py.runtime.tasks import *  # noqa: F403
+from omp4py.runtime.lowlevel.numeric import pyint, pyint_array, pyfloat, pyint_array # noqa: F403

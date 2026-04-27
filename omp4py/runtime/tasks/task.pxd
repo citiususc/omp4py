@@ -1,4 +1,4 @@
-from cpython.object cimport Py_TYPE
+from cpython.object cimport Py_TYPE, PyTypeObject
 
 from omp4py.runtime.icvs cimport Data
 from omp4py.runtime.lowlevel.atomic cimport AtomicInt, AtomicObject
@@ -7,6 +7,9 @@ from omp4py.runtime.lowlevel.numeric cimport pyint
 
 cdef inline bint same_class(object obj1, object obj2):
     return Py_TYPE(obj1) == Py_TYPE(obj2)
+
+cdef inline bint instanceof(object obj, type cls):
+    return Py_TYPE(obj) == <PyTypeObject*>cls
 
 cdef class Task:
     cdef SharedContext shared
@@ -31,6 +34,8 @@ cdef class SharedContext:
     cdef SharedContext new()
 
     cdef SharedContext mirror(self)
+
+    cdef object get(self, type cls)
 
     cdef object sync(self, object obj)
 

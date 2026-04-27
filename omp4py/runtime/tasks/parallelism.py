@@ -11,7 +11,6 @@ variables (`tpvars`).
 """
 
 from __future__ import annotations
-import py
 
 import threading
 import typing
@@ -20,7 +19,7 @@ from collections.abc import Callable
 import cython
 
 # BEGIN_CYTHON_IMPORTS
-from omp4py.runtime.lowlevel.numeric import new_pyint_array
+from omp4py.runtime.lowlevel.numeric import new_pyint_array, pyint
 from omp4py.runtime.lowlevel.threadlocal import threadlocal_set
 from omp4py.runtime.tasks.barrier import barrier
 from omp4py.runtime.tasks.context import TaskContext, omp_ctx
@@ -29,7 +28,6 @@ from omp4py.runtime.tasks.threadprivate import TPrivRef, copy_private, map_priva
 
 if typing.TYPE_CHECKING:
     from omp4py.runtime.icvs import Data
-    from omp4py.runtime.lowlevel.numeric import pyint
 
 # END_CYTHON_IMPORTS
 
@@ -251,7 +249,7 @@ def parallel(
     threads: list[threading.Thread] = []
     for i in range(new_icvs.team_size - 1, -1, -1):  # TODO: affinity and timeout pool
         thread_ctx = TaskContext.new(ctx.task, [] if all_tpvars is None else all_tpvars[i]) if i > 0 else ctx
-        thread_ctx.push(ParallelTask.new(init, f, shared, new_icvs.copy(), barrier))
+        thread_ctx.push(ParallelTask.new(init, f, shared.mirror(), new_icvs.copy(), barrier))
         thread_ctx.icvs.thread_num = i
         if i > 0:
             threads.append(threading.Thread(target=_parallel_thread_init, args=(thread_ctx,)))

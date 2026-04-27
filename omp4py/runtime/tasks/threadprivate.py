@@ -27,6 +27,7 @@ import copy
 from omp4py.runtime.lowlevel.mutex import Mutex
 from omp4py.runtime.lowlevel.numeric import new_pyint_array, pyint, pyint_array
 from omp4py.runtime.tasks.context import omp_ctx
+from omp4py.runtime.tasks.privatization import copy_var
 
 # END_CYTHON_IMPORTS
 
@@ -140,13 +141,10 @@ def map_privates(names: tuple[str, ...]) -> pyint_array:
 def copy_private(obj: object) -> object:
     """Create a copy of a threadprivate value.
 
-    This function currently uses shallow copying and serves as the
-    default copy strategy for threadprivate variables.
-
     Args:
         obj: Object to copy.
 
     Returns:
         object: Shallow copy of the input object.
     """
-    return copy.copy(obj)  # TODO: replicate declare reduction copy strategy
+    return copy_var(obj)

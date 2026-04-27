@@ -37,7 +37,7 @@ if typing.TYPE_CHECKING:
     )
     from omp4py.core.preprocessor.transformers.symtable import SymbolEntry, SymbolTable
 
-__all__ = ["check_scopes", "create_scope", "dec_annotation", "get_scopes", "modify_scope", "scope_names"]
+__all__ = ["check_scopes", "create_scope", "dec_annotation", "dec_cast", "get_scopes", "modify_scope", "scope_names"]
 
 
 def get_scopes(*scopes: DataScope) -> set[str]:
@@ -90,7 +90,7 @@ def check_scopes(ctx: Context, *scopes: DataScope, allow_threadprivate: bool = F
     return used
 
 
-def create_scope( # noqa: PLR0913
+def create_scope(  # noqa: PLR0913
     ctr: Construct,
     ctx: Context,
     f_ast: ast.FunctionDef,
@@ -122,7 +122,7 @@ def create_scope( # noqa: PLR0913
     return _variable_scope(ctr, ctx, f_ast, default, shared_ds, private_ds, first_private_ds, reduction_ds)
 
 
-def modify_scope( # noqa: PLR0913
+def modify_scope(  # noqa: PLR0913
     ctr: Construct,
     ctx: Context,
     body: list[ast.stmt],
@@ -151,7 +151,7 @@ def modify_scope( # noqa: PLR0913
     return _variable_scope(ctr, ctx, f_ast, None, [], private_ds, first_private_ds, reduction_ds)
 
 
-def _variable_scope( # noqa: C901 PLR0912 PLR0913
+def _variable_scope(  # noqa: C901 PLR0912 PLR0913
     ctr: Construct,
     ctx: Context,
     f_ast: ast.FunctionDef,
@@ -295,3 +295,26 @@ def dec_annotation(ctx: Context, s: SymbolEntry, new_name: str | None = None) ->
     if ann is None:
         ann = ast.Call(runtime_ast("cy_typeof"), [ast.Name(s.old_name)])
     return ast.AnnAssign(ast.Name(new_name or s.scope_name, ast.Store()), ann, simple=1)
+
+
+def dec_cast(ctx: Context, origin: ast.expr, s: SymbolEntry, new_name: str | None = None) -> ast.Assign:
+    """Generate a cast assignment for a variable declaration.
+
+    This function creates an `AnnAssign` node that cast a variable
+    to the same type as an existing symbol. If no explicit annotation
+    is available, a runtime type inference call is used.
+
+    Args:
+        ctx (Context): Active transformation context.
+        origin (ast.expr): Expression to be cast.
+        s (SymbolEntry): Symbol entry to replicate.
+        new_name (str | None): Optional new variable name.
+
+    Returns:
+        ast.AnnAssign: Annotated assignment node.
+    """
+    ann = s.annotation
+    if ann is None:
+        ann = ast.Call(runtime_ast("cy_typeof"), [ast.Name(s.old_name)])
+    value = ast.Call(runtime_ast("cy_cast"), [ann, origin])
+    return ast.Assign([ast.Name(new_name or s.scope_name, ast.Store())], value)

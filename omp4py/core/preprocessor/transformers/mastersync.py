@@ -103,7 +103,7 @@ def _(ctr: Ordered, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
     """Transform an OpenMP `ordered` construct.
 
     Enforces a sequential execution order within a parallel loop by
-    inserting runtime calls that delimit ordered regions.
+    inserting a runtime call that delimit ordered region.
 
     Args:
         ctr (Ordered): Parsed `ordered` construct.
@@ -113,10 +113,8 @@ def _(ctr: Ordered, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
     Returns:
         list[ast.stmt]: Transformed AST statements.
     """
-    init: ast.stmt = ctr.span.to_ast(ast.Expr(ast.Call(runtime_ast("ordered_init"))))
-    end: ast.stmt = ctr.span.to_ast(ast.Expr(ast.Call(runtime_ast("ordered_end"))))
+    init: ast.stmt = ctr.span.to_ast(ast.Expr(ast.Call(runtime_ast("ordered_start"))))
 
     ast.fix_missing_locations(init)
-    ast.fix_missing_locations(end)
 
-    return [init, *body, end]
+    return [init, *body]

@@ -215,14 +215,14 @@ _default_reductions["__new__"] = (
     ast.Assign(
         [ast.Name("omp_priv", ast.Store())],
         ast.Call(
-            runtime_ast("__new__"),
+            runtime_ast("new_var"),
             [ast.Name("omp_orig")],
         ),
     ),
     ast.Assign(
         [ast.Name("omp_out", ast.Store())],
         ast.Call(
-            runtime_ast("__copy__"),
+            runtime_ast("copy_var"),
             [ast.Name("omp_in")],
         ),
     ),

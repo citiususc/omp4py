@@ -349,6 +349,7 @@ class OmpTransformer(ast.NodeTransformer):
             ast.If | list[ast.stmt]: Transformed node or its body.
         """
         if is_unpack_if(node):
+            self.generic_visit(node)
             return node.body
         return node
 

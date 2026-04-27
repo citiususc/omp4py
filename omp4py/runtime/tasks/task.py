@@ -22,17 +22,15 @@ from omp4py.runtime.lowlevel.atomic import AtomicInt, AtomicObject
 from omp4py.runtime.lowlevel.mutex import Event
 
 if typing.TYPE_CHECKING:
+    from omp4py.runtime.icvs import Data
     from omp4py.runtime.lowlevel.numeric import pyint
 
-
-if typing.TYPE_CHECKING:
-    from omp4py.runtime.icvs import Data
 
 
 # END_CYTHON_IMPORTS
 
 # BEGIN_CYTHON_IGNORE
-__all__ = ["SharedContext", "Task"]
+__all__ = ["SharedContext", "Task", "instanceof", "same_class"]
 
 
 def same_class(obj1: object, obj2: object) -> bool:
@@ -50,6 +48,20 @@ def same_class(obj1: object, obj2: object) -> bool:
     """
     return obj1.__class__ == obj2.__class__
 
+def instanceof(obj: object, cls: type[object]) -> bool:
+    """Check whether an object belongs to a class.
+
+    This function is used to validate that all threads execute consistent
+    structured blocks, as required by the OpenMP execution model.
+
+    Args:
+        obj (object): The object to check.
+        cls (type[object]): The class to compare against.
+
+    Returns:
+        bool: True if the object is an instance of the class.
+    """
+    return isinstance(obj, cls)
 
 # END_CYTHON_IGNORE
 
@@ -162,6 +174,35 @@ class SharedContext:
         obj._current = self._current
         return obj
 
+    def get(self, cls: type[object]) -> object:
+        """Retrieve a shared value across threads.
+
+        This method returns the canonical shared object if it has already been
+        initialized and matches the expected class.
+
+        It is designed to be fast in the common case where the shared value
+        is already available, avoiding unnecessary synchronization or creation.
+
+        If the shared value does not exist, is invalid, or does not match the
+        expected class, `None` is returned. In that case, the caller is expected
+        to fall back to `sync()` to initialize or synchronize the value.
+
+        Args:
+            cls (type[object]): Expected class of the shared value.
+
+        Returns:
+            object | None: The shared canonical value if it exists and matches
+            the expected class; otherwise `None`.
+        """
+        shared : SharedItem | None =self._current.get()
+        if shared is None:
+            return None
+        stored = cython.cast(SharedItem, self._current.get())
+        self._current = stored.next
+        if not instanceof(stored.value, cls):
+            return None # Simulate an empty value to delegate to the sync function
+        return stored.value
+
     def sync(self, obj: object) -> object:
         """Synchronize a shared value across threads.
 
@@ -184,6 +225,7 @@ class SharedContext:
             self._current = shared.next
             return obj
         stored = cython.cast(SharedItem, self._current.get())
+        self._current = stored.next
         if not same_class(obj, stored.value):
             print(  # noqa: T201
                 "error: inconsistent directive execution detected\n"

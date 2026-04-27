@@ -41,7 +41,12 @@ from omp4py.core.parser.tree import (
     Span,
 )
 from omp4py.core.preprocessor.transformers.operators import get_reduction, resolve_names
-from omp4py.core.preprocessor.transformers.scopes import check_scopes, dec_annotation, get_scopes, modify_scope
+from omp4py.core.preprocessor.transformers.scopes import (
+    check_scopes,
+    dec_cast,
+    get_scopes,
+    modify_scope,
+)
 from omp4py.core.preprocessor.transformers.symtable import SymbolTable, omp_name, runtime_ast
 from omp4py.core.preprocessor.transformers.transformer import Context, construct, syntax_error_ctx
 from omp4py.core.preprocessor.transformers.utils import fix_body_locations, unpack_if, walk
@@ -77,7 +82,7 @@ def _(ctr: ParallelFor, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
 
 
 @construct.register
-def _(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]: # noqa: C901 PLR0912
+def _(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:  # noqa: C901 PLR0912
     """Transform an OpenMP `for` worksharing construct.
 
     This function rewrites a Python `for` loop into a runtime-driven loop
@@ -100,19 +105,30 @@ def _(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]: # noqa: C
         list[ast.stmt]: Transformed AST statements implementing the loop.
     """
     collapse_num = ctr.collapse.num.value if ctr.collapse is not None else 1
+    ordered_num = 0 if not ctr.ordered else (ctr.ordered.n.value if ctr.ordered.n else 1)
     for_list: list[ast.For] = for_checks(ctr, body, ctx)
     first_private = ctr.first_private
     private = ctr.private
 
     bounds_name: str = omp_name(ctx, "bounds")
-    bounds_value: list[ast.expr]
-    bounds_ast: ast.AnnAssign = ctr.span.to_ast(
+    bounds_create: ast.AnnAssign = ctr.span.to_ast(
         ast.AnnAssign(
             ast.Name(bounds_name, ast.Store()),
-            ast.Subscript(runtime_ast("pyint"), ast.Constant(3 + 6 * collapse_num)),
-            ast.List(bounds_value := [ast.Constant(0) for _ in range(3 + 6 * collapse_num)]),
+            runtime_ast("ForBounds"),
+            ast.Call(runtime_ast("for_bounds"), [ast.Constant(collapse_num)]),
             simple=1,
         ),
+    )
+
+    bounds_index: list[ast.expr] = [
+        ast.Subscript(ast.Attribute(ast.Name(bounds_name), "rs"), ast.Constant(i * 6 + j), ast.Store())
+        for i in range(collapse_num)
+        for j in range(3)
+    ]
+    bounds_value: list[ast.expr] = [ast.Constant(0) for _ in range(3 * collapse_num)]
+
+    bounds_assign: ast.Assign = ctr.span.to_ast(
+        ast.Assign([ast.Tuple(bounds_index, ast.Store())], ast.Tuple(bounds_value)),
     )
 
     schedule_name: str = "static"
@@ -121,22 +137,24 @@ def _(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]: # noqa: C
         kind = ctr.schedule.type.kind
         if ctr.schedule.type.kind == ScheduleType.Kind.AUTO:
             kind = ScheduleType.Kind.STATIC
-        schedule = ctr.schedule.type.nkind.string.lower()
+        schedule_name = ctr.schedule.type.nkind.string.lower()
         match kind:
             case ScheduleType.Kind.STATIC | ScheduleType.Kind.DYNAMIC | ScheduleType.Kind.GUIDED:
-                for_next = f"{for_next}_{schedule}"
+                for_next = f"{for_next}_{schedule_name}"
+    else:
+        for_next = f"{for_next}_static"
 
     for_init: ast.stmt = ctr.span.to_ast(ast.Expr(for_initc := ast.Call(runtime_ast("for_init"))))
     for_next: ast.stmt = ctr.span.to_ast(ast.While(for_nextc := ast.Call(runtime_ast(for_next)), body))
     for_end: ast.stmt = ctr.span.to_ast(ast.Expr(for_endc := ast.Call(runtime_ast("for_end"))))
-    body = [bounds_ast, for_init, for_next, for_end]
+    body = [bounds_create, bounds_assign, for_init, for_next, for_end]
 
-    # Collapse, bounds, modifier, kind, chunk, ordered
-    for_initc.args.append(ast.Constant(collapse_num))
+    # bounds, modifier, kind, chunk, ordered
     for_initc.args.append(ast.Name(bounds_name))
+    for_initc.args.append(ast.Constant(-1))
     for_initc.args.append(ast.Constant(ord(schedule_name[0])))
     for_initc.args.append(ctr.schedule.chunk.value if ctr.schedule and ctr.schedule.chunk else ast.Constant(-1))
-    for_initc.args.append(ast.Constant(0 if not ctr.ordered else (ctr.ordered.n.value if ctr.ordered.n else 1)))
+    for_initc.args.append(ast.Constant(ordered_num))
 
     for_nextc.args.append(ast.Name(bounds_name))
 
@@ -170,28 +188,68 @@ def _(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]: # noqa: C
                     scope.span.to_ast(ast.Assign([ast.Name(s.old_name, ast.Store())], ast.Name(s.scope_name))),
                 )
 
+    if ordered_num > 0:
+        for_list[-1].body.append(ctr.span.to_ast(ast.Expr(ast.Call(runtime_ast("ordered_next")))))
+
+    # ForBounds-> init, end, rs = [start (0), stop (+1), step(+2), mod(+3), N/A, N/A]
     for i in range(collapse_num):
         for_iter: ast.expr = for_list[i].iter
-        new_start: ast.expr = ast.Subscript(ast.Name(bounds_name), ast.Constant(3 + 6 * i))
-        new_stop: ast.expr = ast.Subscript(ast.Name(bounds_name), ast.Constant(3 + 6 * i + 1))
+
+        if collapse_num > 1:
+            if i == collapse_num - 1:  # its-=1; if its == 0: break
+                for_list[i].body.append(
+                    ast.AugAssign(
+                        ast.Attribute(ast.Name(bounds_name), "it", ast.Store()),
+                        ast.Sub(),
+                        ast.Constant(1),
+                    ),
+                )
+            for_list[i].body.insert(
+                0,
+                ast.If(
+                    ast.UnaryOp(ast.Not(), ast.Attribute(ast.Name(bounds_name), "it")),
+                    [ast.Break()],
+                ),
+            )
+
+            new_start: ast.expr = ast.Subscript(ast.Attribute(ast.Name(bounds_name), "rs"), ast.Constant(6 * i))
+            new_stop: ast.expr = ast.Subscript(ast.Attribute(ast.Name(bounds_name), "rs"), ast.Constant(6 * i + 1))
+
+            new_start = ast.IfExp(
+                ast.Compare(
+                    ast.Attribute(ast.Name(bounds_name), "it"),
+                    [ast.Eq()],
+                    [ast.Attribute(ast.Name(bounds_name), "init")],
+                ),
+                ast.BinOp(
+                    new_start,
+                    ast.Add(),
+                    ast.Subscript(ast.Attribute(ast.Name(bounds_name), "rs"), ast.Constant(6 * i + 3)),
+                ),
+                new_start,
+            )  # start + offset if bounds.rs.it == bounds.rs.init else start
+        else:
+            new_start: ast.expr = ast.Attribute(ast.Name(bounds_name), "init")
+            new_stop: ast.expr = ast.Attribute(ast.Name(bounds_name), "end")
+
         match for_iter:
             case ast.Call(func=ast.Name(id="range"), args=[stop]):
                 for_iter.args[0] = new_start
                 for_iter.args.append(new_stop)
-                bounds_value[3 + 6 * i + 1] = stop
-                bounds_value[3 + 6 * i + 2] = ast.Constant(1)
+                bounds_value[3 * i + 1] = stop
+                bounds_value[3 * i + 2] = ast.Constant(1)
             case ast.Call(func=ast.Name(id="range"), args=[start, stop]):
                 for_iter.args[0] = new_start
                 for_iter.args[1] = new_stop
-                bounds_value[3 + 6 * i] = start
-                bounds_value[3 + 6 * i + 1] = stop
-                bounds_value[3 + 6 * i + 2] = ast.Constant(1)
+                bounds_value[3 * i] = start
+                bounds_value[3 * i + 1] = stop
+                bounds_value[3 * i + 2] = ast.Constant(1)
             case ast.Call(func=ast.Name(id="range"), args=[start, stop, step]):
                 for_iter.args[0] = new_start
                 for_iter.args[1] = new_stop
-                bounds_value[3 + 6 * i] = start
-                bounds_value[3 + 6 * i + 1] = stop
-                bounds_value[3 + 6 * i + 2] = step
+                bounds_value[3 * i] = start
+                bounds_value[3 * i + 1] = stop
+                bounds_value[3 * i + 2] = step
             case _:
                 pass
 
@@ -409,7 +467,10 @@ def _(ctr: Sections, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
     for i in range(len(sections_list)):
         sec_loop.body.append(
             ast.copy_location(
-                ast.If(ast.Compare(ast.Name(sec_id), [ast.Eq()], [ast.Constant(i)]), sections_list[i].body),
+                ast.If(
+                    ast.Compare(ast.Name(sec_id), [ast.Eq()], [ast.Constant(len(sections_list) - i)]),
+                    sections_list[i].body,
+                ),
                 sections_list[i],
             ),
         )
@@ -437,6 +498,9 @@ def _(ctr: Sections, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
                     scope.span.to_ast(ast.Assign([ast.Name(s.old_name, ast.Store())], ast.Name(s.scope_name))),
                 )
 
+    for section in sections_list:
+        section.body.append(ctr.span.to_ast(ast.Continue()))
+
     return fix_body_locations(body)
 
 
@@ -457,8 +521,9 @@ def _(ctr: Single, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
         list[ast.stmt]: Transformed AST statements.
     """
     modify_scope(ctr, ctx, body, ctr.private, ctr.first_private, [])
-
-    single_ast = ctr.span.to_ast(ast.If(ast.Call(runtime_ast("single")), body))
+    single_ast = ctr.span.to_ast(
+        ast.If(ast.Call(runtime_ast("single_init"), [ast.Constant(bool(ctr.copyprivate))]), body),
+    )
     single_end: ast.stmt = ctr.span.to_ast(ast.Expr(single_endc := ast.Call(runtime_ast("single_end"))))
 
     if ctr.no_wait and ctr.copyprivate:
@@ -474,13 +539,17 @@ def _(ctr: Single, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
 
     body: list[ast.stmt] = [single_ast]
     if ctr.copyprivate:
-        body.extend(copyprivate(ctr.copyprivate, ctx))
+        check_scopes(ctx, *ctr.copyprivate, *ctr.private, *ctr.first_private, allow_threadprivate=True)
+        copy_if = copyprivate(ctr.copyprivate, ctx)
+        single_ast.body.extend(copy_if.body)
+        single_ast.orelse.extend(copy_if.orelse)
+
     body.append(single_end)
 
     return fix_body_locations(body)
 
 
-def copyprivate(dataclauses: list[CopyPrivate], ctx: Context) -> list[ast.stmt]:
+def copyprivate(dataclauses: list[CopyPrivate], ctx: Context) -> ast.If:
     """Implement the `copyprivate` clause for `single`.
 
     This function generates a helper function that:
@@ -491,51 +560,61 @@ def copyprivate(dataclauses: list[CopyPrivate], ctx: Context) -> list[ast.stmt]:
     It relies on reduction-like semantics for copying values.
 
     Args:
-        dataclauses (list[CopyPrivate]): Copyprivate clauses.
+        dataclauses (list[CopyPrivate]): `copyprivate` clauses.
         ctx (Context): Transformation context.
 
     Returns:
-        list[ast.stmt]: AST statements implementing the copy operation.
+        ast.If: A template `if` node that separates two groups of statements:
+            - `body`: statements executed by the thread that runs the `single`
+              region (the "executor" thread). This part is responsible for
+              capturing and publishing the values.
+            - `orelse`: statements executed by all other threads. This part
+              receives the synchronized values and updates their local copies.
     """
-    check_scopes(ctx, *dataclauses, allow_threadprivate=True)
     span = dataclauses[0].span
 
-    return_types: list[ast.expr] = []
-    return_names: list[ast.expr] = []
-    var_names: list[ast.expr] = []
-    types_ast = ast.Subscript(ast.Name("tuple"), ast.Tuple(return_types))
-    copyprivate_name = omp_name(ctx, "copyprivate")
-    copyprivate_ast = span.to_ast(ast.FunctionDef(copyprivate_name, ast.arguments(), returns=types_ast))
+    copyprivate_var = omp_name(ctx, "copyprivate")
 
+    get_ast = ast.Assign([ast.Name(copyprivate_var, ast.Store())], copy_get := ast.Call(runtime_ast("single_copy_get")))
+    wait_ast = ast.Assign([ast.Name(copyprivate_var, ast.Store())], ast.Call(runtime_ast("single_copy_wait")))
+    notify_ast = ast.Expr(ast.Call(runtime_ast("single_copy_notify")))
+
+    set_stmts: list[ast.stmt] = [get_ast]
+    update_stmts: list[ast.stmt] = [wait_ast]
+
+    count = 0
     for dataclause in dataclauses:
         for var in dataclause.targets:
-            if s := ctx.symtable.get(var.string, True, True, True):
+            if count > 0 and count % 8 == 0:
+                set_stmts.append(
+                    ast.Assign(
+                        [ast.Name(copyprivate_var, ast.Store())], ast.Attribute(ast.Name(copyprivate_var), "next")
+                    ),
+                )
+                update_stmts.append(
+                    ast.Assign(
+                        [ast.Name(copyprivate_var, ast.Store())], ast.Attribute(ast.Name(copyprivate_var), "next")
+                    ),
+                )
+            if s := ctx.symtable.get(var.string, True, True):
                 stmt = get_reduction(ctx, "__new__", s.annotation)
                 if stmt is None:  # never for __new__
                     continue
+
+                set_stmts.append(
+                    ast.Assign(
+                        [ast.Attribute(ast.Name(copyprivate_var), f"v{count % 8}", ast.Store())],
+                        ast.Name(s.scope_name),
+                    ),
+                )
                 new_name = omp_name(ctx, s.scope_name)
-                assign = dec_annotation(ctx, s, new_name)
-                copyprivate_ast.body.append(assign)
-                copyprivate_ast.body.append(resolve_names(stmt[1], omp_out=new_name, omp_in=s.scope_name))
+                assign = dec_cast(ctx, ast.Attribute(ast.Name(copyprivate_var), f"v{count % 8}"), s, new_name)
 
-                var_names.append(ast.Name(s.scope_name, ast.Store()))
-                return_names.append(ast.Name(new_name))
-                return_types.append(assign.annotation)
+                update_stmts.append(assign)
+                update_stmts.append(resolve_names(stmt[1], omp_out=s.scope_name, omp_in=new_name))
 
-    copyprivate_ast.body.append(ast.Return(ast.Tuple(return_names)))
+            count += 1
 
-    copy_wait_ast: ast.stmt = span.to_ast(
-        ast.AnnAssign(
-            ast.Name(copyprivate_name, ast.Store()),
-            ast.Call(runtime_ast("cy_typeof"), [ast.Name(copyprivate_name)]),
-            ast.Call(runtime_ast("copyprivate_wait"), [ast.Name(copyprivate_name)]),
-            simple=1,
-        ),
-    )
-    update_ast = span.to_ast(
-        ast.Assign(
-            [ast.Tuple(var_names, ast.Store())], ast.Call(ast.Name(copyprivate_name), [ast.Name(copyprivate_name)], []),
-        ),
-    )
-
-    return [copyprivate_ast, copy_wait_ast, update_ast]
+    set_stmts.append(notify_ast)
+    copy_get.args.append(ast.Constant(count))
+    return span.to_ast(ast.If(ast.Name("single"), set_stmts, update_stmts))

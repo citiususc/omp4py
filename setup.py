@@ -49,8 +49,10 @@ extensions: list[str] = [
     "omp4py/runtime/tasks/barrier.py",
     "omp4py/runtime/tasks/context.py",
     "omp4py/runtime/tasks/parallelism.py",
+    "omp4py/runtime/tasks/privatization.py",
     "omp4py/runtime/tasks/task.py",
     "omp4py/runtime/tasks/threadprivate.py",
+    "omp4py/runtime/tasks/worksharing.py",
 ]
 
 preproc_pattern: re.Pattern[str] = re.compile(
