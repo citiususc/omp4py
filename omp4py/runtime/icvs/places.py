@@ -206,15 +206,18 @@ class Parser:
             else:
                 result.values = new_pyint_array(0)
             return result
+
         values: list[int] = []
         partitions: list[int] = []
         for place in places:
             values.extend(place.partition)
             partitions.append(len(values))
         result.partitions = new_pyint_array(len(partitions))
-        result.partitions[:] = partitions
+        for i in range(len(partitions)):
+            result.partitions[i] = partitions[i]
         result.values = new_pyint_array(len(values))
-        result.values[:] = values
+        for i in range(len(values)):
+            result.values[i] = values[i]
         return result
 
 
