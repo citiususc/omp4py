@@ -270,17 +270,16 @@ class OmpTransformer(ast.NodeTransformer):
     """
     ctx: Context
 
-    def __init__(self, full_source: str, filename: str, module: ast.Module, is_module: bool, opt: Options) -> None:
+    def __init__(self, full_source: str, filename: str, module: ast.Module, opt: Options) -> None:
         """Initialize the transformer.
 
         Args:
             full_source (str): Original source code.
             filename (str): Source file name.
             module (ast.Module): Root AST node.
-            is_module (bool): Whether transforming a full module.
             opt (Options): Transformation options.
         """
-        self.ctx = Context(full_source, filename, module, is_module, opt)
+        self.ctx = Context(full_source, filename, module, opt)
 
     def transform(self) -> ast.Module:
         """Execute the full transformation pipeline.

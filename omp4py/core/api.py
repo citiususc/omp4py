@@ -45,12 +45,13 @@ omp(py="script.py")
 # Creating a decorator with defaults
 my_omp = omp(alias="my_omp")
 """
-
 from collections.abc import Callable
 from contextlib import AbstractContextManager, contextmanager
+from copy import deepcopy
+from fileinput import filename
 from functools import partial
 from types import ModuleType
-from typing import Any, Protocol, TypedDict, Unpack, overload
+from typing import Any, Protocol, TypedDict, Unpack, cast, overload
 
 from omp4py.core.imports.loader import set_omp_package
 from omp4py.core.options import Options
@@ -58,35 +59,85 @@ from omp4py.core.options import Options
 __all__ = ["OmpType", "omp"]
 
 
-class OmpKargs(TypedDict, total=False):
-    """This class represents the set of arguments that can be passed to the `omp` function.
+class OmpKwargs(TypedDict, total=False):
+    """Keyword arguments accepted by the `omp` entry point.
+
+    This type defines the high-level configuration that can be passed to
+    the `omp` function. These arguments are translated into `Options`
+    and control how preprocessing and transformation are applied.
 
     Attributes:
-        alias (str): TODO: explain and define arguments
-    """
+        alias (str):
+            Name used to identify OpenMP-like directives in the source
+            code (default: `"omp"`).
 
-    alias: str  # omp
-    dump: str
+        compile (bool):
+            Enables compilation of the transformed code after preprocessing.
+
+        modifiers (dict[str, bool]):
+            Enables or disables specific source modifiers applied before
+            or after the transformation process.
+
+        device (str):
+            Default target device identifier used during transformation.
+
+        compiler (str):
+            Compiler backend used when `compile` is enabled.
+
+        parsers (list[str]):
+            Alternative parsers that extend directive syntax beyond the scope
+            of the default `alias` parser.
+
+        compiler_args (dict[str, Any]):
+            Additional arguments passed to the selected compiler backend.
+
+        modifiers_args (dict[str, Any]):
+            Additional configuration values associated with source modifiers.
+
+        args_append (bool):
+            If `True`, successive calls to `omp` will merge collection-type
+            arguments (`list`, `set`, `dict`) instead of replacing them.
+            This allows incremental configuration across multiple calls.
+
+        dump (str | bool):
+            If set, writes the transformed source code to a file. A string
+            specifies the output path, while `True` enables a default
+            location.
+
+        debug (bool):
+            Enables debug mode with additional checks or logging.
+    """
+    alias: str
+    compile: bool
+    modifiers: dict[str, bool]
+    device: str
+    compiler: str
+    parsers: list[str]
+    compiler_args: dict[str, Any]
+    modifiers_args: dict[str, Any]
+    args_append: bool
+    dump: str | bool
+    debug: bool
 
 
 class OmpType(Protocol):
     """Protocol defining the signatures of all `omp` overloads."""
 
     @overload
-    def __call__(self, value: str, /, **kwargs: Unpack[OmpKargs]) -> AbstractContextManager: ...
+    def __call__(self, value: str, /, **kwargs: Unpack[OmpKwargs]) -> AbstractContextManager: ...
 
     @overload
-    def __call__[T: Callable[..., Any] | type | ModuleType](self, value: T, /, **kwargs: Unpack[OmpKargs]) -> T: ...
+    def __call__[T: Callable[..., Any] | type | ModuleType](self, value: T, /, **kwargs: Unpack[OmpKwargs]) -> T: ...
 
     @overload
-    def __call__(self, value: None = None, /, py: str = "", **kwargs: Unpack[OmpKargs]) -> str: ...
+    def __call__(self, value: None = None, /, py: str = "", **kwargs: Unpack[OmpKwargs]) -> str: ...
 
     @overload
-    def __call__(self, value: None = None, /, **kwargs: Unpack[OmpKargs]) -> Callable[..., Any]: ...
+    def __call__(self, value: None = None, /, **kwargs: Unpack[OmpKwargs]) -> Callable[..., Any]: ...
 
 
 @overload
-def omp(value: str, /, **kwargs: Unpack[OmpKargs]) -> AbstractContextManager:
+def omp(value: str, /, **kwargs: Unpack[OmpKwargs]) -> AbstractContextManager:
     """Define an OpenMP directive (optionally with clauses) and provide a safe Python context.
 
     This function allows you to specify an OpenMP directive, optionally including
@@ -106,9 +157,9 @@ def omp(value: str, /, **kwargs: Unpack[OmpKargs]) -> AbstractContextManager:
             (e.g., `"parallel"`, `"parallel for"`, `"critical"`,
             `"parallel for num_threads(4)"`, etc.).
 
-        **kwargs (typing.Unpack[OmpKargs]): Optional keyword arguments providing
+        **kwargs (typing.Unpack[OmpKwargs]): Optional keyword arguments providing
             additional options for the preprocessor.
-            See `OmpKargs` for details.
+            See `OmpKwargs` for details.
 
     Returns:
         typing.ContextManager: A no-op context manager that exists only to prevent
@@ -118,7 +169,7 @@ def omp(value: str, /, **kwargs: Unpack[OmpKargs]) -> AbstractContextManager:
 
 
 @overload
-def omp[T: Callable[..., Any] | type | ModuleType](value: T, /, **kwargs: Unpack[OmpKargs]) -> T:
+def omp[T: Callable[..., Any] | type | ModuleType](value: T, /, **kwargs: Unpack[OmpKwargs]) -> T:
     """Invoke the OpenMP preprocessor on a callable or class, or mark a module to be preprocessed at import time.
 
     This function acts as the entry point to the OpenMP-aware preprocessor.
@@ -140,9 +191,9 @@ def omp[T: Callable[..., Any] | type | ModuleType](value: T, /, **kwargs: Unpack
             preprocess. Can be a function, a class, or an AST module containing
             calls to :func:`omp`.
 
-        **kwargs (typing.Unpack[OmpKargs]): Optional keyword arguments providing
+        **kwargs (typing.Unpack[OmpKwargs]): Optional keyword arguments providing
             additional options for the preprocessor.
-            See `OmpKargs` for details.
+            See `OmpKwargs` for details.
 
     Returns:
         T: The preprocessed object with OpenMP transformations applied or the module
@@ -150,7 +201,7 @@ def omp[T: Callable[..., Any] | type | ModuleType](value: T, /, **kwargs: Unpack
 
 
 @overload
-def omp(value: None = None, /, py: str = "", **kwargs: Unpack[OmpKargs]) -> str:
+def omp(value: None = None, /, py: str = "", **kwargs: Unpack[OmpKwargs]) -> str:
     """Preprocess a Python file for OpenMP directives and generate transformed code.
 
     This overload of `omp` allows you to specify a Python file to be processed
@@ -167,9 +218,9 @@ def omp(value: None = None, /, py: str = "", **kwargs: Unpack[OmpKargs]) -> str:
             transformed according to OpenMP directives, and written back or to
             a new output file depending on preprocessor settings.
 
-        **kwargs (typing.Unpack[OmpKargs]): Optional keyword arguments providing
+        **kwargs (typing.Unpack[OmpKwargs]): Optional keyword arguments providing
             additional metadata or directives for the preprocessor.
-            See `OmpKargs` for details.
+            See `OmpKwargs` for details.
 
     Returns:
         str: Path of the preprocessed Python file, after OpenMP
@@ -178,7 +229,7 @@ def omp(value: None = None, /, py: str = "", **kwargs: Unpack[OmpKargs]) -> str:
 
 
 @overload
-def omp(value: None = None, /, **kwargs: Unpack[OmpKargs]) -> OmpType:
+def omp(value: None = None, /, **kwargs: Unpack[OmpKwargs]) -> OmpType:
     """Create a new `omp` decorator with default options for future use.
 
     When no positional argument is provided, this overload returns a new
@@ -192,8 +243,8 @@ def omp(value: None = None, /, **kwargs: Unpack[OmpKargs]) -> OmpType:
 
     Args:
         value (None, optional): Must be None or omitted for this overload.
-        **kwargs (typing.Unpack[OmpKargs]): Default keyword arguments to store
-            in the new decorator. See `OmpKargs` for details.
+        **kwargs (typing.Unpack[OmpKwargs]): Default keyword arguments to store
+            in the new decorator. See `OmpKwargs` for details.
 
     Returns:
         OmpType: A new `omp` decorator function with the specified
@@ -201,7 +252,7 @@ def omp(value: None = None, /, **kwargs: Unpack[OmpKargs]) -> OmpType:
     """
 
 
-def omp(value: Any = None, /, py: str | None = None, **kwargs: Unpack[OmpKargs]) -> Any:
+def omp(value: Any = None, /, py: str | None = None, __ka: OmpKwargs | None = None, **kwargs: Unpack[OmpKwargs]) -> Any:
     """Unified OpenMP preprocessing entry point.
 
     This function implements all overloads of `omp`:
@@ -223,12 +274,13 @@ def omp(value: Any = None, /, py: str | None = None, **kwargs: Unpack[OmpKargs])
       Returns a new `omp` decorator with default metadata for future use.
       Use the `alias` keyword if assigning a different name for detection.
 
-    Additional metadata or directives can be provided via `**kwargs` (see `OmpKargs`).
+    Additional metadata or directives can be provided via `**kwargs` (see `OmpKwargs`).
 
     Args:
         value (Any, optional): Determines the overload behavior.
         py (str | None, optional): Path to a Python file for file-based preprocessing.
-        **kwargs (typing.Unpack[OmpKargs]): Metadata or default directives for the preprocessor.
+        __ka (OmpKwargs | None): Previous **kwargs used for argument appending.
+        **kwargs (Unpack[OmpKwargs]): Metadata or default directives for the preprocessor.
 
     Returns:
         Any: The return type depends on the overload:
@@ -237,15 +289,28 @@ def omp(value: Any = None, /, py: str | None = None, **kwargs: Unpack[OmpKargs])
             - `str` for file-based preprocessing
             - `OmpType` a new `omp` for a decorator factory
     """
+    if __ka is not None:
+        for key, arg in __ka.items():
+            match arg:
+                case list():
+                    kwargs[key] = arg + kwargs[key]
+                case set() | dict():
+                    kwargs[key] = arg | kwargs[key]
+        __ka = None
+    if kwargs.pop("args_append", False):
+        __ka = deepcopy(cast(OmpKwargs,kwargs))
+
     if py is None:
         if value is None:
-            return partial(omp, py=py, **kwargs)
+            return partial(omp, py=py, __ka=__ka, **kwargs)
         elif isinstance(value, str):
             return contextmanager(lambda: (yield))()
         elif isinstance(value, ModuleType):
-            return set_omp_package(value, Options(**kwargs))
+            return set_omp_package(value, Options(is_module=True, **kwargs))
         from omp4py.core.preprocessor import process_object  # noqa: PLC0415 Lazy import, only when needed
+
         return process_object(value, Options(**kwargs))
     else:
         from omp4py.core.preprocessor import process_file  # noqa: PLC0415 Lazy import, only when needed
-        return process_file(py, Options(**kwargs))
+
+        return process_file(py, Options(is_module=True, **kwargs))

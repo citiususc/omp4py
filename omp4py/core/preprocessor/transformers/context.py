@@ -109,7 +109,6 @@ class Context:
         full_source (str): Original source code.
         filename (str): Name of the source file.
         module (ast.Module): Root AST node.
-        is_module (bool): Whether this context represents a module-level or function-level transformation.
         opt (Options): Compilation and transformation options.
 
         scope (Scope): Current active scope.
@@ -122,7 +121,6 @@ class Context:
     full_source: str
     filename: str
     module: ast.Module
-    is_module: bool
     opt: Options
 
     scope: Scope = field(init=False)
@@ -145,7 +143,7 @@ class Context:
         It also initializes the node stack with the root module node.
         """
         self.scope = Scope(self.module, global_symtable(self.full_source, self.filename))
-        if self.is_module:
+        if self.opt.is_module:
             self.module_storage = ModuleStorage()
         else:
             self.module_storage = _module_storage.setdefault(self.filename, ModuleStorage())

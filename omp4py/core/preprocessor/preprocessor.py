@@ -31,6 +31,7 @@ from pathlib import Path
 from types import CodeType, ModuleType
 
 from omp4py.core.imports.loader import FOMP as __OMP__
+from omp4py.core.modifiers.engine import ModifierEngine
 from omp4py.core.preprocessor import obj2ast
 from omp4py.core.preprocessor.transformers import OmpTransformer
 
@@ -59,7 +60,7 @@ def process_object[T: Callable[..., typing.Any] | type](arg: T, opt: Options) ->
     data: str
     module: ast.Module
     filename, data, module = obj2ast.from_object(arg)
-    module: ast.Module = process(module, False, data, filename, opt)
+    module: ast.Module = process(module, data, filename, opt)
     module_globals: ModuleType = sys.modules[arg.__module__]
 
     # TODO: use importlib to use pyc cache
@@ -88,7 +89,7 @@ def process_source(data: str, filename: str, opt: Options) -> ast.Module:
     Returns:
         ast.Module: Transformed module AST.
     """
-    return process(ast.parse(data, filename), True, data, filename, opt)
+    return process(ast.parse(data, filename), data, filename, opt)
 
 
 def process_file(filename: str, opt: Options) -> str:
@@ -117,7 +118,7 @@ def process_file(filename: str, opt: Options) -> str:
     return str(target)
 
 
-def process(module: ast.Module, is_module: bool, full_source: str, filename: str, opt: Options) -> ast.Module:
+def process(module: ast.Module, full_source: str, filename: str, opt: Options) -> ast.Module:
     """Apply the OpenMP transformation pipeline to an AST module.
 
     This is the internal entry point used by all preprocessing modes. It
@@ -126,7 +127,6 @@ def process(module: ast.Module, is_module: bool, full_source: str, filename: str
 
     Args:
         module (ast.Module): Input module AST.
-        is_module (bool): Whether the source represents a full importable module.
         full_source (str): Original source code.
         filename (str): Source filename.
         opt (Options): Preprocessing options.
@@ -134,8 +134,13 @@ def process(module: ast.Module, is_module: bool, full_source: str, filename: str
     Returns:
         ast.Module: Transformed module AST.
     """
-    transformer: OmpTransformer = OmpTransformer(full_source, filename, module, is_module, opt)
+    transformer: OmpTransformer = OmpTransformer(full_source, filename, module, opt)
+    modifier_engine = ModifierEngine(opt)
+
+    modifier_engine.stage(module)
     new_module = transformer.transform()
+    modifier_engine.stage(module, "omp_transformer")
+
     if opt.dump is not None:
         with open(opt.dump, "w") as f:
             f.write(ast.unparse(new_module))
