@@ -47,7 +47,7 @@ def syntax_error_ctx(message: str, span: Span, ctx: Context) -> SyntaxError:
     Returns:
         SyntaxError: Constructed syntax error.
     """
-    return syntax_error(message, span, ctx.full_source, ctx.filename)
+    return syntax_error(message, span, ctx.full_source, ctx.opt.filename)
 
 
 @singledispatch
@@ -246,9 +246,9 @@ class OmpParser(ast.NodeVisitor):
             raise syntax_error_ctx(msg, Span.from_ast(expr), self.ctx)
 
         if len(raw_directive) - 2 == len(expr.value):
-            directive = parse(self.ctx.filename, f" {expr.value} ", expr.lineno, expr.col_offset, False)
+            directive = parse(self.ctx.opt.filename, f" {expr.value} ", expr.lineno, expr.col_offset, False)
         else:
-            directive = parse(self.ctx.filename, raw_directive, expr.lineno, expr.col_offset, True)
+            directive = parse(self.ctx.opt.filename, raw_directive, expr.lineno, expr.col_offset, True)
         self.ctx.directives[directive_node] = directive
 
 
@@ -270,16 +270,15 @@ class OmpTransformer(ast.NodeTransformer):
     """
     ctx: Context
 
-    def __init__(self, full_source: str, filename: str, module: ast.Module, opt: Options) -> None:
+    def __init__(self, full_source: str, module: ast.Module, opt: Options) -> None:
         """Initialize the transformer.
 
         Args:
             full_source (str): Original source code.
-            filename (str): Source file name.
             module (ast.Module): Root AST node.
             opt (Options): Transformation options.
         """
-        self.ctx = Context(full_source, filename, module, opt)
+        self.ctx = Context(full_source, module, opt)
 
     def transform(self) -> ast.Module:
         """Execute the full transformation pipeline.

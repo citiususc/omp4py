@@ -1,6 +1,6 @@
 line-length = 120
 indent-width = 4
-exclude = ["cython.py", "*/parser/*", "*/compiler/*"]
+exclude = ["cython.py", "*/parser/*"]
 
 [lint]
 select = ["ALL"]

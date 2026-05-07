@@ -24,18 +24,24 @@ written back to disk (file mode).
 from __future__ import annotations
 
 import ast
+import hashlib
+import py_compile
 import sys
 import typing
 from collections.abc import Callable
+from importlib.machinery import ModuleSpec, PathFinder, SourcelessFileLoader
+from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
-from types import CodeType, ModuleType
 
-from omp4py.core.imports.loader import FOMP as __OMP__
+from omp4py.core.imports.loader import OMP_FOLDER
 from omp4py.core.modifiers.engine import ModifierEngine
 from omp4py.core.preprocessor import obj2ast
+from omp4py.core.preprocessor.cbuild import cythonize
 from omp4py.core.preprocessor.transformers import OmpTransformer
 
 if typing.TYPE_CHECKING:
+    from types import CodeType, ModuleType
+
     from omp4py.core.options import Options
 
 __all__ = ["process_file", "process_object", "process_source"]
@@ -56,40 +62,94 @@ def process_object[T: Callable[..., typing.Any] | type](arg: T, opt: Options) ->
     Returns:
         T: The transformed function or class.
     """
-    filename: str
-    data: str
-    module: ast.Module
-    filename, data, module = obj2ast.from_object(arg)
-    module: ast.Module = process(module, data, filename, opt)
+    opt.filename, data, module = obj2ast.from_object(arg)
     module_globals: ModuleType = sys.modules[arg.__module__]
-
-    # TODO: use importlib to use pyc cache
-    code: CodeType = compile(source=module, filename=filename, mode="exec")
     result: dict[str, typing.Any] = {}
-    exec(code, module_globals.__dict__, result)  # noqa: S102
 
-    import omp4py.runtime as _omp  # noqa: PLC0415
+    path_hash: str = hashlib.sha256(bytes(Path(opt.filename).resolve())).hexdigest()[:12]
+    fullname: str = f"p{path_hash}_{arg.__module__}_{arg.__name__}"
+    cache_dir = Path(opt.cache)
+    cache_dir.mkdir(parents=True, exist_ok=True)
 
-    module_globals.__dict__["_omp"] = _omp
+    if opt.compile:
+        spec = PathFinder.find_spec(fullname, [opt.cache])
+
+        if spec is None or spec.cached or opt.ignore_cache:
+            result_module: ast.Module = process(module, data, opt)
+            module.body.insert(
+                0, ast.ImportFrom("cython.cimports.omp4py", names=[ast.alias("runtime", "_omp")], level=0),
+            )
+            ast.fix_missing_locations(module.body[0])
+            cythonize(fullname, str(cache_dir), result_module, opt)
+
+        spec = typing.cast("ModuleSpec", PathFinder.find_spec(fullname, [opt.cache]))
+
+        ext_module = module_from_spec(spec)
+        ext_module.__dict__.update(module_globals.__dict__)
+        if spec.loader:
+            spec.loader.exec_module(ext_module)
+
+        return ext_module.__dict__[arg.__name__]
+
+    pyfile = (cache_dir / fullname).with_suffix(".py")
+    spec = typing.cast("ModuleSpec", spec_from_file_location(fullname, pyfile))
+
+    result_code = ""
+    if not pyfile.exists() or opt.ignore_cache:
+        result_module: ast.Module = process(module, data, opt)
+        try:
+            pyfile.write_text(result_code := ast.unparse(result_module))
+            py_compile.compile(str(pyfile))
+        except Exception:  # noqa: BLE001, S110
+            pass
+
+    codecache: CodeType | str | None = None
+    if spec and spec.cached and Path(spec.cached).exists():
+        codecache = SourcelessFileLoader("f", spec.cached).get_code("f")
+    if codecache is None:
+        codecache = result_code or Path(pyfile).read_text()
+
+    exec(codecache, module_globals.__dict__, result)  # noqa: S102
+    module_globals.__dict__["_omp"] = sys.modules["omp4py.runtime"]
 
     return result[arg.__name__]
 
 
-def process_source(data: str, filename: str, opt: Options) -> ast.Module:
-    """Preprocess Python source code and return the transformed AST.
+def process_source(data: str, filename: str, opt: Options) -> str:
+    """Preprocess Python source code and return the transformed result code.
 
     The source code is parsed into an abstract syntax tree and passed
     through the OpenMP transformation pipeline.
 
     Args:
         data (str): Python source code.
-        filename (str): Virtual or real filename associated with the source.
+        filename (str): Filename associated with the source to store
+                        the result if path is writable.
         opt (Options): Preprocessing options.
 
     Returns:
-        ast.Module: Transformed module AST.
+        ast.Module: Transformed module source code.
     """
-    return process(ast.parse(data, filename), data, filename, opt)
+    target = Path(filename)
+    source: Path = target
+    if source.parent.name == OMP_FOLDER:
+        source = source.parent.parent / source.name
+
+    opt.filename = str(source)
+    module: ast.Module = process(ast.parse(data, opt.filename), data, opt)
+    module.body.insert(0, ast.ImportFrom("omp4py", names=[ast.alias("runtime", "_omp")], level=0))
+    ast.fix_missing_locations(module.body[0])
+    result_code = ast.unparse(module)
+
+    try:
+        if not target.exists():
+            target.parent.mkdir(exist_ok=True)
+        with target.open("w") as f:
+            f.write(result_code)
+    except Exception:  # noqa: BLE001, S110
+        pass
+
+    return result_code
 
 
 def process_file(filename: str, opt: Options) -> str:
@@ -105,20 +165,12 @@ def process_file(filename: str, opt: Options) -> str:
     Returns:
         str: Path to the generated transformed file.
     """
-    with open(filename) as f:
-        data: str = f.read()
-    module: ast.Module = process_source(data, filename, opt)
-
-    target: Path = Path(filename).parent / __OMP__ / Path(filename).name
-    if not target.parent.exists():
-        target.parent.mkdir(exist_ok=True)
-    with target.open("w") as f:
-        f.write(ast.unparse(module))
-
-    return str(target)
+    omp_path = Path(filename).parent / OMP_FOLDER / Path(filename).name  # same as loader
+    process_source(omp_path.read_text(), str(omp_path), opt)
+    return str(omp_path)
 
 
-def process(module: ast.Module, full_source: str, filename: str, opt: Options) -> ast.Module:
+def process(module: ast.Module, full_source: str, opt: Options) -> ast.Module:
     """Apply the OpenMP transformation pipeline to an AST module.
 
     This is the internal entry point used by all preprocessing modes. It
@@ -128,20 +180,19 @@ def process(module: ast.Module, full_source: str, filename: str, opt: Options) -
     Args:
         module (ast.Module): Input module AST.
         full_source (str): Original source code.
-        filename (str): Source filename.
         opt (Options): Preprocessing options.
 
     Returns:
         ast.Module: Transformed module AST.
     """
-    transformer: OmpTransformer = OmpTransformer(full_source, filename, module, opt)
+    transformer: OmpTransformer = OmpTransformer(full_source, module, opt)
     modifier_engine = ModifierEngine(opt)
 
     modifier_engine.stage(module)
     new_module = transformer.transform()
     modifier_engine.stage(module, "omp_transformer")
 
-    if opt.dump is not None:
+    if opt.dump:
         with open(opt.dump, "w") as f:
             f.write(ast.unparse(new_module))
     return new_module

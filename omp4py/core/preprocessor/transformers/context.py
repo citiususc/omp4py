@@ -107,7 +107,6 @@ class Context:
 
     Attributes:
         full_source (str): Original source code.
-        filename (str): Name of the source file.
         module (ast.Module): Root AST node.
         opt (Options): Compilation and transformation options.
 
@@ -119,7 +118,6 @@ class Context:
     """
 
     full_source: str
-    filename: str
     module: ast.Module
     opt: Options
 
@@ -142,11 +140,11 @@ class Context:
 
         It also initializes the node stack with the root module node.
         """
-        self.scope = Scope(self.module, global_symtable(self.full_source, self.filename))
+        self.scope = Scope(self.module, global_symtable(self.full_source, self.opt.filename))
         if self.opt.is_module:
             self.module_storage = ModuleStorage()
         else:
-            self.module_storage = _module_storage.setdefault(self.filename, ModuleStorage())
+            self.module_storage = _module_storage.setdefault(self.opt.filename, ModuleStorage())
         self.node_stack.append(self.module)
 
     @property
