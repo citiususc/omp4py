@@ -12,27 +12,24 @@ its source code is parsed into an AST, transformed using the `omp4py`
 preprocessor, and then compiled and executed as usual.
 """
 
-import ast
 import sys
 import types
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from importlib.machinery import ModuleSpec, PathFinder, SourceFileLoader
 from pathlib import Path
 from threading import Lock
-from types import ModuleType
-from typing import Any
 
 from omp4py.core.options import Options
 
-__all__ = ["FOMP", "set_omp_package"]
+__all__ = ["OMP_FOLDER", "set_omp_package"]
 
-FOMP: str = "__omp__"
+OMP_FOLDER: str = "__omp__"
 _init_lock: Lock = Lock()
 omp_packages: dict[str, Options] = {}
 
 
 class Omp4pyFinder:
-    """Meta path finder that enables OpenMP preprocessing for registered packages.
+    """Meta pathfinder that enables OpenMP preprocessing for registered packages.
 
     This finder intercepts module imports and checks whether the top-level
     package name has been registered via `set_omp_package`. If so, it
@@ -68,11 +65,12 @@ class Omp4pyFinder:
             specification using `Omp4pyLoader` for registered packages,
             or `None` if the module does not belong to a registered package.
         """
-        if name.split(".", maxsplit=1)[0] not in omp_packages:
+        if name.rsplit(".", maxsplit=1)[0] not in omp_packages:
             return None
         spec: ModuleSpec | None = PathFinder.find_spec(name, import_path, target_module)
         if spec is not None and isinstance(spec.loader, SourceFileLoader) and spec.origin is not None:
             spec.loader = Omp4pyLoader(name, spec.origin)
+            spec.origin = str(Path(spec.origin).parent / OMP_FOLDER / Path(spec.origin).name)
         return spec
 
 
@@ -114,42 +112,52 @@ class Omp4pyLoader(SourceFileLoader):
             types.CodeType: Compiled code object produced from the
             transformed AST.
         """
-        from omp4py.core import preprocessor  # noqa: PLC0415  Lazy import, only when needed (no cache available)
-        opt: Options = omp_packages[self.name]
-        module: ast.Module  = preprocessor.process_source(data, path, opt)
-        return super().source_to_code(module, path, *args, **kwargs)
+        if isinstance(path, bytes):
+            path = path.decode()
+        if isinstance(data, bytes):
+            data = data.decode()
 
-    def get_code(self, fullname: str) -> types.CodeType | None:
-        """Load and compile a module using a virtual OpenMP-aware path.
+        omp_path: str = str(Path(path).parent / OMP_FOLDER / Path(path).name)
+        if isinstance(data, str):
+            from omp4py.core import preprocessor  # noqa: PLC0415  Lazy import, only when needed (no cache available)
 
-        This method creates a virtual module path under the `__omp__`
-        directory to allow transformed modules to coexist logically with
-        their original source files. A temporary loader is used to
-        redirect filesystem operations back to the original source file
-        while preserving the transformed module identity.
+            opt: Options = omp_packages[self.name.rsplit(".", maxsplit=1)[0]]
+            data = preprocessor.process_source(data, omp_path, opt)
+            path = omp_path
+        return super().source_to_code(data, path, *args, **kwargs)
+
+    def get_data(self, path: str) -> bytes:
+        """Retrieve module data, redirecting cache accesses to the OpenMP cache.
+
+        This method overrides the default data loading mechanism to intercept
+        accesses to files inside a `__pycache__` directory. When such a path is
+        detected, it is transparently redirected to the equivalent location
+        within the `__omp__` cache directory.
+
+        The original source files remain untouched and are loaded normally.
+        Only cached bytecode and related files are affected, ensuring that
+        Python reuses the OpenMP-preprocessed cache instead of the standard
+        `__pycache__`.
 
         Args:
-            fullname (str): Fully qualified name of the module.
+            path (str): Filesystem path requested by the import system.
 
         Returns:
-            types.CodeType | None: Compiled code object for the transformed
-            module, or `None` if the module cannot be loaded.
+            bytes: Raw file contents, loaded from the OpenMP cache when the
+            request targets a cache file, or from the original location
+            otherwise.
         """
-        py_path: str = self.path
-        omp_path: str = str(Path(py_path).parent / FOMP / Path(py_path).name)
+        target = Path(path)
+        if target.parent.name == "__pycache__":
+            if omp_packages[self.name.rsplit(".", maxsplit=1)[0]].ignore_cache:
+                msg = "Cache directory is detected and ignored"
+                raise OSError(msg)
+            target = Path(*target.parts[:-2], OMP_FOLDER, *target.parts[-2:])
 
-        class DummyLoader(Omp4pyLoader):
-            def get_data(self, path: str) -> bytes:
-                return super().get_data(py_path if path == omp_path else path)
-
-            def path_stats(self, path: str) -> Mapping[str, Any]:
-                return super().path_stats(py_path if path == omp_path else path)
-
-        opl: Omp4pyLoader = DummyLoader(fullname, omp_path)
-        return SourceFileLoader.get_code(opl, fullname)
+        return super().get_data(str(target))
 
 
-def set_omp_package(mod: ModuleType, opt: Options) -> ModuleType:
+def set_omp_package(pkg: str, opt: Options) -> None:
     """Register a package for import-time OpenMP preprocessing.
 
     This function marks a package as OpenMP-aware by associating it with
@@ -161,18 +169,13 @@ def set_omp_package(mod: ModuleType, opt: Options) -> ModuleType:
     the beginning of `sys.meta_path` to activate the import hook.
 
     Args:
-        mod (ModuleType): The package module to register. Typically, this
-            is the result of importing the package's top-level module.
+        pkg (str): The `__package__` value of `__init__.py` module
+            where the preprocessor will be applied.
         opt (Options): Preprocessing options controlling how OpenMP
             directives are applied within the package.
-
-    Returns:
-        ModuleType: The same module that was passed in, allowing this
-        function to be used inline during package initialization.
     """
     if len(omp_packages) == 0:
         with _init_lock:
             if len(omp_packages) == 0:
                 sys.meta_path.insert(0, Omp4pyFinder())
-    omp_packages[mod.__name__] = opt
-    return mod
+    omp_packages[pkg] = opt
