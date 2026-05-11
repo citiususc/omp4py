@@ -32,15 +32,16 @@ if typing.TYPE_CHECKING:
     from omp4py.core.options import Options
 
 
-def cythonize(name: str, output: str, module: ast.Module, opt: Options) -> str:
+def cythonize(name: str, output: str, module: ast.Module | str, opt: Options, inplace: bool = True) -> str:
     """Compile a transformed AST module into a native extension.
 
-    The provided AST is converted into Python source code, compiled
-    with Cython, and built using setuptools as a platform-specific
-    extension module.
+    The input module can be provided either as an `ast.Module` instance
+    or as a path to an existing Python source file. The resulting source
+    is compiled with Cython and built using `setuptools` as a
+    platform-specific extension module.
 
     Compilation behavior is controlled through `Options.compiler_args`,
-    while additional directives required by omp4py are automatically
+    while additional directives required by `omp4py` are automatically
     injected into the Cython configuration.
 
     Temporary build files are created inside an isolated temporary
@@ -59,6 +60,11 @@ def cythonize(name: str, output: str, module: ast.Module, opt: Options) -> str:
 
         opt (Options):
             Compilation and preprocessing configuration.
+
+        inplace (bool):
+            If ``False``, place the compiled extension directly inside
+            ``output`` without recreating the package hierarchy from
+            ``name``. Defaults to ``False``.
 
     Returns:
         str:
@@ -87,9 +93,17 @@ def cythonize(name: str, output: str, module: ast.Module, opt: Options) -> str:
     args["compiler_directives"].setdefault("infer_types", True)
 
     with tempfile.TemporaryDirectory() as tmp:
-        source = (pathlib.Path(tmp) / f"{name}.py")
-        source.write_text(ast.unparse(module))
+        source = pathlib.Path(tmp)
+        if isinstance(module, ast.Module):
+            source /= f"{name}.py"
+            source.write_text(ast.unparse(module))
+        else:
+            source /= pathlib.Path(module).name
+            shutil.copy(module, source)
+
         ext: list[setuptools.Extension] = cythonize(setuptools.Extension(name=name, sources=[source]), **args)
+        if not inplace:
+            ext[0].name = name.rsplit(".", maxsplit=1)[1]
 
         if opt.debug:
             shutil.copy(source.with_suffix(".html"), output)
@@ -98,16 +112,18 @@ def cythonize(name: str, output: str, module: ast.Module, opt: Options) -> str:
             {
                 "name": name,
                 "ext_modules": ext,
-            }        )
+            },
+        )
 
         cmd = dist.get_command_obj("build_ext")
         cmd.build_lib = output
 
         cmd.build_temp = tmp
         cmd.ensure_finalized()
-        if sys.platform == "win32": # windows require extra flags
+        if sys.platform == "win32":  # windows require extra flags
             org = cmd.build_extensions
-            def patched()->None:
+
+            def patched() -> None:
                 if cmd.compiler.compiler_type == "msvc":
                     for ext in cmd.extensions:
                         ext.extra_compile_args += [
@@ -120,4 +136,4 @@ def cythonize(name: str, output: str, module: ast.Module, opt: Options) -> str:
 
         cmd.run()
 
-    return cmd.get_ext_fullpath(name)
+    return cmd.get_ext_fullpath(ext[0].name)
