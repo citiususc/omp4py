@@ -1,6 +1,8 @@
 from omp4py.runtime.tasks.barrier cimport barrier
 from omp4py.runtime.tasks.parallelism cimport parallel
-from omp4py.runtime.tasks.threadprivate cimport threadprivate, threadprivates
+from omp4py.runtime.tasks.privatization cimport copy_var, new_var
+from omp4py.runtime.tasks.task cimport TPrivRef
+from omp4py.runtime.tasks.threadprivate cimport TPrivRef, threadprivate, threadprivates
 from omp4py.runtime.tasks.worksharing cimport (
     ForBounds,
     SingleCopyPrivate,

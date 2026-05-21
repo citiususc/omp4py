@@ -58,7 +58,7 @@ def _(ctr: ThreadPrivate, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
          variable in the enclosing scope.
        - Replaces variable accesses with runtime calls:
            threadprivates(name).v
-       - Applies optional type casting using `cy_cast` if annotations exist.
+       - Applies optional type casting using `tp_cast` if annotations exist.
        - Prevents unsafe constructs such as assignment expressions (`:=`).
 
     Args:
@@ -134,7 +134,7 @@ def _(ctr: ThreadPrivate, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
             if isinstance(node.ctx, ast.Load):
                 ann: ast.expr | None = copy.deepcopy(ctx.module_storage.threadprivate[node.id].annotation)
                 if ann:
-                    new_node = ast.Call(runtime_ast("cy_cast"), [ann, new_node])
+                    new_node = ast.Call(runtime_ast("tp_cast"), [ann, new_node])
 
             return new_node
 

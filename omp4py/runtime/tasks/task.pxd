@@ -39,6 +39,7 @@ cdef class SharedContext:
 
     cdef object sync(self, object obj)
 
+
 cdef class Barrier:
     cdef pyint _parties
     cdef AtomicInt _waiting
@@ -51,3 +52,10 @@ cdef class Barrier:
     cdef bint wait(self)
 
     cdef void interrupt(self)
+
+
+cdef class TPrivRef:
+    cdef public object v
+
+    @staticmethod
+    cdef TPrivRef new()

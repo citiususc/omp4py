@@ -1,15 +1,15 @@
 from omp4py.runtime.icvs cimport Data
 from omp4py.runtime.lowlevel cimport threadlocal # omp4py_threadlocal_get
-from omp4py.runtime.tasks.task cimport Task
+from omp4py.runtime.tasks.task cimport Task, TPrivRef
 
 cdef class TaskContext:
     cdef Data icvs
     cdef Task task
-    cdef list tpvars
-    cdef list all_tpvars
+    cdef list[TPrivRef] tpvars
+    cdef list[list[TPrivRef]] all_tpvars
 
     @staticmethod
-    cdef TaskContext new(Task task, list tpvars)
+    cdef TaskContext new(Task task, list[TPrivRef] tpvars)
 
     cdef void push(self, Task task)
 

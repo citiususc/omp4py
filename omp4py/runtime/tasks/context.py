@@ -25,10 +25,7 @@ import typing
 # BEGIN_CYTHON_IMPORTS
 from omp4py.runtime.icvs import Data, defaults
 from omp4py.runtime.lowlevel import threadlocal
-from omp4py.runtime.tasks.task import Barrier, SharedContext, Task
-
-if typing.TYPE_CHECKING:
-    from omp4py.runtime.tasks.threadprivate import TPrivRef
+from omp4py.runtime.tasks.task import Barrier, SharedContext, Task, TPrivRef
 
 # END_CYTHON_IMPORTS
 

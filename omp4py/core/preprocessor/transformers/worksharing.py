@@ -574,9 +574,18 @@ def copyprivate(dataclauses: list[CopyPrivate], ctx: Context) -> ast.If:
     span = dataclauses[0].span
 
     copyprivate_var = omp_name(ctx, "copyprivate")
-
-    get_ast = ast.Assign([ast.Name(copyprivate_var, ast.Store())], copy_get := ast.Call(runtime_ast("single_copy_get")))
-    wait_ast = ast.Assign([ast.Name(copyprivate_var, ast.Store())], ast.Call(runtime_ast("single_copy_wait")))
+    get_ast = ast.AnnAssign(
+        ast.Name(copyprivate_var, ast.Store()),
+        runtime_ast("SingleCopyPrivate"),
+        copy_get := ast.Call(runtime_ast("single_copy_get")),
+        simple=1,
+    )
+    wait_ast = ast.AnnAssign(
+        ast.Name(copyprivate_var, ast.Store()),
+        runtime_ast("SingleCopyPrivate"),
+        ast.Call(runtime_ast("single_copy_wait")),
+        simple=1,
+    )
     notify_ast = ast.Expr(ast.Call(runtime_ast("single_copy_notify")))
 
     set_stmts: list[ast.stmt] = [get_ast]
@@ -588,12 +597,12 @@ def copyprivate(dataclauses: list[CopyPrivate], ctx: Context) -> ast.If:
             if count > 0 and count % 8 == 0:
                 set_stmts.append(
                     ast.Assign(
-                        [ast.Name(copyprivate_var, ast.Store())], ast.Attribute(ast.Name(copyprivate_var), "next")
+                        [ast.Name(copyprivate_var, ast.Store())], ast.Attribute(ast.Name(copyprivate_var), "next"),
                     ),
                 )
                 update_stmts.append(
                     ast.Assign(
-                        [ast.Name(copyprivate_var, ast.Store())], ast.Attribute(ast.Name(copyprivate_var), "next")
+                        [ast.Name(copyprivate_var, ast.Store())], ast.Attribute(ast.Name(copyprivate_var), "next"),
                     ),
                 )
             if s := ctx.symtable.get(var.string, True, True):

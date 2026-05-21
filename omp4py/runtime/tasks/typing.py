@@ -1,4 +1,4 @@
-"""Compile-time helper functions used by the `omp4py` runtime.
+"""Typing helper functions used by the `omp4py` runtime.
 
 This module provides Python equivalents of helper operations used when
 the runtime is compiled with Cython. They allow the same source code to
@@ -14,7 +14,7 @@ the interpreted and compiled versions of the runtime.
 """
 
 
-def cy_typeof[T](obj: T) -> type[T]:
+def tp_typeof[T](obj: T) -> type[T]:
     """Return the runtime type of an object.
 
     This is the pure Python equivalent of a compile-time type query used
@@ -29,7 +29,7 @@ def cy_typeof[T](obj: T) -> type[T]:
     return type(obj)
 
 
-def cy_cast[T](cls: type[T], obj: object) -> T:
+def tp_cast[T](cls: type[T], obj: object) -> T:
     """Return an object cast to the requested type.
 
     In pure Python mode this function performs no runtime conversion and

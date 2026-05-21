@@ -30,7 +30,7 @@ if typing.TYPE_CHECKING:
 # END_CYTHON_IMPORTS
 
 # BEGIN_CYTHON_IGNORE
-__all__ = ["SharedContext", "Task", "instanceof", "same_class"]
+__all__ = ["SharedContext", "TPrivRef", "Task", "instanceof", "same_class"]
 
 
 def same_class(obj1: object, obj2: object) -> bool:
@@ -301,3 +301,24 @@ class Barrier:
         new_event = Event.new()
         old_event: Event = cython.cast(Event, self._event.exchange(new_event))
         old_event.notify()
+
+
+class TPrivRef:
+    """Container for a thread-private value reference.
+
+    Each instance holds the value associated with a thread-private
+    variable for a specific thread context.
+    """
+
+    v: object
+
+    @staticmethod
+    def new() -> TPrivRef:
+        """Create an empty thread-private reference.
+
+        Returns:
+            TPrivRef: A new reference initialized with `None`.
+        """
+        obj: TPrivRef = TPrivRef.__new__(TPrivRef)
+        obj.v = None
+        return obj

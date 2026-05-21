@@ -293,7 +293,7 @@ def dec_annotation(ctx: Context, s: SymbolEntry, new_name: str | None = None) ->
     """
     ann = s.annotation
     if ann is None:
-        ann = ast.Call(runtime_ast("cy_typeof"), [ast.Name(s.old_name)])
+        ann = ast.Call(runtime_ast("tp_typeof"), [ast.Name(s.old_name)])
     return ast.AnnAssign(ast.Name(new_name or s.scope_name, ast.Store()), ann, simple=1)
 
 
@@ -315,6 +315,6 @@ def dec_cast(ctx: Context, origin: ast.expr, s: SymbolEntry, new_name: str | Non
     """
     ann = s.annotation
     if ann is None:
-        ann = ast.Call(runtime_ast("cy_typeof"), [ast.Name(s.old_name)])
-    value = ast.Call(runtime_ast("cy_cast"), [ann, origin])
+        ann = ast.Call(runtime_ast("tp_typeof"), [ast.Name(s.old_name)])
+    value = ast.Call(runtime_ast("tp_cast"), [ann, origin])
     return ast.Assign([ast.Name(new_name or s.scope_name, ast.Store())], value)

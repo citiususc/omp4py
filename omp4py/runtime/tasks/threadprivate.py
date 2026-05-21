@@ -21,18 +21,17 @@ supports dynamic growth of the per-thread storage structure.
 
 from __future__ import annotations
 
-import copy
-
 # BEGIN_CYTHON_IMPORTS
 from omp4py.runtime.lowlevel.mutex import Mutex
 from omp4py.runtime.lowlevel.numeric import new_pyint_array, pyint, pyint_array
 from omp4py.runtime.tasks.context import omp_ctx
 from omp4py.runtime.tasks.privatization import copy_var
+from omp4py.runtime.tasks.task import TPrivRef
 
 # END_CYTHON_IMPORTS
 
 # BEGIN_CYTHON_IGNORE
-__all__ = ["TPrivRef", "copy_private", "map_privates", "threadprivate", "threadprivates", "update_privates"]
+__all__ = ["copy_private", "map_privates", "threadprivate", "threadprivates", "update_privates"]
 
 _threadprivate_ids_last: pyint
 # END_CYTHON_IGNORE
@@ -40,27 +39,6 @@ _threadprivate_ids_last: pyint
 _threadprivate_ids: dict[str, pyint] = {}
 _threadprivate_ids_last = 0
 _threadprivate_ids_mutex = Mutex.new()
-
-
-class TPrivRef:
-    """Container for a thread-private value reference.
-
-    Each instance holds the value associated with a thread-private
-    variable for a specific thread context.
-    """
-
-    v: object
-
-    @staticmethod
-    def new() -> TPrivRef:
-        """Create an empty thread-private reference.
-
-        Returns:
-            TPrivRef: A new reference initialized with `None`.
-        """
-        obj: TPrivRef = TPrivRef.__new__(TPrivRef)
-        obj.v = None
-        return obj
 
 
 def threadprivate(name: str, value: object) -> pyint:
