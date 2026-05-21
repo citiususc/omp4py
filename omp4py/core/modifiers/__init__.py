@@ -12,6 +12,8 @@ entry points.
 The package also exposes the base `Modifier` class and the
 `modifier` registration decorator used to define custom modifiers.
 """
+
+import omp4py.core.modifiers.omp  #noqa: F401
 from omp4py.core.modifiers.engine import Modifier, modifier
 
 __all__ = ["Modifier", "modifier"]
