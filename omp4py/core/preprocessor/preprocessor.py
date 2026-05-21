@@ -1,24 +1,45 @@
 """OpenMP preprocessing.
 
-This module provides the high-level entry points for applying the OpenMP-like
-transformation system to Python code.
+This module provides the high-level entry points for applying the
+OpenMP-like transformation system to Python code.
 
 It acts as the central orchestration layer that connects:
 - Source extraction utilities (`obj2ast`)
+- AST modifier stages (`ModifierEngine`)
 - AST-based transformation engine (`OmpTransformer`)
-- Runtime code generation
+- Runtime and optional compiled code generation
 
-The preprocessor supports three input modes:
+The preprocessor supports multiple input modes:
 - Python source files
 - Raw source code strings
 - Python objects (functions or classes)
 
-All inputs are normalized into an AST representation and passed to the
-transformation pipeline, where OpenMP-like constructs are rewritten into
-standard Python AST with runtime support calls.
+All inputs are normalized into an AST representation and passed through
+the preprocessing pipeline.
 
-The transformed code can either be executed directly (object mode) or
-written back to disk (file mode).
+The transformation pipeline is divided into multiple stages:
+
+1. Pre-transformation modifiers:
+   Optional AST modifiers may run before OpenMP transformation to adapt,
+   normalize, optimize, or extend the source tree.
+
+2. OpenMP transformation:
+   The `OmpTransformer` rewrites OpenMP-like constructs into standard
+   Python AST nodes combined with runtime support calls.
+
+3. Post-transformation modifiers:
+   Additional modifiers may run after the main transformation stage to
+   apply backend-specific optimizations, typing rewrites, or compilation
+   adjustments.
+
+The resulting transformed code can then be:
+- Executed directly in pure Python mode
+- Cached as generated Python source
+- Compiled into native extensions using Cython
+
+The modifier system is fully configurable through preprocessing options
+and allows custom transformation passes to be integrated into the
+pipeline.
 """
 
 from __future__ import annotations

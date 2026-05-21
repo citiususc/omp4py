@@ -22,15 +22,20 @@ import ast
 import typing
 from functools import singledispatch
 
-from omp4py.core.parser import parse, syntax_error
-from omp4py.core.parser.tree import Construct, Span
+from omp4py.core.parser import Construct, Directive, Span, extract_directive, parse_directive, syntax_error
 from omp4py.core.preprocessor.transformers.context import Context
 from omp4py.core.preprocessor.transformers.utils import is_unpack_if
 
 if typing.TYPE_CHECKING:
+    from collections.abc import Callable
+
     from omp4py.core.options import Options
 
-__all__ = ["Context", "OmpTransformer", "construct", "syntax_error_ctx"]
+__all__ = ["DEVICES", "PARSERS", "Context", "OmpTransformer", "construct", "syntax_error_ctx"]
+
+DEVICES: dict[str, Callable[[Construct, list[ast.stmt], Context], list[ast.stmt]]] = {}
+
+PARSERS: dict[str, Callable[[str, Span, str], Directive]] = {}
 
 
 def syntax_error_ctx(message: str, span: Span, ctx: Context) -> SyntaxError:
@@ -74,6 +79,45 @@ def construct(ctr: Construct, body: list[ast.stmt], ctx: Context) -> list[ast.st
     """
     msg: str = f"'{ctr.name}' not implemented"
     raise syntax_error_ctx(msg, ctr.span, ctx)
+
+
+def transform(ctr: Construct, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
+    """Transform a construct using the configured target device.
+
+    This function dispatches the transformation process to the appropriate
+    device transformer.
+
+    If the configured device is ``"omp"``, the default OpenMP transformation
+    pipeline is used through the generic ``construct`` dispatcher.
+
+    Otherwise, the device name is resolved against the registered device
+    handlers stored in ``DEVICES``. If the device is unknown or not
+    registered, a syntax error is raised with contextual information.
+
+    Args:
+        ctr (Construct): Parsed construct representation.
+        body (list[ast.stmt]): AST statements associated with the construct.
+        ctx (Context): Active transformation context.
+
+    Returns:
+        list[ast.stmt]: Transformed AST statements produced by the selected
+        device backend.
+
+    Raises:
+        SyntaxError: If the configured device does not exist or is
+            not registered.
+    """
+    device_name = ctx.opt.device
+    if device_name == "omp":
+        return construct(ctr, body, ctx)
+    if device_name not in DEVICES:
+        msg = (
+            f"Unknown transformation device '{device_name}'. "
+            f"The configured device transformer is not registered or does not exist. "
+            f"Available devices: {sorted(DEVICES)}."
+        )
+        raise syntax_error_ctx(msg, ctr.span, ctx)
+    return DEVICES[device_name](ctr, body, ctx)
 
 
 def find_decorator(ctx: Context, node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> None:
@@ -120,6 +164,7 @@ class OmpParser(ast.NodeVisitor):
     Attributes:
         ctx (Context): Active transformation context.
     """
+
     ctx: Context
 
     def __init__(self, ctx: Context) -> None:
@@ -200,24 +245,24 @@ class OmpParser(ast.NodeVisitor):
         Raises:
             SyntaxError: If the directive usage is invalid.
         """
+        name: str = self.ctx.opt.alias
         match node.func:
-            case ast.Name(id=self.ctx.opt.alias) | ast.Attribute(attr=self.ctx.opt.alias):
-                pass
+            case ast.Name(value) | ast.Attribute(_, value) if value == name or value in self.ctx.opt.parsers:
+                name = value
             case _:
                 return
-        alias = self.ctx.opt.alias
 
         if len(node.keywords) > 0:
-            msg = f"{alias} () takes no keyword arguments"
+            msg = f"{name} () takes no keyword arguments"
             raise syntax_error_ctx(msg, Span.from_ast(node), self.ctx)
 
         if len(node.args) != 1:
-            msg = f"{alias} () takes exactly one argument ({len(node.args)} given)"
+            msg = f"{name} () takes exactly one argument ({len(node.args)} given)"
             raise syntax_error_ctx(msg, Span.from_ast(node), self.ctx)
 
         expr: ast.expr = node.args[0]
         if not isinstance(expr, ast.Constant) or not isinstance(expr.value, str):
-            msg = f"{alias} () argument needs constant string expression"
+            msg = f"{name} () argument needs constant string expression"
             raise syntax_error_ctx(msg, Span.from_ast(node), self.ctx)
 
         parent: ast.AST = self.ctx.node_stack[-2]
@@ -237,18 +282,22 @@ class OmpParser(ast.NodeVisitor):
 
                 directive_node = grand
             case _:
-                msg = f"{alias} () can only be used as a statement or in a with block"
+                msg = f"{name} () can only be used as a statement or in a with block"
                 raise syntax_error_ctx(msg, Span.from_ast(node), self.ctx)
 
-        raw_directive: str | None = ast.get_source_segment(self.ctx.full_source, expr)
-        if raw_directive is None:
-            msg = "raw directive source not found"
-            raise syntax_error_ctx(msg, Span.from_ast(expr), self.ctx)
+        directive_code = extract_directive(expr, self.ctx.full_source, self.ctx.opt.filename)
 
-        if len(raw_directive) - 2 == len(expr.value):
-            directive = parse(self.ctx.opt.filename, f" {expr.value} ", expr.lineno, expr.col_offset, False)
+        if name == self.ctx.opt.alias:
+            directive = parse_directive(directive_code, Span.from_ast(expr), self.ctx.opt.filename)
         else:
-            directive = parse(self.ctx.opt.filename, raw_directive, expr.lineno, expr.col_offset, True)
+            if name not in PARSERS:
+                msg = (
+                    f"Unknown directive parser '{name}'. "
+                    f"Available parsers: {sorted(self.ctx.opt.parsers)}."
+                )
+                raise syntax_error_ctx(msg, Span.from_ast(node), self.ctx)
+            directive = PARSERS[name](directive_code, Span.from_ast(expr), self.ctx.opt.filename)
+
         self.ctx.directives[directive_node] = directive
 
 
@@ -268,6 +317,7 @@ class OmpTransformer(ast.NodeTransformer):
     Attributes:
         ctx (Context): Active transformation context.
     """
+
     ctx: Context
 
     def __init__(self, full_source: str, module: ast.Module, opt: Options) -> None:
@@ -328,7 +378,7 @@ class OmpTransformer(ast.NodeTransformer):
         Returns:
             ast.AST: Transformed node.
         """
-        old_scope, self.ctx.scope =  self.ctx.scope, self.ctx.scope.new_child(node)
+        old_scope, self.ctx.scope = self.ctx.scope, self.ctx.scope.new_child(node)
         self.generic_visit(node)
         self.ctx.scope = old_scope
         return node
@@ -392,7 +442,7 @@ class OmpTransformer(ast.NodeTransformer):
             ast.With | list[ast.stmt]: Transformed node or replacement body.
         """
         if directive := self.ctx.directives.get(node):
-            node.body = construct(directive.construct, node.body, self.ctx)
+            node.body = transform(directive.construct, node.body, self.ctx)
             self.generic_visit(node)
             return node.body
         self.generic_visit(node)
@@ -411,7 +461,7 @@ class OmpTransformer(ast.NodeTransformer):
             ast.Expr | list[ast.stmt]: Transformed node or replacement body.
         """
         if directive := self.ctx.directives.get(node):
-            tmp = ast.Try(construct(directive.construct, [], self.ctx))
+            tmp = ast.Try(transform(directive.construct, [], self.ctx))
             self.generic_visit(tmp)
             return tmp.body
         self.generic_visit(node)
