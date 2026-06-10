@@ -16,6 +16,7 @@ variables.
 from __future__ import annotations
 
 import ast
+import copy
 import functools
 import operator
 import typing
@@ -292,12 +293,11 @@ def dec_annotation(ctx: Context, s: SymbolEntry, new_name: str | None = None) ->
         ast.AnnAssign: Annotated assignment node.
     """
     ann = s.annotation
-    if ann is None:
-        ann = ast.Call(runtime_ast("tp_typeof"), [ast.Name(s.old_name)])
+    ann = ast.Call(runtime_ast("tp_typeof"), [ast.Name(s.old_name)]) if ann is None else copy.deepcopy(ann)
     return ast.AnnAssign(ast.Name(new_name or s.scope_name, ast.Store()), ann, simple=1)
 
 
-def dec_cast(ctx: Context, origin: ast.expr, s: SymbolEntry, new_name: str | None = None) -> ast.Assign:
+def dec_cast(ctx: Context, origin: ast.expr, s: SymbolEntry, new_name: str | None = None) -> ast.AnnAssign:
     """Generate a cast assignment for a variable declaration.
 
     This function creates an `AnnAssign` node that cast a variable
@@ -314,7 +314,7 @@ def dec_cast(ctx: Context, origin: ast.expr, s: SymbolEntry, new_name: str | Non
         ast.AnnAssign: Annotated assignment node.
     """
     ann = s.annotation
-    if ann is None:
-        ann = ast.Call(runtime_ast("tp_typeof"), [ast.Name(s.old_name)])
+    ann = ast.Call(runtime_ast("tp_typeof"), [ast.Name(s.old_name)]) if ann is None else copy.deepcopy(ann)
     value = ast.Call(runtime_ast("tp_cast"), [ann, origin])
-    return ast.Assign([ast.Name(new_name or s.scope_name, ast.Store())], value)
+    ann = copy.deepcopy(ann)
+    return ast.AnnAssign(ast.Name(new_name or s.scope_name, ast.Store()),ann, value, simple=1)

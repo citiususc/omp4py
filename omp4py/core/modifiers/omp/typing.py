@@ -23,6 +23,7 @@ Two execution strategies are supported:
 The modifiers defined in this module are automatically enabled depending
 on the active compilation configuration.
 """
+
 from __future__ import annotations
 
 import ast
@@ -34,6 +35,7 @@ if typing.TYPE_CHECKING:
     from omp4py.core.options import Options
 
 __all__ = []
+
 
 @modifier
 class CythonTypes(Modifier, name="omp_cython_types", default=True):
@@ -52,6 +54,7 @@ class CythonTypes(Modifier, name="omp_cython_types", default=True):
     module and applies temporary workarounds for known Cython
     limitations related to nested cast expressions.
     """
+
     @classmethod
     def should_run(cls, options: Options) -> bool:
         """Determine whether the modifier should be applied.
@@ -119,9 +122,10 @@ class CythonTypes(Modifier, name="omp_cython_types", default=True):
             match node.func:
                 case ast.Attribute(ast.Name("_omp"), "tp_cast"):
                     match node.args[0]:
-                        case ast.Attribute(ast.Name("_omp"), "tp_typeof"):
+                        case ast.Call(ast.Attribute(ast.Name("_omp"), "tp_typeof")):
                             return node.args[1]
-        return node
+
+        return typing.cast("ast.expr", self.generic_visit(node))
 
     def visit_Attribute(self, node: ast.Attribute) -> ast.Attribute:
         """Rewrite generic typing helpers into native Cython APIs.
@@ -149,6 +153,7 @@ class CythonTypes(Modifier, name="omp_cython_types", default=True):
             case _:
                 return node
         return ast.fix_missing_locations(node)
+
 
 @modifier
 class PurePythonTypes(Modifier, name="omp_pure_types", default=True):
