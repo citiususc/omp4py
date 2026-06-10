@@ -54,7 +54,7 @@ from importlib.machinery import ModuleSpec, PathFinder, SourcelessFileLoader
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
-from omp4py.core.imports.loader import OMP_FOLDER
+from omp4py.core.imports.loader import OMP_FOLDER, load_extensions
 from omp4py.core.modifiers.engine import ModifierEngine
 from omp4py.core.preprocessor import obj2ast
 from omp4py.core.preprocessor.cbuild import cythonize
@@ -98,7 +98,8 @@ def process_object[T: Callable[..., typing.Any] | type](arg: T, opt: Options) ->
         if spec is None or spec.cached or opt.ignore_cache:
             result_module: ast.Module = process(module, data, opt)
             module.body.insert(
-                0, ast.ImportFrom("cython.cimports.omp4py", names=[ast.alias("runtime", "_omp")], level=0),
+                0,
+                ast.ImportFrom("cython.cimports.omp4py", names=[ast.alias("runtime", "_omp")], level=0),
             )
             ast.fix_missing_locations(module.body[0])
             cythonize(fullname, str(cache_dir), result_module, opt)
@@ -206,6 +207,7 @@ def process(module: ast.Module, full_source: str, opt: Options) -> ast.Module:
     Returns:
         ast.Module: Transformed module AST.
     """
+    load_extensions()
     transformer: OmpTransformer = OmpTransformer(full_source, module, opt)
     modifier_engine = ModifierEngine(opt)
 

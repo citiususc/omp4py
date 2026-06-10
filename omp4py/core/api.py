@@ -29,6 +29,9 @@ import my_module.foo
 # File preprocessing
 omp(py="script.py")
 
+# Register an extension module for lazy loading
+omp(extension="my_extension")
+
 # Creating a new decorator with defaults
 my_omp = omp(alias="my_omp", ...)
 """
@@ -39,6 +42,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager, contextmanager
 from typing import Any, TypedDict, Unpack, overload
 
+from omp4py.core.imports.loader import add_extension, set_omp_package
 from omp4py.core.options import Options
 
 __all__ = ["OmpType", "omp"]
@@ -301,12 +305,34 @@ class OmpType:
             OmpType: A new decorator function with the specified defaults applied.
         """
 
+    @overload
+    def __call__(self, *, extension: str) -> None:
+        """Register an extension module for lazy loading.
+
+        This overload registers an extension module that should only be
+        imported when the OpenMP preprocessing subsystem is initialized.
+
+        The mechanism avoids importing transformation-related modules when
+        only the runtime components of `omp4py` are being used, reducing
+        startup overhead and preventing unnecessary dependencies from being
+        loaded.
+
+        Extension modules typically use this registration mechanism from
+        their public entry point so that users only need to import the
+        extension module itself, while the actual implementation modules
+        remain unloaded until required by the preprocessor.
+
+        Args:
+            extension (str): Module name to register for deferred loading.
+        """
+
     def __call__(
         self,
         value: Any = None,
         *,
         py: str | None = None,
         pkg: str | None = None,
+        extension: str | None = None,
         **kwargs: Unpack[OmpKwargs],
     ) -> Any:
         """Unified OpenMP preprocessing entry point.
@@ -314,19 +340,19 @@ class OmpType:
         This function implements all overloads of `omp`:
 
         - **Directive context manager**
-          (`omp(value: str, /)`):
+          (`omp(value: str)`):
           Returns a no-op context manager for an OpenMP directive.
 
         - **Preprocessing of callables**
-          (`omp(value: Callable[P, R], /, **kwargs)`):
+          (`omp(value: Callable[P, R], **kwargs)`):
           Analyzes and transforms contained `omp` calls into parallel code.
 
         - **Preprocessing of classes**
-          (`omp(value: type[T], /, **kwargs)`):
+          (`omp(value: type[T], **kwargs)`):
           Analyzes and transforms contained `omp` calls into parallel code.
 
         - **Preprocessing of modules**
-          (`omp(*, pkg: str, /, **kwargs)`):
+          (`omp(*, pkg: str, **kwargs)`):
           Mark a package for OpenMP preprocessing at import time.
 
         - **File-based preprocessing**
@@ -338,21 +364,36 @@ class OmpType:
           Returns a new `omp` decorator with default metadata for future use.
           Use the `alias` keyword if assigning a different name for detection.
 
+        - **Extension registration**
+          (`omp(*, extension: str)`):
+          Registers an extension module for deferred loading by the
+          preprocessing subsystem.
+
         Additional metadata or directives can be provided via `**kwargs` (see `OmpKwargs`).
 
         Args:
             value (Any): Determines the overload behavior.
             py (str | None): Path to a Python file for file-based preprocessing.
             pkg (str | None): Package name for deferred preprocessing overload.
+            extension (str | None): Name of an extension module to register for deferred
+                loading by the preprocessing subsystem.
             **kwargs (Unpack[OmpKwargs]): Metadata or default directives for the preprocessor.
 
         Returns:
-            Any: The return type depends on the overload:
-                - `AbstractContextManager` for directives
-                - The processed callable/class/module
-                - `str` for file-based preprocessing
-                - `OmpType` a new `omp` for a decorator factory
+            Any:
+                Return value depends on the selected overload:
+
+                - `AbstractContextManager` for directive contexts.
+                - Transformed callable or class objects.
+                - `str` containing the generated file path for file-based
+                  preprocessing.
+                - `None` for package or extension registration.
+                - `OmpType` for decorator factory creation.
         """
+        if extension is not None:
+            add_extension(extension)
+            return None
+
         if kwargs.pop("args_append", False):
             for key, arg in kwargs.items():
                 match arg:
@@ -371,10 +412,8 @@ class OmpType:
             return process_file(py, Options(is_module=True, **self.__args))  # ty:ignore[unknown-argument, invalid-argument-type]
 
         if pkg is not None:
-            from omp4py.core.imports.loader import set_omp_package  # noqa: PLC0415 Lazy import, only when needed
-
             set_omp_package(pkg, Options(**self.__args)) # ty:ignore[unknown-argument, invalid-argument-type]
-            return None
+            return
 
         if value is not None:
             if isinstance(value, str):

@@ -22,20 +22,80 @@ The module also tracks whether preprocessing regenerated transformed
 sources, allowing compiled extensions to be rebuilt only when necessary.
 """
 
+from __future__ import annotations
+
 import sys
-import types
-from collections.abc import Sequence
+import typing
 from importlib.machinery import ExtensionFileLoader, ModuleSpec, PathFinder, SourceFileLoader
 from pathlib import Path
 from threading import Lock
 
-from omp4py.core.options import Options
+if typing.TYPE_CHECKING:
+    import types
+    from collections.abc import Sequence
 
-__all__ = ["OMP_FOLDER", "set_omp_package"]
+    from omp4py.core.options import Options
+
+__all__ = ["OMP_FOLDER", "add_extension", "load_extensions", "set_omp_package"]
 
 OMP_FOLDER: str = "__omp__"
-_init_lock: Lock = Lock()
+_lock: Lock = Lock()
 omp_packages: dict[str, Options] = {}
+_omp_extensions: list[str] = []
+
+
+def load_extensions() -> None:
+    """Load all registered extension modules.
+
+    This function imports every extension module previously registered
+    through `add_extension`.
+
+    Extensions are loaded lazily to avoid importing preprocessing-related
+    modules when only the runtime components of `omp4py` are being used.
+    This reduces startup overhead and prevents optional preprocessing
+    dependencies from being loaded unnecessarily.
+
+    Once all extensions have been imported successfully, the internal
+    registration list is cleared to ensure that each extension is loaded
+    only once.
+
+    The operation is protected by a global lock to guarantee thread-safe
+    initialization.
+
+    Notes:
+        This function is typically invoked during initialization of the
+        preprocessing subsystem and is not intended to be called directly
+        by user code.
+    """
+    if len(_omp_extensions) == 0:
+        return
+    with _lock:
+        for ext in _omp_extensions:
+            __import__(ext)
+        _omp_extensions.clear()
+
+
+def add_extension(name: str) -> None:
+    """Register an extension module for deferred loading.
+
+    This function records the name of an extension module that should be
+    imported when the OpenMP preprocessing subsystem is initialized.
+
+    Deferred registration allows extension modules to expose additional
+    directives, parsers, modifiers, transformations, or compiler
+    integrations without forcing those modules to be imported when only
+    the runtime layer is being used.
+
+    Registered extensions remain unloaded until `load_extensions()` is
+    executed.
+
+    Args:
+        name (str):
+            Fully qualified module name to be imported when extension
+             loading is triggered.
+    """
+    with _lock:
+        _omp_extensions.append(name)
 
 
 class Omp4pyFinder:
@@ -332,7 +392,7 @@ def set_omp_package(pkg: str, opt: Options) -> None:
             the package.
     """
     if len(omp_packages) == 0:
-        with _init_lock:
+        with _lock:
             if len(omp_packages) == 0:
                 sys.meta_path.insert(0, Omp4pyFinder())
     omp_packages[pkg] = opt
