@@ -21,10 +21,50 @@ Python's native error reporting system.
 from __future__ import annotations
 
 import ast
+import typing
+from pathlib import Path
 
-from omp4py.core.parser.tree import Directive, Span
+from . import openmp_parser as omp
+from . import string_parser as pre
+
+from .source_view import SourceView
+from .transformer import AstTransformer
+from .tree import Directive, Span
 
 __all__ = ["extract_directive", "parse_directive", "syntax_error"]
+
+@pre.v_args(inline=True)
+class PreTransformer(pre.Transformer):
+    def scape_seq(self, token: pre.Token) -> str:
+        return " "*len(str(token))
+
+    def string_token(self, token: pre.Token) -> str:
+        return str(token)
+
+    @pre.v_args(inline=False)
+    def start(self, children: list) -> tuple[str, int, int]:
+        # children is either [OPEN_DELIM, ...content..., CLOSE_DELIM]
+        # or [PREFIX, OPEN_DELIM, ...content..., CLOSE_DELIM]
+        has_prefix = (
+            len(children) > 2 and
+            isinstance(children[0], pre.Token) and
+            children[0].type == "STRING_PREFIX"
+        )
+
+        prefix_len     = len(children[0]) if has_prefix else 0
+        delim_len      = len(children[1 if has_prefix else 0])
+        last_delim_len = len(children[-1])
+
+        content_offset = prefix_len + delim_len
+        content = "".join(str(c) for c in (children[2:-1] if has_prefix else children[1:-1]))
+
+        return content, content_offset, last_delim_len
+
+
+preprocesor   = pre.Lark_StandAlone(transformer=PreTransformer())
+openmp_parser = omp.Lark_StandAlone()
+begin_offset = 0
+end_offset = 0
 
 
 def syntax_error(message: str, span: Span, source: str, filename: str) -> SyntaxError:
@@ -88,8 +128,23 @@ def extract_directive(node: ast.Constant, full_source: str, filename: str) -> st
     if len(raw_source) - 2 == len(node_value):
         return node_value
 
-    msg = "Complex directives is not supported yet"
-    raise NotImplementedError(msg)
+    global begin_offset, end_offset
+    contents, begin_offset, end_offset = preprocesor.parse(raw_source)
+    return contents
+
+
+# Required for the tests, to avoid duplicating the error handling
+def _parse(code: str, source_view: SourceView) -> Directive:
+    transformer = AstTransformer(source_view)
+    try:
+        parse_tree = openmp_parser.parse(code)
+        return transformer.transform(parse_tree)
+    except omp.UnexpectedToken as e:
+        raise source_view.error(e) from None
+    except omp.VisitError as e:
+        if isinstance(e.orig_exc, SyntaxError):
+            raise e.orig_exc from None
+        raise
 
 
 def parse_directive(code: str, span: Span, filename: str) -> Directive:
@@ -113,6 +168,14 @@ def parse_directive(code: str, span: Span, filename: str) -> Directive:
 
     Returns:
         Directive: Parsed directive representation.
+
+    Raises:
+        SyntaxError if the directive is incorrect.
     """
-    msg = "New parser is not implemented yet"
-    raise NotImplementedError(msg)
+    span.offset     += begin_offset
+    span.end_offset -= end_offset
+    source_view = SourceView.from_file(span, filename, code)
+    return _parse(code, source_view)
+
+
+

@@ -8,12 +8,15 @@ can include modifiers, which are arguments that further define their behavior.
 
 from __future__ import annotations
 
-from ast import alias, arg, expr, keyword, pattern, stmt, type_param
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
+
+if TYPE_CHECKING:
+    from ast import alias, arg, expr, keyword, pattern, stmt, type_param
 
 __all__ = [
+    "Atomic",
     "Barrier",
     "Clause",
     "Collapse",
@@ -26,12 +29,15 @@ __all__ = [
     "DeclareReduction",
     "Default",
     "Directive",
+    "Final",
     "FirstPrivate",
+    "Flush",
     "For",
     "If",
     "Initializer",
     "LastPrivate",
     "Master",
+    "Mergeable",
     "Modifier",
     "Name",
     "NoWait",
@@ -57,7 +63,11 @@ __all__ = [
     "Shared",
     "Single",
     "Span",
+    "Task",
+    "TaskWait",
+    "TaskYield",
     "ThreadPrivate",
+    "Untied",
 ]
 
 
@@ -201,6 +211,64 @@ class ThreadPrivate(Construct):
     @property
     def str_targets(self) -> list[str]:
         return [v.string for v in self.targets]
+
+
+@dataclass
+class Task(Construct):
+    if_: If | None = None
+    final: Final | None = None
+    untied: Untied | None = None
+    default: Default | None = None
+    mergeable: Mergeable | None = None
+    private: list[Private] = field(default_factory=list)
+    first_private: list[FirstPrivate] = field(default_factory=list)
+    shared: list[Shared] = field(default_factory=list)
+
+
+@dataclass
+class TaskYield(Construct):
+    pass
+
+
+@dataclass
+class TaskWait(Construct):
+    pass
+
+
+@dataclass
+class Atomic(Construct):
+    ntype: Name|None = None
+
+    class Type(Enum):
+        READ = 0
+        WRITE = 1
+        UPDATE = 2
+        CAPTURE = 3
+
+    type: Type = field(init=False)
+
+    def __post_init__(self) -> None:
+        if self.ntype is None:
+            return
+        object.__setattr__(
+            self,
+            "type",
+            {
+                "read": self.Type.READ,
+                "write": self.Type.WRITE,
+                "update": self.Type.UPDATE,
+                "capture": self.Type.CAPTURE,
+            }[self.ntype.string.lower()],
+        )
+
+
+@dataclass
+class Flush(Construct):
+    targets: list[PyName]|None = None
+
+    @property
+    def str_targets(self) -> list[str]:
+        return [v.string for v in self.targets] if self.targets is not None else []
 
 
 #######################################################################################################################
@@ -375,6 +443,21 @@ class Shared(DataScope):
     id: ClassVar[str] = "shared"
 
 
+@dataclass
+class Untied(Clause):
+    id: ClassVar[str] = "untied"
+
+
+@dataclass
+class Final(Clause):
+    id: ClassVar[str] = "final"
+    expr: PyExpr
+
+
+@dataclass
+class Mergeable(Clause):
+    id: ClassVar[str] = "mergeable"
+
 #######################################################################################################################
 ###################################################### Modifiers ######################################################
 #######################################################################################################################
@@ -433,6 +516,7 @@ class PyExpr(Modifier):
     """
 
     value: expr
+    source: str
 
 
 @dataclass

@@ -1,0 +1,48 @@
+//////////////////////////////////////////////////////////////////////////////////
+//                                                                              //
+// To generate the string parser from this grammar use the following command:   //
+//                                                                              //
+//   python -m lark.tools.standalone string_literal.lark \                      //
+//     --out string_parser.py --lexer basic --start start                       //
+//                                                                              //
+//////////////////////////////////////////////////////////////////////////////////
+
+// ---- TOKENS -----------------------------------------------------------------
+
+OCTAL_DIGIT.5 : "0".."7"
+HEX_DIGIT.5   : "0".."9" | "a".."f" | "A".."F"
+OCTAL_SCAPE.5 : "\\" OCTAL_DIGIT~1..3
+HEX_SCAPE.5   : "\\x" HEX_DIGIT~2
+
+UNICODE_SCAPE.5       : "\\U" HEX_DIGIT~8 | "\\u" HEX_DIGIT~4
+NAMED_UNICODE_SCAPE.5 : "\\N{" NAME "}"
+NAME.5                : /[a-zA-Z0-9 \-]+/
+
+NEWLINE.5       : "\n"
+STRING_PREFIX.5 : "r"i | "u"i | "b"i | "br"i | "rb"i
+
+TRIPLE_DOUBLE.4 : "\"\"\""
+TRIPLE_SINGLE.4 : "'''"
+DOUBLE.3        : "\""
+SINGLE.3        : "'"
+
+SINGLE_SCAPE_SEQ.2       : /\\[\n\\\'\"abfnrtv]/
+UNRECOGNIZED_SCAPE_SEQ.1 : /\\./s
+
+ANY.0: /[^\"'\\\n]+/s
+
+// ---- RULES ------------------------------------------------------------------
+
+start: STRING_PREFIX? TRIPLE_DOUBLE triple_double_inner* TRIPLE_DOUBLE
+     | STRING_PREFIX? TRIPLE_SINGLE triple_single_inner* TRIPLE_SINGLE
+     | STRING_PREFIX? DOUBLE        double_inner*        DOUBLE
+     | STRING_PREFIX? SINGLE        single_inner*        SINGLE
+
+?triple_double_inner : other_token |                 TRIPLE_SINGLE | DOUBLE | SINGLE | NEWLINE -> string_token
+?triple_single_inner : other_token | TRIPLE_DOUBLE |                 DOUBLE | SINGLE | NEWLINE -> string_token
+?double_inner        : other_token | TRIPLE_DOUBLE | TRIPLE_SINGLE |          SINGLE           -> string_token
+?single_inner        : other_token | TRIPLE_DOUBLE | TRIPLE_SINGLE | DOUBLE                    -> string_token
+
+?other_token: scape_seq | UNRECOGNIZED_SCAPE_SEQ | STRING_PREFIX | ANY
+scape_seq: SINGLE_SCAPE_SEQ | OCTAL_SCAPE | HEX_SCAPE | NAMED_UNICODE_SCAPE | UNICODE_SCAPE
+

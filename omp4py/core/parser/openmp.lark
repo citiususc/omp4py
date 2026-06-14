@@ -1,0 +1,258 @@
+//////////////////////////////////////////////////////////////////////////////////
+//                                                                              //
+// To generate the OpenMP parser from this grammar use the following command:   //
+//                                                                              //
+//   python -m lark.tools.standalone openmp.lark \                              //
+//     --out openmp_parser.py --start start      \                              //
+//     --lexer contextual --propagate_positions                                 //
+//                                                                              //
+//////////////////////////////////////////////////////////////////////////////////
+
+// -----------------------------------------------------------------------------
+// ---- TOKENS -----------------------------------------------------------------
+// -----------------------------------------------------------------------------
+
+//
+// ---- DIRECTIVE & CLAUSE KEYWORDS ----
+//
+
+// IMPORTANT: then directive keywords' names must end with ``_DIRECTIVE``
+// and the clauses keywords' names with ``_CLAUSE``.
+// This convention is used by the error system.
+
+// Directive keywords
+ATOMIC_DIRECTIVE        : "atomic"
+BARRIER_DIRECTIVE       : "barrier"
+CRITICAL_DIRECTIVE      : "critical"
+FLUSH_DIRECTIVE         : "flush"
+FOR_DIRECTIVE           : "for"
+MASTER_DIRECTIVE        : "master"
+PARALLEL_DIRECTIVE      : "parallel"
+SECTION_DIRECTIVE       : "section"
+SECTIONS_DIRECTIVE      : "sections"
+SINGLE_DIRECTIVE        : "single"
+TASK_DIRECTIVE          : "task"
+TASKWAIT_DIRECTIVE      : "taskwait"
+THREADPRIVATE_DIRECTIVE : "threadprivate"
+ORDERED_DIRECTIVE       : "ordered"
+TASKYIELD_DIRECTIVE     : "taskyield"
+
+// Clause keywords
+COLLAPSE_CLAUSE     : "collapse"
+COPYIN_CLAUSE       : "copyin"
+COPYPRIVATE_CLAUSE  : "copyprivate"
+DEFAULT_CLAUSE      : "default"
+FIRSTPRIVATE_CLAUSE : "firstprivate"
+IF_CLAUSE           : "if"
+LASTPRIVATE_CLAUSE  : "lastprivate"
+NOWAIT_CLAUSE       : "nowait"
+NUM_THREADS_CLAUSE  : "num_threads"
+PRIVATE_CLAUSE      : "private"
+REDUCTION_CLAUSE    : "reduction"
+SCHEDULE_CLAUSE     : "schedule"
+UNTIED_CLAUSE       : "untied"
+ORDERED_CLAUSE      : "ordered"
+SHARED_CLAUSE       : "shared"
+FINAL_CLAUSE        : "final"
+MERGEABLE_CLAUSE    : "mergeable"
+
+//
+// ---- OPTION KEYWORDS ----
+//
+
+// Reduction clause options
+PLUS        : "+"
+MINUS       : "-"
+MULT        : "*"
+BITWISE_AND : "&"
+BITWISE_OR  : "|"
+BITWISE_XOR : "^"
+LOGIC_AND   : "and"
+LOGIC_OR    : "or"
+MAX         : "max"
+MIN         : "min"
+
+// Default clause options
+NONE   : "none"
+SHARED : "shared"
+
+// Schedule clause options
+STATIC  : "static"
+DYNAMIC : "dynamic"
+GUIDED  : "guided"
+AUTO    : "auto"
+RUNTIME : "runtime"
+
+// Atomic options
+READ    : "read"
+WRITE   : "write"
+UPDATE  : "update"
+CAPTURE : "capture"
+
+//
+// ---- OTHER TOKENS ----
+//
+
+_WHITESPACE: /\s+/
+%ignore _WHITESPACE
+
+INTEGER    : /[0-9]+/
+IDENTIFIER : /[^\W\d]\w*/
+
+// Accept all characters until the end of the clause (parentheses)
+// This is possible because all OpenMP clauses that require these types of expressions
+// do not accept any other parameters.
+PY_ATOM : /[^()]+/
+
+
+// -----------------------------------------------------------------------------
+// ---- RULES ------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+
+start: parallel_directive | parallel_for_directive | parallel_sections_directive
+	| for_directive
+	| sections_directive | section_directive
+	| single_directive
+	| task_directive | taskyield_directive
+	| master_directive
+	| critical_directive
+	| barrier_directive
+	| taskwait_directive
+	| atomic_directive
+	| flush_directive
+	| ordered_directive
+	| threadprivate_directive
+
+//
+// ---- CONSTRUCTS ----
+//
+
+parallel_directive: PARALLEL_DIRECTIVE _parallel_clause_list?
+_parallel_clause_list: _parallel_clause (","? _parallel_clause)*
+_parallel_clause: if_clause
+	| num_threads_clause
+	| default_clause
+	| private_clause
+	| firstprivate_clause
+	| shared_clause
+	| copyin_clause
+	| reduction_clause
+
+parallel_for_directive: PARALLEL_DIRECTIVE FOR_DIRECTIVE _parallel_for_clause_list?
+_parallel_for_clause_list: _parallel_for_clause (","? _parallel_for_clause)*
+_parallel_for_clause: private_clause // shared
+	| firstprivate_clause // shared
+	| reduction_clause    // shared
+	| if_clause           // parallel
+	| num_threads_clause  // parallel
+	| default_clause      // parallel
+	| shared_clause       // parallel
+	| copyin_clause       // parallel
+	| lastprivate_clause  // for
+	| schedule_clause     // for
+	| collapse_clause     // for
+	| ordered_clause      // for
+	// | nowait_clause    // not allowed in "parallel for" (there's an implicit barrier after parallel)
+
+parallel_sections_directive: PARALLEL_DIRECTIVE SECTIONS_DIRECTIVE _parallel_sections_clause_list?
+_parallel_sections_clause_list: _parallel_sections_clause (","? _parallel_sections_clause)*
+_parallel_sections_clause: private_clause // shared
+	| firstprivate_clause // shared
+	| reduction_clause    // shared
+	| if_clause           // parallel
+	| num_threads_clause  // parallel
+	| default_clause      // parallel
+	| shared_clause       // parallel
+	| copyin_clause       // parallel
+	| lastprivate_clause  // sections
+	// | nowait_clause    // not allowed in "parallel sections" (there's an implicit barrier after parallel)
+
+for_directive: FOR_DIRECTIVE _for_clause_list?
+_for_clause_list: _for_clause (","? _for_clause)*
+_for_clause: private_clause
+	| firstprivate_clause
+	| lastprivate_clause
+	| reduction_clause
+	| schedule_clause
+	| collapse_clause
+	| ordered_clause
+	| nowait_clause
+
+sections_directive: SECTIONS_DIRECTIVE _sections_clause_list?
+_sections_clause_list: _sections_clause (","? _sections_clause)*
+_sections_clause: private_clause
+	| firstprivate_clause
+	| lastprivate_clause
+	| reduction_clause
+	| nowait_clause
+
+section_directive: SECTION_DIRECTIVE
+
+single_directive: SINGLE_DIRECTIVE _single_clause_list?
+_single_clause_list: _single_clause (","? _single_clause)*
+_single_clause: private_clause
+	| firstprivate_clause
+	| copyprivate_clause
+	| nowait_clause
+
+task_directive: TASK_DIRECTIVE _task_clause_list?
+_task_clause_list: _task_clause (","? _task_clause)*
+_task_clause: if_clause
+	| final_clause
+	| untied_clause
+	| default_clause
+	| mergeable_clause
+	| private_clause
+	| firstprivate_clause
+	| shared_clause
+
+taskyield_directive: TASKYIELD_DIRECTIVE
+
+critical_directive      : CRITICAL_DIRECTIVE ("(" IDENTIFIER ")")?
+atomic_directive        : ATOMIC_DIRECTIVE _atomic_option?
+_atomic_option          : READ | WRITE | UPDATE | CAPTURE
+flush_directive         : FLUSH_DIRECTIVE ("(" var_list ")")?
+threadprivate_directive : THREADPRIVATE_DIRECTIVE "(" var_list ")"
+
+master_directive        : MASTER_DIRECTIVE
+barrier_directive       : BARRIER_DIRECTIVE
+taskwait_directive      : TASKWAIT_DIRECTIVE
+ordered_directive       : ORDERED_DIRECTIVE
+
+//
+// ---- CLAUSES ----
+//
+
+// DataScope
+shared_clause       : SHARED_CLAUSE       "(" var_list ")"
+private_clause      : PRIVATE_CLAUSE      "(" var_list ")"
+firstprivate_clause : FIRSTPRIVATE_CLAUSE "(" var_list ")"
+lastprivate_clause  : LASTPRIVATE_CLAUSE  "(" var_list ")"
+copyin_clause       : COPYIN_CLAUSE       "(" var_list ")"
+copyprivate_clause  : COPYPRIVATE_CLAUSE  "(" var_list ")"
+reduction_clause    : REDUCTION_CLAUSE    "(" reduction_op ":" var_list ")"
+
+// Others
+schedule_clause    : SCHEDULE_CLAUSE    "(" schedule_type ("," py_expr)? ")"
+default_clause     : DEFAULT_CLAUSE     "(" (SHARED | NONE) ")"
+if_clause          : IF_CLAUSE          "(" py_expr ")"
+num_threads_clause : NUM_THREADS_CLAUSE "(" py_expr ")"
+collapse_clause    : COLLAPSE_CLAUSE    "(" INTEGER ")"
+final_clause       : FINAL_CLAUSE       "(" py_expr ")"
+ordered_clause     : ORDERED_CLAUSE
+nowait_clause      : NOWAIT_CLAUSE
+untied_clause      : UNTIED_CLAUSE
+mergeable_clause   : MERGEABLE_CLAUSE
+
+
+//
+// ---- MODIFIERS ----
+//
+
+var_list      : IDENTIFIER ("," IDENTIFIER)*
+reduction_op  : PLUS | MINUS | MULT | BITWISE_AND | BITWISE_OR | BITWISE_XOR | LOGIC_AND | LOGIC_OR | MAX | MIN
+schedule_type : STATIC | DYNAMIC | GUIDED | AUTO | RUNTIME
+
+py_expr   : temp_expr
+temp_expr : (PY_ATOM | "(" temp_expr? ")")+
+
