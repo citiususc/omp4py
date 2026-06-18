@@ -283,8 +283,6 @@ class SourceView:
         Returns:
             SyntaxError: A formatted syntax error suitable for user display.
         """
-        msg, use_one_char_span = self._msg_from_error(error)
-
         token = typing.cast("Token", error.token)
         span = Span(
             token.line or 1,
@@ -292,14 +290,11 @@ class SourceView:
             token.end_line       if token.end_line   is not None else -1,
             token.end_column - 1 if token.end_column is not None else -1,
         )
-        if use_one_char_span:
-            span.end_lineno = -1
-            span.end_offset = -1
-
+        msg, span = self._msg_from_error(error, span)
         return self.syntax_error(msg, span, diagnostics=diagnostics)
 
 
-    def _msg_from_error(self, error: UnexpectedToken) -> tuple[str, bool]:
+    def _msg_from_error(self, error: UnexpectedToken, span: Span) -> tuple[str, Span]:
         token = typing.cast("Token", error.token)
 
         #### Expected tokens ####
@@ -312,7 +307,9 @@ class SourceView:
             if expected_token.endswith("_DIRECTIVE"):
                 # Directive must be at top level,
                 # if that was not provided, everything else is wrong.
-                return "expected OpenMP directive.", False
+                span.end_offset = -1
+                span.end_lineno = -1
+                return "expected OpenMP directive.", span
 
             if expected_token.endswith("_CLAUSE"):
                 expected_clause = True
@@ -337,25 +334,43 @@ class SourceView:
 
         #### Actual token received ####
 
+        # If the current token is an identifier and the last token was an integer,
+        # it is probably because the integer was invalid and the lexer broke it into parts:
+        #     "0o9" ==> integer 0 + "o9" identifier
+        # This is only applies if both tokens are next to each other with no whitespace in between,
+        # because "0 o9" should get a different error.
+        if token.type == "IDENTIFIER" and error.token_history:
+            last_token = typing.cast("Token", error.token_history[-1])
+
+            if (
+                last_token.type == "INTEGER" and
+                last_token.end_column is not None and token.column is not None and
+                last_token.end_column == token.column
+            ):
+                span.offset -= 1 # Include 0 prefix
+                return f'invalid integer literal "0{token}".', span
+
         # If the token is PY_ATOM, it means that we got unexpected characters.
         # The problem here is that PY_ATOM will consume everything until a parentheses,
         # therefore the error location will be wrong.
         if token.type == "PY_ATOM":
             first_char = token[0]
             display = "integer" if first_char.isdigit() else f"'{first_char}'"
-            return f'expected {expected_str} instead of {display}.', True
+            span.end_offset = -1
+            span.end_lineno = -1
+            return f'expected {expected_str} instead of {display}.', span
 
         if token.type.endswith(("_DIRECTIVE", "_CLAUSE")):
-            return f'"{token}" is not valid for this directive.', False
+            return f'"{token}" is not valid for this directive.', span
 
         found_token = _TOKEN_DISPLAY.get(token.type, f'"{token}"')
         if expected_expr:
             # Unbalanced parentheses
             if token.type == "$END":
-                return f'expected ")" before {found_token}.', False
-            return f"expected Python expression before {found_token}.", False
+                return f'expected ")" before {found_token}.', span
+            return f"expected Python expression before {found_token}.", span
 
-        return f"expected {expected_str} before {found_token}.", False
+        return f"expected {expected_str} before {found_token}.", span
 
 
     def annotate(self, span: Span, indent: int=0, show_lineno: bool=False) -> tuple[str, str]:

@@ -121,7 +121,12 @@ class AstTransformer(Transformer):
     @v_args(inline=True)
     def INTEGER(self, token: Token) -> tree.PyInt:
         # The int() conversion is safe to do here because the parser guarantees only digits
-        return tree.PyInt(span=self._token2span(token), value=int(token))
+        # Also, if the base is 0, Python will correctly guess it based on the prefix:
+        #     XXX    ==> Base 10
+        #     0bXXXX ==> Base 2
+        #     0oXXX  ==> Base 8
+        #     0xXX   ==> Base 16
+        return tree.PyInt(span=self._token2span(token), value=int(token, 0))
 
     # py_expr: (PY_ATOM | "(" py_expr ")")+
     @v_args(tree=True)

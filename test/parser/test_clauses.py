@@ -62,6 +62,27 @@ INVALID_CLAUSES = [
     "for private(10)",
     "for private(39+(10+42)*1)",
 
+    # Invalid integers
+    "for collapse()",
+    "for collapse(-1)",
+    "for collapse(1.5)",
+    "for collapse(1+1)",
+    "for collapse(n)",
+
+    "for collapse(4__2)",
+    "for collapse(0b123)",
+    "for collapse(0b0__0)",
+    "for collapse(0o8)",
+    "for collapse(0o911)",
+    "for collapse(0o__1)",
+    "for collapse(0xF__F)",
+    "for collapse(0_x1F)",
+
+    # Correct syntax but collapse(0) is not allowed
+    "for collapse(0)",
+    "for collapse(00_000_0)",
+    "for collapse(0O0)",
+
     # Expressions
     # They are also present in if() and final(), but as they are the same rule,
     # so testing one is enough.
@@ -105,14 +126,6 @@ INVALID_CLAUSES = [
     "parallel default(true)",
     "parallel default(Shared)",
     "parallel default(None)",
-
-    # int
-    "for collapse()",
-    "for collapse(0)",
-    "for collapse(-1)",
-    "for collapse(1.5)",
-    "for collapse(1+1)",
-    "for collapse(n)",
 
     # flag clauses with spurious arguments
     "for nowait(x)",
@@ -248,8 +261,12 @@ def test_expr(source: str, clause_type: type[tree.Clause], expr: str) -> None:
 @pytest.mark.parametrize("source,clause_type,num", [
     # collapse
     ("for collapse(1)", tree.Collapse, 1),
-    ("for collapse(2)", tree.Collapse, 2),
-    ("for collapse(10)", tree.Collapse, 10),
+    ("for collapse(4_2)", tree.Collapse, 42),
+    ("for collapse(0b_11_11)", tree.Collapse, 15),
+    ("for collapse(0B101)", tree.Collapse, 5),
+    ("for collapse(0o_7_5_5)", tree.Collapse, 493),
+    ("for collapse(0x1Ff)", tree.Collapse, 511),
+    ("for collapse(0X1_0)", tree.Collapse, 16),
 ])
 def test_int(source: str, clause_type: type[tree.Clause], num: int) -> None:
     directive = parse(source)

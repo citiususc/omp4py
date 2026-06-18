@@ -96,7 +96,24 @@ CAPTURE : "capture"
 _WHITESPACE: /\s+/
 %ignore _WHITESPACE
 
-INTEGER    : /[0-9]+/
+// Python integer definitions
+// https://docs.python.org/3/reference/lexical_analysis.html#grammar-token-python-grammar-integer
+_DIGIT          : "0".."9"
+_NON_ZERO_DIGIT : "1".."9"
+_BIN_DIGIT      : "0" | "1"
+_OCT_DIGIT      : "0".."7"
+_HEX_DIGIT      : _DIGIT | "a".."f" | "A".."F"
+
+_DEC_INTEGER  : _NON_ZERO_DIGIT ("_"? _DIGIT)*
+_BIN_INTEGER  : "0" ("b" | "B") ("_"? _BIN_DIGIT)+
+_OCT_INTEGER  : "0" ("o" | "O") ("_"? _OCT_DIGIT)+
+_HEX_INTEGER  : "0" ("x" | "X") ("_"? _HEX_DIGIT)+
+_ZERO_INTEGER : "0"+            ("_"? "0")*
+
+INTEGER: _DEC_INTEGER | _BIN_INTEGER | _OCT_INTEGER | _HEX_INTEGER | _ZERO_INTEGER
+
+// Python identifier definitions
+// https://docs.python.org/3/reference/lexical_analysis.html#names-identifiers-and-keywords
 IDENTIFIER : /[^\W\d]\w*/
 
 // Accept all characters until the end of the clause (parentheses)
