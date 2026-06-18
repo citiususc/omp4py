@@ -6,119 +6,113 @@ from omp4py.core.parser.parser import preprocesor
 
 CASES = [
     # Empty strings
-    ('""',       "", 1, 1),
-    ("''",       "", 1, 1),
-    ("''''''",   "", 3, 3),
-    ('""""""',   "", 3, 3),
-    ('r""""""',  "", 4, 3),
-    ('rb""""""', "", 5, 3),
+    ('""',       " "*2),
+    ("''",       " "*2),
+    ("''''''",   " "*6),
+    ('""""""',   " "*6),
+    ('r""""""',  " "*7),
+    ('rb""""""', " "*8),
 
     # String prefixes
-    ('r"rub"',  "rub", 2, 1),
-    ('R"RUB"',  "RUB", 2, 1),
-    ('b""',  "", 2, 1),
-    ('B""',  "", 2, 1),
-    ('u""',  "", 2, 1),
-    ('U""',  "", 2, 1),
-    ('br""', "", 3, 1),
-    ('Br""', "", 3, 1),
-    ('bR""', "", 3, 1),
-    ('BR""', "", 3, 1),
-    ('rb""', "", 3, 1),
-    ('rB""', "", 3, 1),
-    ('Rb""', "", 3, 1),
-    ('RB""', "", 3, 1),
+    ('r"rub"',  "  rub "),
+    ('R"RUB"',  "  RUB "),
+    ('b""',  " "*3),
+    ('B""',  " "*3),
+    ('u""',  " "*3),
+    ('U""',  " "*3),
+    ('br""', " "*4),
+    ('Br""', " "*4),
+    ('bR""', " "*4),
+    ('BR""', " "*4),
+    ('rb""', " "*4),
+    ('rB""', " "*4),
+    ('Rb""', " "*4),
+    ('RB""', " "*4),
 
     # ANY: plain content, no escapes
-    ('"hello"',       "hello",       1, 1),
-    ("'hello'",       "hello",       1, 1),
-    ('"""hello"""',   "hello",       3, 3),
-    ("'''hello'''",   "hello",       3, 3),
-    ('"hello world"', "hello world", 1, 1),
+    ('"hello"',       " hello "),
+    ("'hello'",       " hello "),
+    ('"""hello"""',   "   hello   "),
+    ("'''hello'''",   "   hello   "),
+    ('"hello world"', " hello world "),
 
     # SINGLE_SCAPE_SEQ: recognized single-char escapes
-    (r'"\n"',  " "*2, 1, 1),
-    (r'"\t"',  " "*2, 1, 1),
-    (r'"\r"',  " "*2, 1, 1),
-    (r'"\\"',  " "*2, 1, 1),
-    (r'"\'"',  " "*2, 1, 1),
-    (r'"\""',  " "*2, 1, 1),
-    (r'"\a"',  " "*2, 1, 1),
-    (r'"\b"',  " "*2, 1, 1),
-    (r'"\f"',  " "*2, 1, 1),
-    (r'"\v"',  " "*2, 1, 1),
-    ('"\\\n"', " "*2, 1, 1),
+    (r'"\n"',  " "*4),
+    (r'"\t"',  " "*4),
+    (r'"\r"',  " "*4),
+    (r'"\\"',  " "*4),
+    (r'"\'"',  " "*4),
+    (r'"\""',  " "*4),
+    (r'"\a"',  " "*4),
+    (r'"\b"',  " "*4),
+    (r'"\f"',  " "*4),
+    (r'"\v"',  " "*4),
+    ('"\\\n"', " "*4),
 
     # OCTAL_SCAPE
-    (r'"\0"',   " "*2, 1, 1), # 1 digit
-    (r'"\07"',  " "*3, 1, 1), # 2 digits
-    (r'"\077"', " "*4, 1, 1), # 3 digits
+    (r'"\0"',   " "*4),
+    (r'"\07"',  " "*5),
+    (r'"\077"', " "*6),
 
     # HEX_SCAPE
-    (r'"\x00"',  " "*4, 1, 1),
-    (r'"\x41"',  " "*4, 1, 1),
-    (r'"\xff"',  " "*4, 1, 1),
-    (r'"\xFF"',  " "*4, 1, 1),
+    (r'"\x00"',  " "*6),
+    (r'"\x41"',  " "*6),
+    (r'"\xff"',  " "*6),
+    (r'"\xFF"',  " "*6),
 
     # UNICODE_SCAPE: \uXXXX (4 hex digits)
-    (r'"\u0041"', " "*6, 1, 1),  # 'A'
-    (r'"\u00ff"', " "*6, 1, 1),
-    (r'"\uFFFF"', " "*6, 1, 1),
+    (r'"\u0041"', " "*8),
+    (r'"\u00ff"', " "*8),
+    (r'"\uFFFF"', " "*8),
 
     # UNICODE_SCAPE: \UXXXXXXXX (8 hex digits)
-    (r'"\U00000041"', " "*10, 1, 1),
-    (r'"\U0001F600"', " "*10, 1, 1),
+    (r'"\U00000041"', " "*12),
+    (r'"\U0001F600"', " "*12),
 
     # NAMED_UNICODE_SCAPE
-    (r'"\N{LATIN SMALL LETTER A}"',     " "*24, 1, 1),
-    (r'"\N{snowman}"',                  " "*11, 1, 1),
-    (r'"\N{Greek Small Letter Alpha}"', " "*28, 1, 1),
+    (r'"\N{LATIN SMALL LETTER A}"',     " "*26),
+    (r'"\N{snowman}"',                  " "*13),
+    (r'"\N{Greek Small Letter Alpha}"', " "*30),
 
     # UNRECOGNIZED_SCAPE_SEQ: unknown escapes pass through
-    (r'"\p"', r"\p", 1, 1),
-    (r'"\q"', r"\q", 1, 1),
-    (r'"\j"', r"\j", 1, 1),
+    (r'"\p"', r" \p "),
+    (r'"\q"', r" \q "),
+    (r'"\j"', r" \j "),
 
     # NEWLINE in triple-quoted strings
-    ('"""line1\nline2"""',   "line1\nline2",   3, 3),
-    ("'''line1\nline2'''",   "line1\nline2",   3, 3),
-    ('"""line1\n\nline2"""', "line1\n\nline2", 3, 3),
+    ('"""line1\nline2"""',   "   line1\nline2   "),
+    ("'''line1\nline2'''",   "   line1\nline2   "),
+    ('"""line1\n\nline2"""', "   line1\n\nline2   "),
 
     # Quote characters allowed inside triple-quoted strings
-    ('"""she said "hi" """',     'she said "hi" ',     3, 3),
-    ("'''it's fine'''",          "it's fine",          3, 3),
-    ('"""one " two "" three"""', 'one " two "" three', 3, 3),
-    ("'''one ' two '' three'''", "one ' two '' three", 3, 3),
+    ('"""she said "hi" """',     '   she said "hi"    '),
+    ("'''it's fine'''",          "   it's fine   "),
+    ('"""one " two "" three"""', '   one " two "" three   '),
+    ("'''one ' two '' three'''", "   one ' two '' three   "),
 
     # Opposite quote delimiter inside single-quoted strings
-    ('"it\'s"',      "it's",     1, 1),
-    ("'say \"hi\"'", 'say "hi"', 1, 1),
+    ('"it\'s"',      " it's "),
+    ("'say \"hi\"'", ' say "hi" '),
 
     # Mixed content: ANY + escapes
-    (r'"hello\nworld"', "hello  world", 1, 1),
-    (r'"col:\x41end"',  "col:    end",  1, 1),
-    (r'"a\tb\tc"',      "a  b  c",      1, 1),
+    (r'"hello\nworld"', " hello  world "),
+    (r'"col:\x41end"',  " col:    end "),
+    (r'"a\tb\tc"',      " a  b  c "),
 
     # Multiple escape sequences in a row
-    (r'"\n\t\r"',   " " * 6, 1, 1),
-    (r'"\x41\x42"', " " * 8, 1, 1),
+    (r'"\n\t\r"',   " " * 8),
+    (r'"\x41\x42"', " " * 10),
 
     # Triple-quoted with escapes
-    ('"""\\n"""',     " " * 2, 3, 3),
-    ('"""\\x41"""',   " " * 4, 3, 3),
-    ('b"""\\x41"""',  " " * 4, 4, 3),
-    ('rb"""\\x41"""', " " * 4, 5, 3),
+    ('"""\\n"""',     " " * 8),
+    ('"""\\x41"""',   " " * 10),
+    ('b"""\\x41"""',  " " * 11),
+    ('rb"""\\x41"""', " " * 12),
 ]
 
 @pytest.mark.no_isolate
-@pytest.mark.parametrize("input,expected,expected_begin,expected_end", CASES)
-def test_string_preprocessor(
-    input: str,
-    expected: str,
-    expected_begin: int,
-    expected_end: int,
-) -> None:
-    out, begin, end = preprocesor.parse(input)
-    assert out   == expected
-    assert begin == expected_begin
-    assert end   == expected_end
+@pytest.mark.parametrize("input,expected", CASES)
+def test_string_preprocessor(input: str, expected: str) -> None:
+    content = preprocesor.parse(input)
+    assert len(content) == len(input)
+    assert content == expected

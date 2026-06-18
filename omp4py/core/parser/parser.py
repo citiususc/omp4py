@@ -42,29 +42,22 @@ class PreTransformer(pre.Transformer):
         return str(token)
 
     @pre.v_args(inline=False)
-    def start(self, children: list) -> tuple[str, int, int]:
-        # children is either [OPEN_DELIM, ...content..., CLOSE_DELIM]
-        # or [PREFIX, OPEN_DELIM, ...content..., CLOSE_DELIM]
-        has_prefix = (
-            len(children) > 2 and
-            isinstance(children[0], pre.Token) and
-            children[0].type == "STRING_PREFIX"
+    def string_literal(self, children: list) -> str:
+        return (
+            " "*len(str(children[0])) +
+            "".join(children[1:-1]) +
+            " "*len(str(children[-1]))
         )
 
-        prefix_len     = len(children[0]) if has_prefix else 0
-        delim_len      = len(children[1 if has_prefix else 0])
-        last_delim_len = len(children[-1])
-
-        content_offset = prefix_len + delim_len
-        content = "".join(str(c) for c in (children[2:-1] if has_prefix else children[1:-1]))
-
-        return content, content_offset, last_delim_len
-
+    @pre.v_args(inline=False)
+    def start(self, children: list) -> str:
+        if len(children) == 1:
+            return children[0]
+        assert len(children) == 2
+        return " "*len(str(children[0])) + children[1]
 
 preprocesor   = pre.Lark_StandAlone(transformer=PreTransformer())
 openmp_parser = omp.Lark_StandAlone()
-begin_offset = 0
-end_offset = 0
 
 
 def syntax_error(message: str, span: Span, source: str, filename: str) -> SyntaxError:
@@ -128,9 +121,7 @@ def extract_directive(node: ast.Constant, full_source: str, filename: str) -> st
     if len(raw_source) - 2 == len(node_value):
         return node_value
 
-    global begin_offset, end_offset
-    contents, begin_offset, end_offset = preprocesor.parse(raw_source)
-    return contents
+    return preprocesor.parse(raw_source)
 
 
 # Required for the tests, to avoid duplicating the error handling
@@ -172,8 +163,6 @@ def parse_directive(code: str, span: Span, filename: str) -> Directive:
     Raises:
         SyntaxError if the directive is incorrect.
     """
-    span.offset     += begin_offset
-    span.end_offset -= end_offset
     source_view = SourceView.from_file(span, filename, code)
     return _parse(code, source_view)
 

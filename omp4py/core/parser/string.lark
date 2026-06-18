@@ -33,10 +33,11 @@ ANY.0: /[^\"'\\\n]+/s
 
 // ---- RULES ------------------------------------------------------------------
 
-start: STRING_PREFIX? TRIPLE_DOUBLE triple_double_inner* TRIPLE_DOUBLE
-     | STRING_PREFIX? TRIPLE_SINGLE triple_single_inner* TRIPLE_SINGLE
-     | STRING_PREFIX? DOUBLE        double_inner*        DOUBLE
-     | STRING_PREFIX? SINGLE        single_inner*        SINGLE
+start: STRING_PREFIX? string_literal
+string_literal: TRIPLE_DOUBLE triple_double_inner* TRIPLE_DOUBLE
+              | TRIPLE_SINGLE triple_single_inner* TRIPLE_SINGLE
+              | DOUBLE        double_inner*        DOUBLE
+              | SINGLE        single_inner*        SINGLE
 
 ?triple_double_inner : other_token |                 TRIPLE_SINGLE | DOUBLE | SINGLE | NEWLINE -> string_token
 ?triple_single_inner : other_token | TRIPLE_DOUBLE |                 DOUBLE | SINGLE | NEWLINE -> string_token
