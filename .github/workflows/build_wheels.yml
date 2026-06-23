@@ -4,6 +4,7 @@ on:
     paths-ignore:
     - '**.md'
     - 'examples/**'
+    - 'docs/**'
     - 'test/**' # Ignore changes in the 'test' folder, as they are not executed
 
 jobs:
