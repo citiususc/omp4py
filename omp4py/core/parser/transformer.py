@@ -18,35 +18,9 @@ class AstTransformer(Transformer):
 
     #### HELPERS ###############################################################
 
-    def _token2span(self, token: Token) -> tree.Span:
-        if token.line is None or token.column is None:
-            msg = "Missing position information"
-            raise ValueError(msg)
-
-        # Lark starts at line 1 column 1, but the Span expects an offset.
-        return tree.Span(
-            token.line,
-            token.column - 1,
-            token.end_line       if token.end_line   is not None else -1,
-            token.end_column - 1 if token.end_column is not None else -1,
-        )
-
-    def _meta2span(self, meta: Meta) -> tree.Span:
-        if meta.empty:
-            msg = "Meta object is empty"
-            raise ValueError(msg)
-
-        # Lark starts at line 1 column 1, but the Span expects an offset.
-        return tree.Span(
-            meta.line,
-            meta.column - 1,
-            meta.end_line,
-            meta.end_column - 1,
-        )
-
     # No type here, otherwise cast() will be required everywhere
     def _name_from_token(self, token) -> tree.Name:
-        return tree.Name(span=self._token2span(token), string=str(token))
+        return tree.Name(span=self.sv.token2span(token), string=str(token))
 
     # Applies to rules like: name_clause: KEYWORD_CLAUSE "(" var_list ")"
     def _fill_data_scope[T: tree.DataScope](
@@ -57,7 +31,7 @@ class AstTransformer(Transformer):
         **kwargs
     ) -> T:
         return cls(
-            span    = self._meta2span(node.meta),
+            span    = self.sv.meta2span(node.meta),
             name    = self._name_from_token(node.children[0]),
             targets = cast("list[tree.PyName]", node.children[target_child]),
             **kwargs,
@@ -83,16 +57,16 @@ class AstTransformer(Transformer):
         # so the clause is duplicated. Therefore, raise an error.
         else:
             raise self.sv.syntax_error(
-                f"{clause.id} clause can only be defined once.",
+                # In the case of "if_" or "for_", remove those underscores
+                f"{clause.id.strip('_')} clause can only be defined once.",
                 clause.span,
                 diagnostics=[("first defined here", current.span)],
             )
 
-
     # Applies to rules like: KEYWORD _rule_clause_list?
     def _fill_construct[T: tree.Construct](self, node: Tree, cls: type[T]) -> T:
         construct = cls(
-            span=self._meta2span(node.meta),
+            span=self.sv.meta2span(node.meta),
             name=self._name_from_token(node.children[0]),
         )
 
@@ -104,12 +78,67 @@ class AstTransformer(Transformer):
 
         return construct
 
+    # Retrieves the original code and passes it to ast.parse()
+    def _parse_py_code(self, meta: Meta) -> tuple[pyast.Module, tree.Span, str]:
+        try:
+            # Get the source of the expression and pass it to ast.parse()
+            span = self.sv.meta2span(meta)
+            source = self.sv.source_text(span)
+
+            # Clean up leading whitespace, as it will be treated as indentation
+            source_stripped = source.lstrip()
+            leading_ws = len(source) - len(source_stripped)
+
+            code = pyast.parse(source_stripped)
+            code = self._apply_span(code, span, leading_ws)
+            return code, span, source
+
+        except SyntaxError as e:
+            # Adjust the error position to show it within its context
+            err_line     = e.lineno     or 1
+            err_end_line = e.end_lineno or err_line
+            err_col      = e.offset     or 1
+            err_end_col  = e.end_offset or err_col
+            span = tree.Span(
+                *self.sv.absolute_position(span, err_line,     err_col,     leading_ws),
+                *self.sv.absolute_position(span, err_end_line, err_end_col, leading_ws),
+            )
+
+            msg = f"invalid Python code: {e.msg}"
+            raise self.sv.syntax_error(msg, span) from None
+
+    # Modifies the Python AST's positions so they are relative to the whole file
+    def _apply_span[T: pyast.AST](self, code: T, span: tree.Span, leading_ws: int = 0) -> T:
+        node: pyast.AST
+        for node in pyast.walk(code):
+            starts_on_first_line = False
+            ends_on_first_line = False
+
+            if hasattr(node, "lineno"):
+                starts_on_first_line = node.lineno == 1
+                node.lineno += span.lineno - 1 # ty: ignore[unsupported-operator]
+
+            if hasattr(node, "end_lineno"):
+                ends_on_first_line = node.end_lineno == 1
+                node.end_lineno += span.lineno - 1 # ty: ignore[unsupported-operator]
+            else:
+                # Assume single-line node
+                ends_on_first_line = starts_on_first_line
+
+            if starts_on_first_line and hasattr(node, "col_offset"):
+                node.col_offset += span.offset + leading_ws # ty: ignore[unsupported-operator]
+
+            if ends_on_first_line and hasattr(node, "end_col_offset"):
+                node.end_col_offset += span.offset + leading_ws # ty: ignore[unsupported-operator]
+        return code
+
+
     #### TOKENS ################################################################
 
     # IDENTIFIER: /[^\W\d]\w*/
     @v_args(inline=True)
     def IDENTIFIER(self, token: Token) -> tree.PyName:
-        span = self._token2span(token)
+        span = self.sv.token2span(token)
 
         # This ensures that the token is considered an identifier by Python
         if not token.value.isidentifier():
@@ -126,40 +155,31 @@ class AstTransformer(Transformer):
         #     0bXXXX ==> Base 2
         #     0oXXX  ==> Base 8
         #     0xXX   ==> Base 16
-        return tree.PyInt(span=self._token2span(token), value=int(token, 0))
+        return tree.PyInt(span=self.sv.token2span(token), value=int(token, 0))
 
-    # py_expr: (PY_ATOM | "(" py_expr ")")+
-    @v_args(tree=True)
     def py_expr(self, node: Tree) -> tree.PyExpr:
-        try:
-            # Get the source of the expression and pass it to ast.parse()
-            span = self._meta2span(node.meta)
-            source = self.sv.directive_text(span)
+        code, span, source = self._parse_py_code(node.meta)
 
-            # Clean up leading whitespace, as it will be treated as indentation
-            source_stripped = source.lstrip()
-            leading_ws = len(source) - len(source_stripped)
+        if not code.body or len(code.body) != 1 or not isinstance(code.body[0], pyast.Expr):
+            raise self.sv.syntax_error("expected expression", span)
 
-            parsed = pyast.parse(source_stripped, mode="eval")
-            return tree.PyExpr(
-                span=span,
-                value=parsed.body,
-                source=source,
-            )
+        return tree.PyExpr(
+            span=span,
+            value=code.body[0].value,
+            source=source,
+        )
 
-        except SyntaxError as e:
-            # Adjust the error position to show it within its context
-            err_line     = e.lineno     or 1
-            err_end_line = e.end_lineno or err_line
-            err_col      = e.offset     or 1
-            err_end_col  = e.end_offset or err_col
-            span = tree.Span(
-                *self.sv.absolute_position(span, err_line,     err_col,     leading_ws),
-                *self.sv.absolute_position(span, err_end_line, err_end_col, leading_ws),
-            )
+    def py_stmt(self, node: Tree) -> tree.PyStmt:
+        code, span, source = self._parse_py_code(node.meta)
 
-            msg = f"invalid Python expression: {e.msg}"
-            raise self.sv.syntax_error(msg, span) from None
+        if not code.body or len(code.body) != 1:
+            raise self.sv.syntax_error("expected a single statement", span)
+
+        return tree.PyStmt(
+            span=span,
+            value=code.body[0],
+            source=source,
+        )
 
     #### MODIFIERS #############################################################
 
@@ -171,12 +191,12 @@ class AstTransformer(Transformer):
     # reduction_op: PLUS | MINUS | MULT | BITWISE_AND | BITWISE_OR | BITWISE_XOR | LOGIC_AND | LOGIC_OR | MAX | MIN
     @v_args(inline=True)
     def reduction_op(self, token: Token) -> tree.ReductionOp:
-        return tree.ReductionOp(span=self._token2span(token), value=str(token))
+        return tree.ReductionOp(span=self.sv.token2span(token), value=str(token))
 
     # schedule_type: STATIC | DYNAMIC | GUIDED | AUTO | RUNTIME
     @v_args(inline=True)
     def schedule_type(self, token: Token) -> tree.ScheduleType:
-        span = self._token2span(token)
+        span = self.sv.token2span(token)
         name = tree.Name(span=span, string=str(token))
         return tree.ScheduleType(span=span, nkind=name)
 
@@ -214,7 +234,7 @@ class AstTransformer(Transformer):
     # schedule_clause: SCHEDULE_CLAUSE "(" schedule_type ("," py_expr)? ")"
     def schedule_clause(self, node: Tree) -> tree.Schedule:
         return tree.Schedule(
-            span  = self._meta2span(node.meta),
+            span  = self.sv.meta2span(node.meta),
             name  = self._name_from_token(node.children[0]),
             type  = cast("tree.ScheduleType", node.children[1]),
             chunk = cast("tree.PyExpr",       node.children[2]) if len(node.children) > 2 else None,
@@ -223,7 +243,7 @@ class AstTransformer(Transformer):
     # default_clause: DEFAULT_CLAUSE "(" (SHARED | NONE) ")"
     def default_clause(self, node: Tree) -> tree.Default:
         return tree.Default(
-            span  = self._meta2span(node.meta),
+            span  = self.sv.meta2span(node.meta),
             name  = self._name_from_token(node.children[0]),
             ntype = self._name_from_token(node.children[1])
         )
@@ -231,7 +251,7 @@ class AstTransformer(Transformer):
     # if_clause: IF_CLAUSE "(" py_expr ")"
     def if_clause(self, node: Tree) -> tree.If:
         return tree.If(
-            span = self._meta2span(node.meta),
+            span = self.sv.meta2span(node.meta),
             name = self._name_from_token(node.children[0]),
             expr = cast("tree.PyExpr", node.children[1]),
         )
@@ -239,7 +259,7 @@ class AstTransformer(Transformer):
     # num_threads_clause: NUM_THREADS_CLAUSE "(" py_expr ")"
     def num_threads_clause(self, node: Tree) -> tree.NumThreads:
         return tree.NumThreads(
-            span = self._meta2span(node.meta),
+            span = self.sv.meta2span(node.meta),
             name = self._name_from_token(node.children[0]),
             expr = cast("tree.PyExpr", node.children[1])
         )
@@ -247,7 +267,7 @@ class AstTransformer(Transformer):
     # final_clause: FINAL_CLAUSE "(" py_expr ")"
     def final_clause(self, node: Tree) -> tree.Final:
         return tree.Final(
-            span = self._meta2span(node.meta),
+            span = self.sv.meta2span(node.meta),
             name = self._name_from_token(node.children[0]),
             expr = cast("tree.PyExpr", node.children[1])
         )
@@ -258,7 +278,7 @@ class AstTransformer(Transformer):
         if num.value <= 0:
             raise self.sv.syntax_error("required positive non-zero integer.", num.span)
         return tree.Collapse(
-            span = self._meta2span(node.meta),
+            span = self.sv.meta2span(node.meta),
             name = self._name_from_token(node.children[0]),
             num  = num,
         )
@@ -267,7 +287,7 @@ class AstTransformer(Transformer):
     def ordered_clause(self, node: Tree) -> tree.OrderedClause:
         # TODO: tree.OrderedClause.n
         return tree.OrderedClause(
-            span=self._meta2span(node.meta),
+            span=self.sv.meta2span(node.meta),
             name=self._name_from_token(node.children[0])
         )
 
@@ -275,7 +295,7 @@ class AstTransformer(Transformer):
     def nowait_clause(self, node: Tree) -> tree.NoWait:
         # TODO: tree.NoWait.expr
         return tree.NoWait(
-            span=self._meta2span(node.meta),
+            span=self.sv.meta2span(node.meta),
             name=self._name_from_token(node.children[0]),
             expr=None
         )
@@ -283,14 +303,14 @@ class AstTransformer(Transformer):
     # untied_clause: UNTIED_CLAUSE
     def untied_clause(self, node: Tree) -> tree.Untied:
         return tree.Untied(
-            span=self._meta2span(node.meta),
+            span=self.sv.meta2span(node.meta),
             name=self._name_from_token(node.children[0])
         )
 
     # mergeable_clause: MERGEABLE_CLAUSE
     def mergeable_clause(self, node: Tree) -> tree.Mergeable:
         return tree.Mergeable(
-            span=self._meta2span(node.meta),
+            span=self.sv.meta2span(node.meta),
             name=self._name_from_token(node.children[0])
         )
 
@@ -312,10 +332,10 @@ class AstTransformer(Transformer):
         )
         parallel_for_name = tree.Name(
             parallel_for_span,
-            self.sv.directive_text(parallel_for_span),
+            self.sv.source_text(parallel_for_span),
         )
 
-        construct_span = self._meta2span(node.meta)
+        construct_span = self.sv.meta2span(node.meta)
         parallel = tree.Parallel(construct_span, parallel_name)
         for_ = tree.For(construct_span, for_name)
 
@@ -348,10 +368,10 @@ class AstTransformer(Transformer):
         )
         parallel_sections_name = tree.Name(
             parallel_sections_span,
-            self.sv.directive_text(parallel_sections_span),
+            self.sv.source_text(parallel_sections_span),
         )
 
-        construct_span = self._meta2span(node.meta)
+        construct_span = self.sv.meta2span(node.meta)
         parallel = tree.Parallel(construct_span, parallel_name)
         sections = tree.Sections(construct_span, sections_name)
 
@@ -379,7 +399,7 @@ class AstTransformer(Transformer):
 
     def section_directive(self, node: Tree) -> tree.Section:
         return tree.Section(
-            span=self._meta2span(node.meta),
+            span=self.sv.meta2span(node.meta),
             name=self._name_from_token(node.children[0])
         )
 
@@ -392,7 +412,7 @@ class AstTransformer(Transformer):
 
     def master_directive(self, node: Tree) -> tree.Master:
         return tree.Master(
-            span=self._meta2span(node.meta),
+            span=self.sv.meta2span(node.meta),
             name=self._name_from_token(node.children[0])
         )
 
@@ -400,52 +420,52 @@ class AstTransformer(Transformer):
     # critical_directive: CRITICAL ("(" IDENTIFIER ")")?
     def critical_directive(self, node: Tree) -> tree.Critical:
         return tree.Critical(
-            span=self._meta2span(node.meta),
+            span=self.sv.meta2span(node.meta),
             name=self._name_from_token(node.children[0])
         )
 
     def barrier_directive(self, node: Tree) -> tree.Barrier:
         return tree.Barrier(
-            span=self._meta2span(node.meta),
+            span=self.sv.meta2span(node.meta),
             name=self._name_from_token(node.children[0])
         )
 
     def ordered_directive(self, node: Tree) -> tree.Ordered:
         return tree.Ordered(
-            span=self._meta2span(node.meta),
+            span=self.sv.meta2span(node.meta),
             name=self._name_from_token(node.children[0])
         )
 
     # threadprivate_directive: THREADPRIVATE "(" var_list ")"
     def threadprivate_directive(self, node: Tree) -> tree.ThreadPrivate:
         return tree.ThreadPrivate(
-            span=self._meta2span(node.meta),
+            span=self.sv.meta2span(node.meta),
             name=self._name_from_token(node.children[0]),
             targets=cast("list[tree.PyName]", node.children[1]),
         )
 
     def taskyield_directive(self, node: Tree) -> tree.TaskYield:
         return tree.TaskYield(
-            span=self._meta2span(node.meta),
+            span=self.sv.meta2span(node.meta),
             name=self._name_from_token(node.children[0])
         )
 
     def taskwait_directive(self, node: Tree) -> tree.TaskWait:
         return tree.TaskWait(
-            span=self._meta2span(node.meta),
+            span=self.sv.meta2span(node.meta),
             name=self._name_from_token(node.children[0])
         )
 
     def atomic_directive(self, node: Tree) -> tree.Atomic:
         return tree.Atomic(
-            span  = self._meta2span(node.meta),
+            span  = self.sv.meta2span(node.meta),
             name  = self._name_from_token(node.children[0]),
             ntype = self._name_from_token(node.children[1]) if len(node.children) > 1 else None,
         )
 
     def flush_directive(self, node: Tree) -> tree.Flush:
         return tree.Flush(
-            span    = self._meta2span(node.meta),
+            span    = self.sv.meta2span(node.meta),
             name    = self._name_from_token(node.children[0]),
             targets = cast("list[tree.PyName]", node.children[1]) if len(node.children) > 1 else None,
         )
@@ -456,6 +476,6 @@ class AstTransformer(Transformer):
     def start(self, construct: tree.Construct) -> tree.Directive:
         return tree.Directive(
             span=construct.span,
-            string=self.sv.directive,
+            string=self.sv.source_text(self.sv.span), # NOTE: this includes the quotes
             construct=construct,
         )

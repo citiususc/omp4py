@@ -119,7 +119,7 @@ IDENTIFIER : /[^\W\d]\w*/
 // Accept all characters until the end of the clause (parentheses)
 // This is possible because all OpenMP clauses that require these types of expressions
 // do not accept any other parameters.
-PY_ATOM : /[^()]+/
+PY_CODE : /[^()]+/
 
 
 // -----------------------------------------------------------------------------
@@ -270,6 +270,7 @@ var_list      : IDENTIFIER ("," IDENTIFIER)*
 reduction_op  : PLUS | MINUS | MULT | BITWISE_AND | BITWISE_OR | BITWISE_XOR | LOGIC_AND | LOGIC_OR | MAX | MIN
 schedule_type : STATIC | DYNAMIC | GUIDED | AUTO | RUNTIME
 
-py_expr   : temp_expr
-temp_expr : (PY_ATOM | "(" temp_expr? ")")+
+py_expr: py_code
+py_stmt: py_code
+py_code: (PY_CODE | "(" py_code? ")")+
 
