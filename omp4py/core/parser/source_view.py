@@ -333,17 +333,19 @@ class SourceView:
                 last_token.line == token.line and
                 last_token.end_column == token.column
             ):
-                span.offset = last_token.column-1
+                start_col_offset = self.span.offset if last_token.line == 1 else 0
+                span.offset = start_col_offset + last_token.column - 1
                 return f'invalid integer literal "{last_token}{token}".', span
 
         # If the token is PY_CODE, it means that we got unexpected characters.
         # The problem here is that PY_CODE will consume everything until a parentheses,
         # therefore the error location will be wrong.
+        # Only point to the first incorrect caracter.
         if token.type == "PY_CODE":
             first_char = token[0]
             display = "integer" if first_char.isdigit() else f"'{first_char}'"
             span.end_offset = span.offset
-            span.end_lineno = span.end_lineno
+            span.end_lineno = span.lineno
             return f'expected {expected_str} instead of {display}.', span
 
         if expected_clause and token.type.endswith(("_DIRECTIVE", "_CLAUSE")):

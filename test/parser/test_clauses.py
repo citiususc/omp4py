@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import traceback
 from collections.abc import Callable
 from typing import cast
 
@@ -10,12 +11,13 @@ from omp4py.core.parser.parser import _parse
 from omp4py.core.parser.source_view import SourceView
 
 
-def parse(code: str) -> tree.Directive:
+def parse(code: str, prefix:str='    with omp("', suffix:str='"):\n') -> tree.Directive:
+    complete_code = prefix + code + suffix
     sv = SourceView(
-        tree.Span(0, 0, 0, 0),
+        tree.Span(1, len(prefix), 1, len(prefix)+len(code)),
         "<string>",
-        code.splitlines(),
-        code,
+        complete_code.splitlines(),
+        complete_code,
     )
     return _parse(code, sv)
 
@@ -137,8 +139,9 @@ INVALID_CLAUSES = [
 @pytest.mark.no_isolate
 @pytest.mark.parametrize("source", INVALID_CLAUSES)
 def test_clause_invalid(source: str) -> None:
-    with pytest.raises(SyntaxError):
+    with pytest.raises(SyntaxError) as e:
         parse(source)
+    traceback.print_exception(e.value)
 
 
 ################################################################################
@@ -232,19 +235,21 @@ def test_schedule(source: str, kind: sk, chunk: str|None) -> None:
 
 @pytest.mark.no_isolate
 @pytest.mark.parametrize("source,clause_type,expr", [
-    ("parallel if(x > 0)",             tree.If, "x > 0"),
-    ("parallel if(True)",              tree.If, "True"),
-    ("parallel if(x > 0 and y < 10)",  tree.If, "x > 0 and y < 10"),
-    ("parallel if(foo(x, y))",         tree.If, "foo(x, y)"),
-    ("parallel if(   n    )",          tree.If, "   n    "),
-    ("parallel if(    foo(x, y)\t\t)", tree.If, "    foo(x, y)\t\t"),
+    ("parallel if(x > 0)",              tree.If, "x > 0"),
+    ("parallel if(True)",               tree.If, "True"),
+    ("parallel if(x > 0 and y < 10)",   tree.If, "x > 0 and y < 10"),
+    ("parallel if(foo(x, y))",          tree.If, "foo(x, y)"),
+    ("parallel if(   n    )",           tree.If, "   n    "),
+    ("parallel if( \n foo(x, y)\t\t)",  tree.If, " \n foo(x, y)\t\t"),
+    ("parallel if(\nfoo(\n\tx,\n\ty))", tree.If, "\nfoo(\n\tx,\n\ty)"),
 
     # num_threads
-    ("parallel num_threads(8)",                 tree.NumThreads, "8"),
-    ("parallel num_threads((1 + sqrt(5))/2)",   tree.NumThreads, "(1 + sqrt(5))/2"),
-    ("parallel num_threads(get_threads())",     tree.NumThreads, "get_threads()"),
-    ("parallel num_threads(   n    )",          tree.NumThreads, "   n    "),
-    ("parallel num_threads(    foo(x, y)\t\t)", tree.NumThreads, "    foo(x, y)\t\t"),
+    ("parallel num_threads(8)",                  tree.NumThreads, "8"),
+    ("parallel num_threads((1 +   sqrt(5))/2)",  tree.NumThreads, "(1 +   sqrt(5))/2"),
+    ("parallel num_threads(get_threads())",      tree.NumThreads, "get_threads()"),
+    ("parallel num_threads(   n    )",           tree.NumThreads, "   n    "),
+    ("parallel num_threads( \n foo(x, y)\t\t)",  tree.NumThreads, " \n foo(x, y)\t\t"),
+    ("parallel num_threads(\nfoo(\n\tx,\n\ty))", tree.NumThreads, "\nfoo(\n\tx,\n\ty)"),
 
     # final
     ("task final(True)",  tree.Final, "True"),
