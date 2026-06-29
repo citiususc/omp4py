@@ -119,7 +119,8 @@ directive_name: \
 	// worksharing contructs
 	| SINGLE_DIRECTIVE
 	| SCOPE_DIRECTIVE
-	| SECTIONS_DIRECTIVE | SECTION_DIRECTIVE
+	| SECTIONS_DIRECTIVE
+	| SECTION_DIRECTIVE
 	| WORKSHARE_DIRECTIVE
 	| WORKDISTRIBUTE_DIRECTIVE
 	| FOR_DIRECTIVE
@@ -160,24 +161,27 @@ directive_name: \
 combined_directive: combined_directive_name combined_directive_name+ combined_clause_list?
 
 combined_directive_name: \
-	  DISTRIBUTE_DIRECTIVE
-	| FOR_DIRECTIVE
-	| LOOP_DIRECTIVE
-	| MASKED_DIRECTIVE
-	| PARALLEL_DIRECTIVE
-	| SECTIONS_DIRECTIVE
+	  PARALLEL_DIRECTIVE
+	| TEAMS_DIRECTIVE
 	| SIMD_DIRECTIVE
+	| MASKED_DIRECTIVE
+	// worksharing
 	| SINGLE_DIRECTIVE
+	| SECTIONS_DIRECTIVE
+	| WORKSHARE_DIRECTIVE
+	| WORKDISTRIBUTE_DIRECTIVE
+	| FOR_DIRECTIVE
+	| DISTRIBUTE_DIRECTIVE
+	| LOOP_DIRECTIVE
+	// tasking
+	| TASK_DIRECTIVE
+	| TASKLOOP_DIRECTIVE
+	// device
 	| TARGET_DATA_DIRECTIVE
-	| TARGET_DIRECTIVE
 	| TARGET_ENTER_DATA_DIRECTIVE
 	| TARGET_EXIT_DATA_DIRECTIVE
+	| TARGET_DIRECTIVE
 	| TARGET_UPDATE_DIRECTIVE
-	| TASKLOOP_DIRECTIVE
-	| TASK_DIRECTIVE
-	| TEAMS_DIRECTIVE
-	| WORKDISTRIBUTE_DIRECTIVE
-	| WORKSHARE_DIRECTIVE
 
 combined_clause_list: _combined_clause (","? _combined_clause)*
 _combined_clause: \
@@ -208,6 +212,8 @@ _combined_clause: \
 	| order_clause
 	| safelen_clause
 	| simdlen_clause
+	// masked
+	| filter_clause
 	// single
 	| copyprivate_clause
 	| nowait_clause
@@ -235,6 +241,21 @@ _combined_clause: \
 	| grainsize_clause
 	| nogroup_clause
 	| num_tasks_clause
+	// target_data
+	| device_clause
+	| map_clause
+	| use_device_ptr_clause
+	| use_device_addr_clause
+	// target_enter_data and target_exit_data: nothing new
+	// target
+	| defaultmap_clause
+	| device_type_clause
+	| has_device_addr_clause
+	| is_device_ptr_clause
+	| uses_allocators_clause
+	// target_update
+	| from_clause
+	| to_clause
 
 // -----------------------------------------------------------------------------
 // ---- DIRECTIVES WITH THEIR CLAUSES ------------------------------------------
@@ -1256,11 +1277,14 @@ cancellation_point_directive: CANCELLATION_POINT_DIRECTIVE [directive_name ":"] 
 // ---- COMMON CLAUSES ---------------------------------------------------------
 // -----------------------------------------------------------------------------
 
+// TODO: reduce-reduce conflict because both directive_name and _apply_directive share the same tokens.
+// This clause cannot be part of a combined construct (see _combined_clause), so this should be fine.
 APPLY_CLAUSE: "apply" // optional
 apply_clause: APPLY_CLAUSE "(" [_apply_modifier_list ":"] _apply_directive_list ")"
+//_apply_modifier_list: directive_name | loop_modifier | loop_modifier "," directive_name | directive_name "," loop_modifier
+_apply_modifier_list: loop_modifier 
 _apply_directive_list: _apply_directive ("," _apply_directive)*
 _apply_directive: FUSE_DIRECTIVE | INTERCHANGE_DIRECTIVE | NOTHING_DIRECTIVE | REVERSE_DIRECTIVE | SPLIT_DIRECTIVE | STRIPE_DIRECTIVE | TILE_DIRECTIVE | UNROLL_DIRECTIVE
-_apply_modifier_list: directive_name | loop_modifier | loop_modifier "," directive_name | directive_name "," loop_modifier
 
 
 DEPEND_CLAUSE: "depend"
@@ -1359,6 +1383,7 @@ _lastprivate_modifier_list: CONDITIONAL | directive_name | directive_name "," CO
 CONDITIONAL: "conditional"
 
 
+// TODO: allocators make no sense in Python
 ALLOCATE_CLAUSE: "allocate"
 allocate_clause: ALLOCATE_CLAUSE "(" [_allocate_modifier_list ":"] var_list ")"
 // allocator-simple-modifier is exclusive
