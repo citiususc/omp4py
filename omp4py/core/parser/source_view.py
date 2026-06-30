@@ -15,6 +15,7 @@ This module does not perform parsing; it only formats and contextualizes
 errors produced by the parser.
 """
 from __future__ import annotations
+from cmath import exp
 
 import typing
 from dataclasses import dataclass
@@ -27,6 +28,8 @@ if typing.TYPE_CHECKING:
 
 __all__ = ["SourceView"]
 
+# Look up table to translate token names to a more meaningfull name.
+# Defaults to lowercase the name of the token with double quotes.
 _TOKEN_DISPLAY: dict[str, str] = {
     # Reduction operators
     "PLUS"        : '"+"',
@@ -40,32 +43,17 @@ _TOKEN_DISPLAY: dict[str, str] = {
     "MAX"         : '"max"',
     "MIN"         : '"min"',
 
-    #### OPTIONS ####
-    # TODO: add quotes here?
-    # Schedule
-    "STATIC"  : "static",
-    "DYNAMIC" : "dynamic",
-    "GUIDED"  : "guided",
-    "AUTO"    : "auto",
-    "RUNTIME" : "runtime",
-
-    # Default
-    "NONE"   : "none",
-    "SHARED" : "shared",
-
-    # Atomic
-    "READ"    : "read",
-    "WRITE"   : "write",
-    "UPDATE"  : "update",
-    "CAPTURE" : "capture",
-
-    #### OTHER ####
+    # Other
     "INTEGER"    : "integer",
     "IDENTIFIER" : "variable name",
 
-    #### DEFINED BY LARK ####
+    # Defined by Lark
     "LPAR"  : '"("',
     "RPAR"  : '")"',
+    "LBRACE": '"{"',
+    "RBRACE": '"}"',
+    "LSQB"  : '"["',
+    "RSQB"  : '"]"',
     "COMMA" : '","',
     "COLON" : '":"',
     "$END"  : "end of input",
@@ -217,7 +205,7 @@ class SourceView:
         message,
         span: Span,
         *,
-        diagnostics: list[tuple[str, Span]] | None = None,
+        diagnostics: list[tuple[str, Span]|str] | None = None,
     ) -> SyntaxError:
         """Construct a ``SyntaxError`` with optional diagnostic notes.
 
@@ -243,9 +231,13 @@ class SourceView:
             )
 
         if diagnostics is not None:
-            for msg, span in diagnostics:
-                line, cursor = self.annotate(span, indent=2, show_lineno=True)
-                error.add_note(f"  note: {msg}\n{line}{cursor[:-1]}")
+            for diag in diagnostics:
+                if isinstance(diag, str):
+                    error.add_note(f"  note: {diag}")
+                else:
+                    msg, span = diag
+                    line, cursor = self.annotate(span, indent=2, show_lineno=True)
+                    error.add_note(f"  note: {msg}\n{line}{cursor[:-1]}")
 
         return error
 
@@ -271,43 +263,46 @@ class SourceView:
     def _msg_from_error(self, error: UnexpectedToken, span: Span) -> tuple[str, Span]:
         token = typing.cast("Token", error.token)
 
+        print("DEBUG:", error.expected)
+        print("DEBUG:", token.type)
+
         #### Expected tokens ####
 
         expected_token_names: list[str] = []
-        expected_clause = False
-        expected_expr   = False
-        expected_end    = False
+        expected_directive = False
+        expected_clause    = False
+        expected_code      = False
+        expected_end       = False
 
-        for expected_token in sorted(error.expected):
+        for expected_token in error.expected:
             if expected_token.endswith("_DIRECTIVE"):
-                # Directive must be at top level,
-                # if that was not provided, everything else is wrong.
-                span.end_offset = span.offset
-                span.end_lineno = span.lineno
-                # TODO: special case when "parallel <invalid clause>"
-                return "expected OpenMP directive.", span
+                expected_directive = True
+                continue
 
             if expected_token.endswith("_CLAUSE"):
                 expected_clause = True
                 continue
 
-            if expected_token == "PY_CODE":
-                expected_expr = True
+            if expected_token == "PY_CODE_IN" or expected_token == "PY_CODE_OUT":
+                expected_code = True
                 continue
 
             if expected_token == "<END-OF-FILE>":
                 expected_end = True
                 continue
 
-            expected_token_names.append(_TOKEN_DISPLAY.get(expected_token, f'"{expected_token}"'))
+            expected_token_names.append(_TOKEN_DISPLAY.get(expected_token, f'"{expected_token.lower()}"'))
 
-        # Make sure OpenMP clause is last
+        # Make sure these are last
         if expected_clause:
             expected_token_names.append("OpenMP clause")
+        if expected_directive:
+            expected_token_names.append("OpenMP directive")
 
         # Convert to expected_str
+        expected_token_names = sorted(expected_token_names)
         if len(expected_token_names) == 0:
-            expected_str = "nothing"
+            expected_str = "OpenMP directive"
         elif len(expected_token_names) == 1:
             expected_str = expected_token_names[0]
         else:
@@ -315,6 +310,7 @@ class SourceView:
 
 
         #### Actual token received ####
+        found_token = _TOKEN_DISPLAY.get(token.type, f'"{token}"')
 
         # If the current token is an identifier and the last token was an integer,
         # it is probably because the integer was invalid and the lexer broke it into parts:
@@ -326,6 +322,7 @@ class SourceView:
             last_token = typing.cast("Token", error.token_history[-1])
 
             if (
+                last_token and
                 last_token.type == "INTEGER" and
                 last_token.column is not None and
                 last_token.end_column is not None and
@@ -341,24 +338,28 @@ class SourceView:
         # The problem here is that PY_CODE will consume everything until a parentheses,
         # therefore the error location will be wrong.
         # Only point to the first incorrect caracter.
-        if token.type == "PY_CODE":
+        if token.type == "PY_CODE_IN" or token.type == "PY_CODE_OUT":
             first_char = token[0]
             display = "integer" if first_char.isdigit() else f"'{first_char}'"
             span.end_offset = span.offset
             span.end_lineno = span.lineno
             return f'expected {expected_str} instead of {display}.', span
 
-        if expected_clause and token.type.endswith(("_DIRECTIVE", "_CLAUSE")):
-            return f'{token} clause is not valid for this directive.', span
-
         if expected_end and token.type.endswith("_CLAUSE"):
             return f'this directive does not accept any clauses.', span
 
-        found_token = _TOKEN_DISPLAY.get(token.type, f'"{token}"')
-        if expected_expr:
-            # Unbalanced parentheses
-            if token.type == "$END":
-                return f'expected ")" before {found_token}.', span
+        if expected_clause and (token.type.endswith(("_DIRECTIVE", "_CLAUSE")) or token.type == "IDENTIFIER"):
+            return f'{token} clause is invalid for this directive.', span
+
+        # If we expected a directive and the token was a directive,
+        # it means that this directive was incorrect
+        if expected_directive and token.type.endswith("_DIRECTIVE"):
+            return f'{token} directive is invalid here.', span
+
+        if expected_directive and expected_clause:
+            return f"expected OpenMP clause or directive before {found_token}.", span
+
+        if expected_code:
             return f"expected Python expression before {found_token}.", span
 
         return f"expected {expected_str} before {found_token}.", span
