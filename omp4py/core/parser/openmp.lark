@@ -158,9 +158,9 @@ directive_name: \
 // ---- COMBINED CONSTRUCTS ----------------------------------------------------
 // -----------------------------------------------------------------------------
 
-combined_directive: combined_directive_name combined_directive_name+ combined_clause_list?
+combined_directive: _combined_directive_name _combined_directive_name+ [combined_clause_list]
 
-combined_directive_name: \
+_combined_directive_name: \
 	  PARALLEL_DIRECTIVE
 	| TEAMS_DIRECTIVE
 	| SIMD_DIRECTIVE
@@ -277,7 +277,7 @@ threadprivate_directive: THREADPRIVATE_DIRECTIVE "(" var_list ")"
 // ---- declare_reduction ----
 DECLARE_REDUCTION_DIRECTIVE: "declare_reduction" | /declare\s+reduction/
 declare_reduction_directive6: DECLARE_REDUCTION_DIRECTIVE "(" reduction_op ":" type_list ")"             _declare_reduction_clause_list
-declare_reduction_directive: DECLARE_REDUCTION_DIRECTIVE "(" reduction_op ":" type_list ":" py_stmt ")" initializer_clause?
+declare_reduction_directive: DECLARE_REDUCTION_DIRECTIVE "(" reduction_op ":" type_list ":" py_stmt ")" [initializer_clause]
 // Here combiner() is required, so there's only 3 possibilities
 _declare_reduction_clause_list: \
 	  combiner_clause
@@ -304,8 +304,8 @@ collector_clause: COLLECTOR_CLAUSE "(" [directive_name ":"] py_expr ")"
 
 // ---- scan ----
 SCAN_DIRECTIVE: "scan"
-scan_directive: SCAN_DIRECTIVE scan_clauses
-scan_clauses: exclusive_clause | inclusive_clause | init_complete_clause
+scan_directive: SCAN_DIRECTIVE _scan_clauses
+_scan_clauses: exclusive_clause | inclusive_clause | init_complete_clause
 
 EXCLUSIVE_CLAUSE: "exclusive" // innermost-leaf, unique
 exclusive_clause: EXCLUSIVE_CLAUSE "(" [directive_name ":"] var_list ")"
@@ -323,7 +323,7 @@ declare_mapper_directive: DECLARE_MAPPER_DIRECTIVE "(" [IDENTIFIER ":"] IDENTIFI
 
 // ---- grouprivate ----
 GROUPPRIVATE_DIRECTIVE: "groupprivate"
-groupprivate_directive: GROUPPRIVATE_DIRECTIVE device_type_clause?
+groupprivate_directive: GROUPPRIVATE_DIRECTIVE [device_type_clause]
 
 DEVICE_TYPE_CLAUSE: "device_type" // unique
 device_type_clause: DEVICE_TYPE_CLAUSE "(" [directive_name ":"] device_type_kind ")"
@@ -366,7 +366,7 @@ when_clause: WHEN_CLAUSE "(" _when_modifier_list ":" start ")"
 _when_modifier_list: directive_name | context_selector | directive_name "," context_selector | context_selector "," directive_name
 
 OTHERWISE_CLAUSE: "otherwise" // unique, ultimate
-otherwise_clause: OTHERWISE_CLAUSE "(" [directive_name ":"] start? ")"
+otherwise_clause: OTHERWISE_CLAUSE ["(" [directive_name ":"] start ")"]
 
 
 // ---- declare_variant ----
@@ -465,8 +465,8 @@ notinbranch_clause: NOTINBRANCH ["(" [directive_name ":"] py_expr ")"]
 // ---- declare_target ----
 DECLARE_TARGET_DIRECTIVE: "declare_target" | /declare\s+target/
 declare_target_directive: \
-	  DECLARE_TARGET_DIRECTIVE "(" var_list ")"
-	| DECLARE_TARGET_DIRECTIVE _declare_target_clause_list
+	  DECLARE_TARGET_DIRECTIVE "(" var_list ")" -> declare_target_directive
+	| DECLARE_TARGET_DIRECTIVE _declare_target_clause_list -> declare_target_directive_with_clauses
 _declare_target_clause_list: _declare_target_clause ("," _declare_target_clause)*
 _declare_target_clause: device_type_clause | enter_clause | indirect_clause | link_clause | local_clause
 
@@ -503,7 +503,8 @@ _requires_directive_clause: \
 	| unified_shared_memory_clause
 
 ATOMIC_DEFAULT_MEM_ORDER_CLAUSE: "atomic_default_mem_order" // unique
-atomic_default_mem_order_clause: ATOMIC_DEFAULT_MEM_ORDER_CLAUSE "(" [directive_name ":"] (ACQ_REL | ACQUIRE | RELAXED | SEQ_CST) ")"
+atomic_default_mem_order_clause: ATOMIC_DEFAULT_MEM_ORDER_CLAUSE "(" [directive_name ":"] atomic_default_mem_order_clause_arg ")"
+atomic_default_mem_order_clause_arg: (ACQ_REL | ACQUIRE | RELAXED | SEQ_CST) -> name
 ACQ_REL: "acq_rel"
 ACQUIRE: "acquire"
 RELAXED: "relaxed"
@@ -531,7 +532,7 @@ device_safesync_clause: DEVICE_SAFESYNC_CLAUSE ["(" [directive_name ":"] py_expr
 // ---- assume ----
 ASSUME_DIRECTIVE: "assume"
 assume_directive: ASSUME_DIRECTIVE _assume_clause_list
-_assume_clause_list: _assume_clause ("," _assume_clause)?
+_assume_clause_list: _assume_clause ("," _assume_clause)*
 _assume_clause: \
 	  absent_clause
 	| contains_clause
@@ -542,10 +543,12 @@ _assume_clause: \
 	| no_parallelism_clause
 
 ABSENT_CLAUSE: "absent" // unique
-absent_clause: ABSENT_CLAUSE "(" [directive_name ":"] directive_name ("," directive_name)* ")"
+absent_clause: ABSENT_CLAUSE "(" [directive_name ":"] directive_list ")"
+directive_list: directive_name ("," directive_name)*
 
 CONTAINS_CLAUSE: "contains" // unique
-contains_clause: CONTAINS_CLAUSE "(" [directive_name ":"] directive_name ("," directive_name)* ")"
+contains_clause: CONTAINS_CLAUSE "(" [directive_name ":"] directive_list ")"
+
 
 HOLDS_CLAUSE: "holds" // unique
 holds_clause: HOLDS_CLAUSE "(" [directive_name ":"] py_expr ")"
@@ -565,7 +568,7 @@ no_parallelism_clause: NO_PARALLELISM_CLAUSE ["(" [directive_name ":"] py_expr "
 
 // ---- nothing ----
 NOTHING_DIRECTIVE: "nothing" // optional, repeteable
-nothing_directive: NOTHING_DIRECTIVE apply_clause?
+nothing_directive: NOTHING_DIRECTIVE [apply_clause]
 
 
 // ---- error ----
@@ -575,7 +578,8 @@ _error_clause_list: _error_clause ("," _error_clause)?
 _error_clause: at_clause | message_clause | severity_clause
 
 AT_CLAUSE: "at" // unique
-at_clause: AT_CLAUSE "(" [directive_name ":"] (COMPILATION | EXECUTION) ")"
+at_clause: AT_CLAUSE "(" [directive_name ":"] at_clause_arg ")"
+at_clause_arg: (COMPILATION | EXECUTION) -> name
 COMPILATION: "compilation"
 EXECUTION: "execution"
 
@@ -584,7 +588,8 @@ MESSAGE_CLAUSE: "message" // unique
 message_clause: MESSAGE_CLAUSE "(" [directive_name ":"] py_expr ")"
 
 SEVERITY_CLAUSE: "severity" // unique
-severity_clause: SEVERITY_CLAUSE "(" [directive_name ":"] (FATAL | WARNING) ")"
+severity_clause: SEVERITY_CLAUSE "(" [directive_name ":"] severity_clause_arg ")"
+severity_clause_arg: (FATAL | WARNING) -> name
 FATAL: "fatal"
 WARNING: "warning"
 
@@ -613,7 +618,7 @@ permutation_clause: PERMUTATION_CLAUSE "(" [directive_name ":"] expr_list ")"
 
 // ---- reverse ----
 REVERSE_DIRECTIVE: "reverse"
-reverse_directive: REVERSE_DIRECTIVE apply_clause?
+reverse_directive: REVERSE_DIRECTIVE [apply_clause]
 
 
 // ---- split ----
@@ -686,7 +691,8 @@ _num_threads_modifier_list: STRICT | directive_name | directive_name "," STRICT 
 STRICT: "strict"
 
 PROC_BIND_CLAUSE: "proc_bind" // unique
-proc_bind_clause: PROC_BIND_CLAUSE "(" [directive_name ":"] (CLOSE | PRIMARY | SPREAD) ")"
+proc_bind_clause: PROC_BIND_CLAUSE "(" [directive_name ":"] proc_bind_clause_arg ")"
+proc_bind_clause_arg: (CLOSE | PRIMARY | SPREAD) -> name
 PRIMARY: "primary"
 SPREAD: "spread"
 
@@ -883,8 +889,8 @@ _loop_clause: \
 	| reduction_clause
 
 BIND_CLAUSE: "bind" // unique
-bind_clause: BIND_CLAUSE "(" [directive_name ":"] _bind_type ")"
-_bind_type: PARALLEL | TEAMS | THREAD
+bind_clause: BIND_CLAUSE "(" [directive_name ":"] bind_clause_arg ")"
+bind_clause_arg: (PARALLEL | TEAMS | THREAD) -> name
 PARALLEL: "parallel"
 TEAMS: "teams"
 THREAD: "thread"
@@ -962,8 +968,8 @@ _task_iteration_clause: affinity_clause | depend_clause | if_clause
 
 
 // ---- taskyield ----
-TASKYIELD_DIRECTIVE : "taskyield"
-taskyield_directive : TASKYIELD_DIRECTIVE
+TASKYIELD_DIRECTIVE: "taskyield"
+taskyield_directive: TASKYIELD_DIRECTIVE
 
 
 // ---- taskgraph ----
@@ -1184,7 +1190,8 @@ _atomic_clause: \
 	| memscope_clause | hint_clause
 
 MEMSCOPE_CLAUSE: "memscope" // unique
-memscope_clause: MEMSCOPE_CLAUSE "(" [directive_name ":"] (ALL | CGROUP | DEVICE) ")"
+memscope_clause: MEMSCOPE_CLAUSE "(" [directive_name ":"] memscope_clause_arg ")"
+memscope_clause_arg: (ALL | CGROUP | DEVICE) -> name
 CGROUP: "cgroup"
 DEVICE: "device"
 
@@ -1203,7 +1210,8 @@ COMPARE_CLAUSE: "compare" // innermost-leaf, unique
 compare_clause: COMPARE_CLAUSE ["(" [directive_name ":"] py_expr ")"]
 
 FAIL_CLAUSE: "fail" // innermost-leaf, unique
-fail_clause: FAIL_CLAUSE "(" [directive_name ":"] (ACQUIRE | RELAXED | SEQ_CST) ")"
+fail_clause: FAIL_CLAUSE "(" [directive_name ":"] fail_clause_arg ")"
+fail_clause_arg: (ACQUIRE | RELAXED | SEQ_CST) -> name
 
 WEAK_CLAUSE: "weak" // innermost-leaf, unique
 weak_clause: WEAK_CLAUSE ["(" [directive_name ":"] py_expr ")"]
@@ -1357,16 +1365,16 @@ _induction_modifier_list: \
 	  step_modifier
 	// permutations of two
 	| directive_name "," step_modifier | step_modifier "," directive_name
-	| _induction_modifier "," step_modifier | step_modifier "," _induction_modifier
+	| induction_modifier "," step_modifier | step_modifier "," induction_modifier
 	// permutations of three
-	| directive_name "," step_modifier "," _induction_modifier
-	| directive_name "," _induction_modifier "," step_modifier
-	| _induction_modifier "," directive_name "," step_modifier
-	| _induction_modifier "," step_modifier "," directive_name
-	| step_modifier "," _induction_modifier "," directive_name
-	| step_modifier "," directive_name "," _induction_modifier
+	| directive_name "," step_modifier "," induction_modifier
+	| directive_name "," induction_modifier "," step_modifier
+	| induction_modifier "," directive_name "," step_modifier
+	| induction_modifier "," step_modifier "," directive_name
+	| step_modifier "," induction_modifier "," directive_name
+	| step_modifier "," directive_name "," induction_modifier
 
-_induction_modifier: RELAXED|STRICT
+induction_modifier: RELAXED|STRICT -> name
 
 
 SHARED_CLAUSE: "shared"
@@ -1429,7 +1437,8 @@ replayable_clause: REPLAYABLE_CLAUSE ["(" [directive_name ":"] py_expr ")"]
 
 
 THREADSET_CLAUSE: "threadset" // unique
-threadset_clause: THREADSET_CLAUSE "(" [directive_name ":"] (OMP_TEAM | OMP_POOL) ")"
+threadset_clause: THREADSET_CLAUSE "(" [directive_name ":"] threadset_clause_arg ")"
+threadset_clause_arg: (OMP_TEAM | OMP_POOL) -> name
 OMP_POOL: "omp_pool"
 OMP_TEAM: "omp_team"
 
@@ -1502,7 +1511,7 @@ py_stmt: py_code_out
 
 var_list  : IDENTIFIER ("," IDENTIFIER)*
 expr_list : py_expr ("," py_expr)*
-type_list : py_type ("," py_type)*
+type_list : py_type ("," py_type)* -> expr_list
 stmt_list : py_stmt ("," py_stmt)*
 
 

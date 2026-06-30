@@ -50,8 +50,8 @@ __all__ = [
     "IsDevicePtr", "HasDeviceAddr", "NoContext", "NoVariants",
     "Aligned", "Linear", "Simdlen", "Uniform", "InBranch", "NotInBranch",
     "Enter", "Indirect", "Link", "Local",
-    "AtomicDefaultMemOrder", "DynamicAllocators", "ReverseOffload", "UnifiedAddress", "UnifiedSharedAddress", "SelfMaps", "DeviceSafesync",
-    "Absent", "Contains", "Holds", "NoOpenmp", "NoOpenmpConstructs", "NoOpenmpRoutines", "NoParallism",
+    "AtomicDefaultMemOrder", "DynamicAllocators", "ReverseOffload", "UnifiedAddress", "UnifiedSharedMemory", "SelfMaps", "DeviceSafesync",
+    "Absent", "Contains", "Holds", "NoOpenmp", "NoOpenmpConstructs", "NoOpenmpRoutines", "NoParallelism",
     "At", "Message", "Severity",
     "Looprange", "Permutation", "Counts", "Sizes", "Full", "Partial",
     "CopyIn", "NumThreads", "ProcBind", "SafeSync", "NumTeams",
@@ -211,9 +211,12 @@ class Scan(Construct):
     init_complete: InitComplete|None = None
 
 
-@dataclass
+@dataclass(kw_only=True)
 class DeclareMapper(Construct):
     id: ClassVar[str] = "declare_mapper"
+    mapper_identifier: PyName|None = None
+    var: PyName
+    type: PyExpr
     map: list[Map] = field(default_factory=list)
 
 
@@ -311,7 +314,7 @@ class Requires(Construct):
     dynamic_allocators: DynamicAllocators|None = None
     reverse_offload: ReverseOffload|None = None
     unified_address: UnifiedAddress|None = None
-    unified_shared_address: UnifiedSharedAddress|None = None
+    unified_shared_memory: UnifiedSharedMemory|None = None
     self_maps: SelfMaps|None = None
     device_safesync: DeviceSafesync|None = None
 
@@ -325,7 +328,7 @@ class Assume(Construct):
     no_openmp: NoOpenmp|None = None
     no_openmop_contructs: NoOpenmpConstructs|None = None
     no_openmp_routines: NoOpenmpRoutines|None = None
-    no_parallelism: NoParallism|None = None
+    no_parallelism: NoParallelism|None = None
 
 
 @dataclass
@@ -785,6 +788,7 @@ class Flush(Construct):
 @dataclass
 class Depobj(Construct):
     id: ClassVar[str] = "depobj"
+    object: PyName
     # TODO: destroy, init and update are required
     destroy: Destroy|None = None
     init: Init|None = None
@@ -1109,8 +1113,8 @@ class UnifiedAddress(Clause):
     required: PyExpr|None = None
 
 @dataclass
-class UnifiedSharedAddress(Clause):
-    id: ClassVar[str] = "unified_shared_address"
+class UnifiedSharedMemory(Clause):
+    id: ClassVar[str] = "unified_shared_memory"
     required: PyExpr|None = None
 
 @dataclass
@@ -1128,12 +1132,12 @@ class DeviceSafesync(Clause):
 @dataclass
 class Absent(Clause):
     id: ClassVar[str] = "absent"
-    directive_names: list[Name] = field(default_factory=list)
+    directive_names: list[DirectiveName] = field(default_factory=list)
 
 @dataclass
 class Contains(Clause):
     id: ClassVar[str] = "contains"
-    directive_names: list[Name] = field(default_factory=list)
+    directive_names: list[DirectiveName] = field(default_factory=list)
 
 @dataclass
 class Holds(Clause):
@@ -1156,7 +1160,7 @@ class NoOpenmpRoutines(Clause):
     can_assume: PyExpr|None = None
 
 @dataclass
-class NoParallism(Clause):
+class NoParallelism(Clause):
     id: ClassVar[str] = "no_parallelism"
     can_assume: PyExpr|None = None
 
