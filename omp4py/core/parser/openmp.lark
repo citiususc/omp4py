@@ -379,17 +379,19 @@ _declare_variant_clause: adjust_args_clause | append_args_clause | match_clause
 
 ADJUST_ARGS_CLAUSE: "adjust_args" // optional, repeteable
 adjust_args_clause: ADJUST_ARGS_CLAUSE "(" _adjust_args_modifier_list ":" var_list ")"
-_adjust_args_modifier_list: _adjust_op | directive_name "," _adjust_op | _adjust_op "," directive_name
-_adjust_op: NEED_DEVICE_PTR | NEED_DEVICE_ADDR | NOTHING // required
+_adjust_args_modifier_list: adjust_op_name | directive_name "," adjust_op_name | adjust_op_name "," directive_name
+adjust_op_name: (NEED_DEVICE_PTR | NEED_DEVICE_ADDR | NOTHING) -> name // required
 NEED_DEVICE_ADDR: "need_device_addr"
 NEED_DEVICE_PTR: "need_device_ptr"
 NOTHING: "nothing"
 
 APPEND_ARGS_CLAUSE: "append_args" // unique
-append_args_clause: APPEND_ARGS_CLAUSE "(" [directive_name ":"] append_op ("," append_op)* ")"
+append_args_clause: APPEND_ARGS_CLAUSE "(" [directive_name ":"] append_args_arg ")"
+append_args_arg: append_op ("," append_op)*
+
 INTEROP: "interop"
-append_op: INTEROP "(" _interop_type ("," _interop_type)* ")"
-_interop_type: TARGET | TARGETSYNC
+append_op: INTEROP "(" interop_type ("," interop_type)* ")"
+interop_type: (TARGET | TARGETSYNC) -> name
 TARGET: "target"
 TARGETSYNC: "targetsync"
 
@@ -438,13 +440,17 @@ _declare_simd_clause: aligned_clause | linear_clause | simdlen_clause | uniform_
 ALIGNED_CLAUSE: "aligned"
 aligned_clause: ALIGNED_CLAUSE "(" var_list [":" _aligned_modifier_list] ")"
 // alignment is unique and ultimate (because it is post-modified, must be first)
-_aligned_modifier_list: INTEGER "," directive_name | INTEGER | directive_name
+_aligned_modifier_list: alignment_modifier "," directive_name | alignment_modifier | directive_name
+alignment_modifier: INTEGER
+
 
 LINEAR_CLAUSE: "linear" // innermost-leaf
 linear_clause: LINEAR_CLAUSE "(" var_list [":" _linear_modifier_list] ")"
 // step_simple_modifier is exclusive and unique, the rest are unique
-_linear_modifier_list: _linear_modifier ("," _linear_modifier)* | py_expr
-_linear_modifier: step_modifier | (REF|UVAL|VAL) | directive_name
+_linear_modifier_list: _linear_modifier ("," _linear_modifier)* | step_simple_modifier
+_linear_modifier: step_modifier | linear_modifier_name | directive_name
+linear_modifier_name: (REF|UVAL|VAL) -> name
+step_simple_modifier: py_expr
 REF: "ref"
 UVAL: "uval"
 VAL: "val"
@@ -472,8 +478,8 @@ _declare_target_clause: device_type_clause | enter_clause | indirect_clause | li
 
 ENTER_CLAUSE: "enter"
 enter_clause: ENTER_CLAUSE "(" [_enter_modifier_list ":"] var_list ")"
-_enter_modifier_list: _enter_modifier ("," _enter_modifier)*
-_enter_modifier: AUTOMAP | directive_name
+_enter_modifier_list: automap_name | directive_name | automap_name "," directive_name | directive_name "," automap_name
+automap_name: AUTOMAP -> name
 AUTOMAP: "automap"
 
 INDIRECT_CLAUSE: "indirect" // unique
@@ -687,7 +693,8 @@ copyin_clause: COPYIN_CLAUSE "(" [directive_name ":"] var_list ")"
 
 NUM_THREADS_CLAUSE: "num_threads" // unique
 num_threads_clause: NUM_THREADS_CLAUSE "(" [_num_threads_modifier_list ":"] expr_list ")"
-_num_threads_modifier_list: STRICT | directive_name | directive_name "," STRICT | STRICT "," directive_name
+_num_threads_modifier_list: strict_name | directive_name | directive_name "," strict_name | strict_name "," directive_name
+strict_name: STRICT -> name
 STRICT: "strict"
 
 PROC_BIND_CLAUSE: "proc_bind" // unique
@@ -717,7 +724,8 @@ _teams_clause: \
 NUM_TEAMS_CLAUSE: "num_teams" // unique
 num_teams_clause: NUM_TEAMS_CLAUSE "(" [_num_teams_modifier_list ":"] py_expr ")"
 // lower_bound is unique and ultimate
-_num_teams_modifier_list: directive_name | py_expr | directive_name "," py_expr
+_num_teams_modifier_list: directive_name | lower_bound | directive_name "," lower_bound
+lower_bound: py_expr
 
 THREAD_LIMIT_CLAUSE: "thread_limit" // unique
 thread_limit_clause: THREAD_LIMIT_CLAUSE "(" [directive_name ":"] py_expr ")"
@@ -746,8 +754,8 @@ nontemporal_clause: NONTEMPORAL_CLAUSE "(" [directive_name ":"] var_list ")"
 
 ORDER_CLAUSE: "order" // unique
 order_clause: ORDER_CLAUSE "(" [_order_modifier_list ":"] CONCURRENT ")"
-_order_modifier_list: directive_name | _order_modifier | directive_name "," _order_modifier | _order_modifier "," directive_name
-_order_modifier: REPRODUCIBLE | UNCONSTRAINED
+_order_modifier_list: directive_name | order_modifier_name | directive_name "," order_modifier_name | order_modifier_name "," directive_name
+order_modifier_name: (REPRODUCIBLE | UNCONSTRAINED) -> name
 CONCURRENT: "concurrent"
 REPRODUCIBLE: "reproducible"
 UNCONSTRAINED: "unconstrained"
@@ -846,7 +854,9 @@ ordered_clause: ORDERED_CLAUSE ["(" [directive_name ":"] py_expr ")"]
 SCHEDULE_CLAUSE: "schedule" // unique
 schedule_clause: SCHEDULE_CLAUSE "(" [_schedule_modifier_list ":"] schedule_type ["," py_expr] ")"
 _schedule_modifier_list: _schedule_modifier ("," _schedule_modifier)*
-_schedule_modifier: (MONOTONIC | NONMONOTONIC) | SIMD | directive_name
+_schedule_modifier: ordering_modifier_name | chunk_modifier_name | directive_name
+ordering_modifier_name: (MONOTONIC | NONMONOTONIC) -> name
+chunk_modifier_name: SIMD -> name
 schedule_type: STATIC | DYNAMIC | GUIDED | AUTO | RUNTIME
 STATIC  : "static"
 DYNAMIC : "dynamic"
@@ -953,11 +963,11 @@ _taskloop_clause: \
 
 GRAINSIZE_CLAUSE: "grainsize" // unique
 grainsize_clause: GRAINSIZE_CLAUSE "(" [_grainsize_modifier_list ":"] py_expr ")"
-_grainsize_modifier_list: STRICT | directive_name | STRICT "," directive_name | directive_name "," STRICT
+_grainsize_modifier_list: strict_name | directive_name | strict_name "," directive_name | directive_name "," strict_name
 
 NUM_TASKS_CLAUSE: "num_tasks"
 num_tasks_clause: NUM_TASKS_CLAUSE "(" [_num_tasks_modifier_list ":"] py_expr ")"
-_num_tasks_modifier_list: STRICT | directive_name | STRICT "," directive_name | directive_name "," STRICT
+_num_tasks_modifier_list: strict_name | directive_name | strict_name "," directive_name | directive_name "," strict_name
 
 
 // ---- task_iteration ----
@@ -1078,8 +1088,8 @@ _target_clause: \
 DEFAULTMAP_CLAUSE: "defaultmap" // unique
 defaultmap_clause: DEFAULTMAP_CLAUSE "(" _defaultmap_arg [":" _defaultmap_modifier_list] ")"
 _defaultmap_arg: DEFAULT | FIRSTPRIVATE | FROM | NONE | PRESENT | PRIVATE | SELF | STORAGE | TO | TOFROM
-_defaultmap_modifier_list: directive_name | _variable_category | directive_name "," _variable_category | _variable_category "," directive_name
-_variable_category: AGGREGATE | ALL | ALLOCATABLE | POINTER | SCALAR
+_defaultmap_modifier_list: directive_name | variable_category_name
+	| directive_name "," variable_category_name | variable_category_name "," directive_name
 
 USES_ALLOCATORS_CLAUSE: "uses_allocators"
 uses_allocators_clause: USES_ALLOCATORS_CLAUSE "(" [_uses_allocator_modifier_list ":"] py_expr ")"
@@ -1104,12 +1114,13 @@ _target_update_clause: \
 TO_CLAUSE: "to"
 to_clause: TO_CLAUSE "(" [_to_modifier_list ":"] var_list ")"
 _to_modifier_list: _from_modifier ("," _from_modifier)*
-_to_modifier: PRESENT | mapper_modifier | iterator_modifier | directive_name
+_to_modifier: present_name | mapper_modifier | iterator_modifier | directive_name
+present_name: PRESENT -> name
 
 FROM_CLAUSE: "from"
 from_clause: FROM_CLAUSE "(" [_from_modifier_list ":"] var_list ")"
 _from_modifier_list: _from_modifier ("," _from_modifier)*
-_from_modifier: PRESENT | mapper_modifier | iterator_modifier | directive_name
+_from_modifier: present_name | mapper_modifier | iterator_modifier | directive_name
 
 
 //
@@ -1135,8 +1146,8 @@ INIT_CLAUSE: "init" // innermost-leaf
 init_clause: INIT_CLAUSE "(" [_init_modifier_list ":"] IDENTIFIER ")"
 _init_modifier_list: _init_modifier ("," _init_modifier)*
 // all are unique, except interop_type_modifier, which is repeteable
-_init_modifier: prefer_type_mofifier | depinfo_modifier | interop_type_modifier | directive_name
-interop_type_modifier: TARGET | TARGETSYNC
+_init_modifier: interop_type_modifier_name | prefer_type_modifier | depinfo_modifier | directive_name
+interop_type_modifier_name: (TARGET | TARGETSYNC) -> name
 
 USE_CLAUSE: "use" // default
 use_clause: USE_CLAUSE "(" [directive_name ":"] IDENTIFIER ")"
@@ -1243,7 +1254,8 @@ depobj_directive: DEPOBJ_DIRECTIVE "(" IDENTIFIER ")" (destroy_clause | init_cla
 
 UPDATE_CLAUSE: "update" // innermost-leaf, unique
 depobj_update_clause: UPDATE_CLAUSE "(" [_depobj_update_modifier_list ":"] IDENTIFIER ")"
-_depobj_update_modifier_list: directive_name | _task_dependence_type | directive_name "," _task_dependence_type | _task_dependence_type "," directive_name
+_depobj_update_modifier_list: directive_name | task_dependence_name
+	| directive_name "," task_dependence_name | task_dependence_name "," directive_name
 
 
 // ---- ordered ----
@@ -1252,9 +1264,9 @@ ordered_directive: ORDERED_DIRECTIVE (doacross_clause | _ordered_clause_list?)
 _ordered_clause_list: threads_clause | simd_clause | threads_clause ","? simd_clause | simd_clause ","? threads_clause
 
 DOACROSS_CLAUSE: "doacross" // required
-doacross_clause: DOACROSS_CLAUSE "(" _doacross_modifier_list ":" _iterator_specifier ")"
-_doacross_modifier_list: _doacross_dependence_type | directive_name "," _doacross_dependence_type | _doacross_dependence_type "," directive_name
-_doacross_dependence_type: SINK | SOURCE
+doacross_clause: DOACROSS_CLAUSE "(" _doacross_modifier_list ":" iterator_specifier ")"
+_doacross_modifier_list: dependence_type_name | directive_name "," dependence_type_name | dependence_type_name "," directive_name
+dependence_type_name: (SINK | SOURCE) -> name
 SINK: "sink"
 SOURCE: "source"
 
@@ -1288,10 +1300,10 @@ cancellation_point_directive: CANCELLATION_POINT_DIRECTIVE [directive_name ":"] 
 // TODO: reduce-reduce conflict because both directive_name and _apply_directive share the same tokens.
 // This clause cannot be part of a combined construct (see _combined_clause), so this should be fine.
 APPLY_CLAUSE: "apply" // optional
-apply_clause: APPLY_CLAUSE "(" [_apply_modifier_list ":"] _apply_directive_list ")"
+apply_clause: APPLY_CLAUSE "(" [_apply_modifier_list ":"] apply_clause_arg ")"
 //_apply_modifier_list: directive_name | loop_modifier | loop_modifier "," directive_name | directive_name "," loop_modifier
-_apply_modifier_list: loop_modifier 
-_apply_directive_list: _apply_directive ("," _apply_directive)*
+_apply_modifier_list: loop_modifier
+apply_clause_arg: _apply_directive ("," _apply_directive)*
 _apply_directive: FUSE_DIRECTIVE | INTERCHANGE_DIRECTIVE | NOTHING_DIRECTIVE | REVERSE_DIRECTIVE | SPLIT_DIRECTIVE | STRIPE_DIRECTIVE | TILE_DIRECTIVE | UNROLL_DIRECTIVE
 
 
@@ -1299,8 +1311,8 @@ DEPEND_CLAUSE: "depend"
 depend_clause: DEPEND_CLAUSE "(" [_depend_modifier_list ":"] expr_list ")"
 // Each modifier is unique, but may be declared in any order
 _depend_modifier_list: _depend_modifier ("," _depend_modifier)*
-_depend_modifier: _task_dependence_type | iterator_modifier | directive_name
-_task_dependence_type: DEPOBJ | IN | INOUT | INOUTSET | MUTEXINOUTSET | OUT
+_depend_modifier: task_dependence_name | iterator_modifier | directive_name
+task_dependence_name: (DEPOBJ | IN | INOUT | INOUTSET | MUTEXINOUTSET | OUT) -> name
 DEPOBJ: "depobj"
 IN: "in"
 INOUT: "inout"
@@ -1311,19 +1323,18 @@ OUT: "out"
 
 DEVICE_CLAUSE: "device" // unique
 device_clause: DEVICE_CLAUSE "(" [_device_modifier_list ":"] py_expr ")"
-_device_modifier_list: _device_modifier ("," _device_modifier)
-_device_modifier: ANCESTOR | DEVICE_NUM | directive_name
+_device_modifier_list: device_modifier_name | directive_name
+	| device_modifier_name "," directive_name | directive_name "," device_modifier_name
+device_modifier_name: (ANCESTOR | DEVICE_NUM) -> name
 ANCESTOR: "ancestor"
 DEVICE_NUM: "device_num"
 
 
 DEFAULT_CLAUSE: "default" // unique
 default_clause: DEFAULT_CLAUSE "(" (NONE | SHARED | FIRSTPRIVATE | PRIVATE) [":" _default_modifier] ")"
-_default_modifier: \
-	  directive_name | _default_variable_category
-	| directive_name "," _default_variable_category
-	| _default_variable_category "," directive_name
-_default_variable_category: ALL | ALLOCATABLE | POINTER | SCALAR
+_default_modifier: directive_name | variable_category_name
+	| directive_name "," variable_category_name | variable_category_name "," directive_name
+variable_category_name: (ALL | ALLOCATABLE | POINTER | SCALAR | AGGREGATE) -> name
 NONE: "none"
 SHARED: "shared"
 FIRSTPRIVATE: "firstprivate"
@@ -1345,14 +1356,16 @@ if_clause: IF_CLAUSE "(" [directive_name ":"] py_expr ")"
 
 FIRSTPRIVATE_CLAUSE: "firstprivate"
 firstprivate_clause: FIRSTPRIVATE_CLAUSE "(" [_firstprivate_modifier ":"] var_list ")"
-_firstprivate_modifier: directive_name | SAVED | directive_name "," SAVED | SAVED "," directive_name
+_firstprivate_modifier: directive_name | saved_name | directive_name "," saved_name | saved_name "," directive_name
+saved_name: SAVED -> name
 SAVED: "saved"
 
 
 REDUCTION_CLAUSE: "reduction"
 reduction_clause: REDUCTION_CLAUSE  "(" [_reduction_modifier_list ","] reduction_op ":" var_list ")"
 _reduction_modifier_list: _reduction_modifier ("," _reduction_modifier)*
-_reduction_modifier: (INSCAN|TASK|DEFAULT) | original_modifier | directive_name
+_reduction_modifier: reduction_modifier_name | original_modifier | directive_name
+reduction_modifier_name: (INSCAN|TASK|DEFAULT) -> name
 DEFAULT: "default"
 INSCAN: "inscan"
 TASK: "task"
@@ -1364,17 +1377,19 @@ induction_clause: INDUCTION_CLAUSE "(" _induction_modifier_list "," induction_op
 _induction_modifier_list: \
 	  step_modifier
 	// permutations of two
-	| directive_name "," step_modifier | step_modifier "," directive_name
-	| induction_modifier "," step_modifier | step_modifier "," induction_modifier
+	| directive_name "," step_modifier
+	| step_modifier "," directive_name
+	| induction_modifier_name "," step_modifier
+	| step_modifier "," induction_modifier_name
 	// permutations of three
-	| directive_name "," step_modifier "," induction_modifier
-	| directive_name "," induction_modifier "," step_modifier
-	| induction_modifier "," directive_name "," step_modifier
-	| induction_modifier "," step_modifier "," directive_name
-	| step_modifier "," induction_modifier "," directive_name
-	| step_modifier "," directive_name "," induction_modifier
+	| directive_name "," step_modifier "," induction_modifier_name
+	| directive_name "," induction_modifier_name "," step_modifier
+	| induction_modifier_name "," directive_name "," step_modifier
+	| induction_modifier_name "," step_modifier "," directive_name
+	| step_modifier "," induction_modifier_name "," directive_name
+	| step_modifier "," directive_name "," induction_modifier_name
 
-induction_modifier: RELAXED|STRICT -> name
+induction_modifier_name: (RELAXED|STRICT) -> name
 
 
 SHARED_CLAUSE: "shared"
@@ -1387,16 +1402,19 @@ collapse_clause: COLLAPSE_CLAUSE "(" [directive_name ":"] py_expr ")"
 
 LASTPRIVATE_CLAUSE: "lastprivate"
 lastprivate_clause: LASTPRIVATE_CLAUSE "(" [_lastprivate_modifier_list ":"] var_list ")"
-_lastprivate_modifier_list: CONDITIONAL | directive_name | directive_name "," CONDITIONAL | CONDITIONAL "," directive_name
+_lastprivate_modifier_list: conditional_name | directive_name
+	| directive_name "," conditional_name | conditional_name "," directive_name
+conditional_name: CONDITIONAL -> name
 CONDITIONAL: "conditional"
 
 
 // TODO: allocators make no sense in Python
 ALLOCATE_CLAUSE: "allocate"
 allocate_clause: ALLOCATE_CLAUSE "(" [_allocate_modifier_list ":"] var_list ")"
-// allocator-simple-modifier is exclusive
-_allocate_modifier_list: _allocate_modifier ("," _allocate_modifier)* | py_expr
+// allocator_simple_modifier is exclusive
+_allocate_modifier_list: _allocate_modifier ("," _allocate_modifier)* | allocator_simple_modifier
 _allocate_modifier: allocator_modifier | align_modifier | directive_name
+allocator_simple_modifier: py_expr
 
 
 NOWAIT_CLAUSE: "nowait" // outermost-leaf, unique
@@ -1452,19 +1470,25 @@ nogroup_clause: NOGROUP_CLAUSE ["(" [directive_name ":"] py_expr ")"]
 
 
 MAP_CLAUSE: "map"
-map_clause: MAP_CLAUSE "(" [[_map_modifier_list ","] _map_type ":"] var_list ")"
+map_clause: MAP_CLAUSE "(" [[_map_modifier_list ","] map_type_name ":"] var_list ")"
 _map_modifier_list: _map_modifier ("," _map_modifier)*
 _map_modifier: \
-	  ALWAYS
-	| CLOSE
-	| PRESENT
-	| SELF
-	| (REF_PTEE|REF_PTR|REF_PTR_PTEE)
-	| DELETE
+	  always_modifier_name
+	| close_modifier_name
+	| present_modifier_name
+	| self_modifier_name
+	| delete_modifier_name
+	| ref_modifier_name
 	| mapper_modifier
 	| iterator_modifier
 	| directive_name
-_map_type: FROM | STORAGE | TO | TOFROM
+map_type_name: (FROM | STORAGE | TO | TOFROM) -> name
+ref_modifier_name: (REF_PTEE|REF_PTR|REF_PTR_PTEE) -> name
+always_modifier_name: ALWAYS -> name
+close_modifier_name: CLOSE -> name
+present_modifier_name: PRESENT -> name
+self_modifier_name: SELF -> name
+delete_modifier_name: DELETE -> name
 ALWAYS: "always"
 CLOSE: "close"
 PRESENT: "present"
@@ -1538,8 +1562,8 @@ original_modifier: ORIGINAL "(" (DEFAULT | PRIVATE | SHARED) ")"
 
 
 ITERATOR: "iterator"
-iterator_modifier: ITERATOR "(" _iterator_specifier ("," _iterator_specifier)* ")"
-_iterator_specifier: IDENTIFIER "=" py_expr ":" py_expr [":" py_expr]
+iterator_modifier: ITERATOR "(" iterator_specifier ("," iterator_specifier)* ")"
+iterator_specifier: IDENTIFIER "=" py_expr ":" py_expr [":" py_expr]
 // TODO: py_type will eat the '=':
 // _iterator_specifier: IDENTIFIER [":" py_type] "=" py_expr ":" py_expr [":" py_expr]
 
@@ -1576,10 +1600,11 @@ SPLIT: "split"
 UNROLLED: "unrolled"
 
 PREFER_TYPE: "prefer_type"
-prefer_type_mofifier: PREFER_TYPE "(" preference_specification ("," preference_specification )* ")"
-preference_specification: "{" _preference_selector ("," _preference_selector)* "}" | IDENTIFIER
+prefer_type_modifier: PREFER_TYPE "(" preference_specification ("," preference_specification )* ")"
+preference_specification: "{" (fr_selector|attr_selector) ("," (fr_selector|attr_selector))* "}" | IDENTIFIER
 // expression list to allow a list of string literals
-_preference_selector: FR "(" IDENTIFIER ")" | ATTR "(" expr_list ")"
+fr_selector:   FR   "(" IDENTIFIER ")"
+attr_selector: ATTR "(" expr_list  ")"
 FR: "fr"
 ATTR: "attr"
 

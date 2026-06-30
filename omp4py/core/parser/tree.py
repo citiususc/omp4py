@@ -53,7 +53,7 @@ __all__ = [
     "AtomicDefaultMemOrder", "DynamicAllocators", "ReverseOffload", "UnifiedAddress", "UnifiedSharedMemory", "SelfMaps", "DeviceSafesync",
     "Absent", "Contains", "Holds", "NoOpenmp", "NoOpenmpConstructs", "NoOpenmpRoutines", "NoParallelism",
     "At", "Message", "Severity",
-    "Looprange", "Permutation", "Counts", "Sizes", "Full", "Partial",
+    "LoopRange", "Permutation", "Counts", "Sizes", "Full", "Partial",
     "CopyIn", "NumThreads", "ProcBind", "SafeSync", "NumTeams",
     "ThreadLimit", "NonTemporal", "Order", "SafeLen", "Filter",
     "CopyPrivate", "OrderedClause", "Schedule", "DistSchedule",
@@ -122,7 +122,7 @@ class Name(OmpNode):
 @dataclass
 class Directive(OmpNode):
     string: str
-    # Dict[directive_id, Construct] to model combined constructs.
+    # Dict[directive_name, Construct] to model combined constructs.
     # In OpenMP 6.0 there is 413 different combined constructs,
     # it doesn't make sense to create a class for each of them.
     constructs: dict[str, Construct]
@@ -139,7 +139,7 @@ class Construct(OmpNode):
 @dataclass(kw_only=True)
 class Clause(OmpNode):
     id: ClassVar[str] = "clause"  # must be redefined
-    directive_id: DirectiveName|None = None
+    directive_name: DirectiveName|None = None
     name: Name
 
 
@@ -161,7 +161,7 @@ class Modifier(OmpNode):
 
 @dataclass
 class DirectiveName(Modifier):
-    id: ClassVar[str] = "directive_id"
+    id: ClassVar[str] = "directive_name"
     string: str
 
     def __str__(self):
@@ -351,7 +351,7 @@ class Error(Construct):
 class Fuse(Construct):
     id: ClassVar[str] = "fuse"
     apply: Apply|None = None
-    looprange: Looprange|None = None
+    looprange: LoopRange|None = None
 
 
 @dataclass
@@ -943,7 +943,7 @@ class Otherwise(Clause):
 class AdjustArgs(DataScope):
     id: ClassVar[str] = "adjust_args"
     # modifiers:
-    nadjust_op: Name
+    adjust_op_name: Name
     adjust_op: AdjustOp = field(init=False)
 
     class AdjustOp(Enum):
@@ -959,7 +959,7 @@ class AdjustArgs(DataScope):
                 "nothing": self.AdjustOp.NOTHING,
                 "need_device_ptr": self.AdjustOp.NEED_DEVICE_PTR,
                 "need_device_addr": self.AdjustOp.NEED_DEVICE_ADDR,
-            }[self.nadjust_op.string.lower()],
+            }[self.adjust_op_name.string.lower()],
         )
 
 @dataclass
@@ -1002,15 +1002,15 @@ class NoVariants(Clause):
 class Aligned(DataScope):
     id: ClassVar[str] = "aligned"
     # modifiers:
-    alignment: PyInt|None = None
+    alignment_modifier: PyInt|None = None
 
 @dataclass
 class Linear(DataScope):
     id: ClassVar[str] = "linear"
     # modifiers:
-    step_simple: PyExpr|None = None
+    step_simple_modifier: PyExpr|None = None
     step_modifier: Step|None = None
-    nlinear_modifier: Name|None = None
+    linear_modifier_name: Name|None = None
     linear_modifier: LinearModifier|None = field(init=False)
 
     class LinearModifier(Enum):
@@ -1026,8 +1026,8 @@ class Linear(DataScope):
                 "ref": self.LinearModifier.REF,
                 "uval": self.LinearModifier.UVAL,
                 "val": self.LinearModifier.VAL,
-            }[self.nlinear_modifier.string.lower()]
-            if self.nlinear_modifier is not None
+            }[self.linear_modifier_name.string.lower()]
+            if self.linear_modifier_name is not None
             else None
         )
 
@@ -1056,7 +1056,7 @@ class NotInBranch(DataScope):
 class Enter(DataScope):
     id: ClassVar[str] = "enter"
     # modifiers:
-    automap: Name|None = None
+    automap_name: Name|None = None
 
 @dataclass
 class Indirect(Clause):
@@ -1074,7 +1074,7 @@ class Local(DataScope):
 
 #### requires ####
 @dataclass
-class AtomicDefaultMemOrder(DataScope):
+class AtomicDefaultMemOrder(Clause):
     id: ClassVar[str] = "atomic_default_mem_order"
     nmemory_order: Name
     memory_order: MemoryOrder = field(init=False)
@@ -1095,7 +1095,7 @@ class AtomicDefaultMemOrder(DataScope):
                 "relaxed": self.MemoryOrder.RELAXED,
                 "seq_cst": self.MemoryOrder.SEQ_CST,
             }[self.nmemory_order.string.lower()]
-         )
+        )
 
 @dataclass
 class DynamicAllocators(Clause):
@@ -1214,7 +1214,7 @@ class Severity(Clause):
 
 #### fuse ####
 @dataclass
-class Looprange(Clause):
+class LoopRange(Clause):
     id: ClassVar[str] = "looprange"
     first: PyExpr
     count: PyExpr
@@ -1258,7 +1258,7 @@ class NumThreads(Clause):
     id: ClassVar[str] = "num_threads"
     nthreads: PyExpr
     # modifiers:
-    strict: Name|None = None
+    strict_name: Name|None = None
 
 @dataclass
 class ProcBind(Clause):
@@ -1310,7 +1310,7 @@ class Order(Clause):
     id: ClassVar[str] = "non_temporal"
     ordering: Name
     # modifiers:
-    norder_modifier: Name|None = None
+    order_modifier_name: Name|None = None
     order_modifier: OrderModifier|None = field(init=False)
 
     class OrderModifier(Enum):
@@ -1324,8 +1324,8 @@ class Order(Clause):
             {
                 "reproducible": self.OrderModifier.REPRODUCIBLE,
                 "unconstrained": self.OrderModifier.UNCONSTRAINED,
-            }[self.norder_modifier.string.lower()]
-            if self.norder_modifier is not None
+            }[self.order_modifier_name.string.lower()]
+            if self.order_modifier_name is not None
             else None
         )
 
@@ -1360,9 +1360,9 @@ class Schedule(Clause):
     type: ScheduleType
     chunk: PyExpr|None = None
     # modifiers:
-    nordering_modifier: Name|None = None
+    ordering_modifier_name: Name|None = None
     ordering_modifier: OrderingModifier|None = field(init=False)
-    chunk_modifier: Name|None = None
+    chunk_modifier_name: Name|None = None
 
     class OrderingModifier(Enum):
         MONOTONIC = 0
@@ -1375,8 +1375,8 @@ class Schedule(Clause):
             {
                 "monotonic": self.OrderingModifier.MONOTONIC,
                 "nonmonotonic": self.OrderingModifier.NON_MONOTONIC,
-            }[self.nordering_modifier.string.lower()]
-            if self.nordering_modifier is not None
+            }[self.ordering_modifier_name.string.lower()]
+            if self.ordering_modifier_name is not None
             else None
         )
 
@@ -1452,8 +1452,8 @@ class UseDeviceAddr(DataScope):
 
 #### target ####
 class VariableCategory(Enum):
-    AGGREGATE = 0
-    ALL = 1
+    ALL = 0
+    AGGREGATE = 1
     ALLOCATABLE = 2
     POINTER = 3
     SCALAR = 4
@@ -1462,8 +1462,8 @@ class VariableCategory(Enum):
     def from_name(name: Name|None) -> VariableCategory|None:
         return (
             {
-                "aggregate": VariableCategory.AGGREGATE,
                 "all": VariableCategory.ALL,
+                "aggregate": VariableCategory.AGGREGATE,
                 "allocatable": VariableCategory.ALLOCATABLE,
                 "pointer": VariableCategory.POINTER,
                 "scalar": VariableCategory.SCALAR,
@@ -1475,10 +1475,10 @@ class VariableCategory(Enum):
 @dataclass
 class DefaultMap(Clause):
     id: ClassVar[str] = "use_device_addr"
-    nimplicit_behavior: Name
+    implicit_behavior_name: Name
     implicit_behavior: ImplicitBehavior = field(init=False)
     # modifiers:
-    nvariable_category: Name|None = None
+    variable_category_name: Name|None = None
     variable_category: VariableCategory|None = None
 
     class ImplicitBehavior(Enum):
@@ -1508,9 +1508,9 @@ class DefaultMap(Clause):
                 "storage ": self.ImplicitBehavior.STORAGE,
                 "to ": self.ImplicitBehavior.TO,
                 "tofrom ": self.ImplicitBehavior.TOFROM,
-            }[self.nimplicit_behavior.string.lower()],
+            }[self.implicit_behavior_name.string.lower()],
         )
-        object.__setattr__(self, "variable_category", VariableCategory.from_name(self.nvariable_category))
+        object.__setattr__(self, "variable_category", VariableCategory.from_name(self.variable_category_name))
 
 @dataclass
 class UsesAllocators(Clause):
@@ -1526,7 +1526,7 @@ class UsesAllocators(Clause):
 class From(DataScope):
     id: ClassVar[str] = "from_"
     # modifiers:
-    present: Name|None = None
+    present_name: Name|None = None
     mapper_modifier: Mapper|None = None
     iterator_modifier: Iterator|None = None
 
@@ -1535,7 +1535,7 @@ class From(DataScope):
 class To(DataScope):
     id: ClassVar[str] = "to"
     # modifiers:
-    present: Name|None = None
+    present_name: Name|None = None
     mapper_modifier: Mapper|None = None
     iterator_modifier: Iterator|None = None
 
@@ -1550,10 +1550,25 @@ class Destroy(Clause):
 class Init(Clause):
     id: ClassVar[str] = "init"
     init_var: PyName
-    # modifers:
+    # modifiers:
     prefer_modifier: Prefer|None = None
     depinfo_modifier: DepInfo|None = None
-    interop_modifier: list[InteropModifier] = field(default_factory=list)
+    interop_type_modifier_name: list[Name] = field(default_factory=list)
+    interop_type_modifier: list[InteropType] = field(init=False)
+
+    class InteropType(Enum):
+        TARGET = 0
+        TARGETSYNC = 1
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "interop_type_modifier",
+            [{
+                "target": self.InteropType.TARGET,
+                "targetsync": self.InteropType.TARGETSYNC,
+            }[e.string.lower()] for e in self.interop_type_modifier_name]
+        )
 
 @dataclass
 class Use(Clause):
@@ -1671,14 +1686,14 @@ class DepobjUpdate(Clause):
     id: ClassVar[str] = "depobj_update"
     update_var: PyName
     # modifiers:
-    ntask_dependence: Name|None = None
+    task_dependence_name: Name|None = None
     task_dependence: TaskDependenceKind|None = field(init=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(
             self,
             "task_dependence",
-            TaskDependenceKind.from_name(self.ntask_dependence)
+            TaskDependenceKind.from_name(self.task_dependence_name)
         )
 
 
@@ -1688,7 +1703,7 @@ class DoAcross(Clause):
     id: ClassVar[str] = "do_across"
     iterator_specifier: IteratorSpecifier
     # modifiers:
-    ndependence_type: Name
+    dependence_type_name: Name
     dependence_type: DependenceType = field(init=False)
 
     class DependenceType(Enum):
@@ -1702,7 +1717,7 @@ class DoAcross(Clause):
             {
                 "sink": self.DependenceType.SINK,
                 "source": self.DependenceType.SOURCE,
-            }[self.ndependence_type.string.lower()]
+            }[self.dependence_type_name.string.lower()]
         )
 
 
@@ -1759,7 +1774,7 @@ class Depend(Clause):
     id: ClassVar[str] = "depend"
     locator_list: list[PyExpr] = field(default_factory=list)
     # modifiers:
-    ntask_dependence: Name|None = None
+    task_dependence_name: Name|None = None
     task_dependence: TaskDependenceKind|None = field(init=False)
     iterator_modifier: Iterator|None = None
 
@@ -1767,7 +1782,7 @@ class Depend(Clause):
         object.__setattr__(
             self,
             "task_dependence",
-            TaskDependenceKind.from_name(self.ntask_dependence)
+            TaskDependenceKind.from_name(self.task_dependence_name)
         )
 
 
@@ -1777,7 +1792,7 @@ class Device(Clause):
     device_description: PyExpr
 
     # modifiers:
-    ndevice_modifier: Name|None = None
+    device_modifier_name: Name|None = None
     device_modifier: DeviceModifier|None = field(init=False)
 
     class DeviceModifier(Enum):
@@ -1791,8 +1806,8 @@ class Device(Clause):
             {
                 "ancestor": self.DeviceModifier.ANCESTOR,
                 "device_num": self.DeviceModifier.DEVICE_NUM,
-            }[self.ndevice_modifier.string.lower()]
-            if self.ndevice_modifier is not None
+            }[self.device_modifier_name.string.lower()]
+            if self.device_modifier_name is not None
             else None
         )
 
@@ -1800,10 +1815,10 @@ class Device(Clause):
 @dataclass
 class Default(Clause):
     id: ClassVar[str] = "default"
-    ndata_sharing_attr: Name
+    data_sharing_attr_name: Name
     data_sharing_attr: DataSharingAttr = field(init=False)
     # modifiers:
-    nvariable_category: Name|None = None
+    variable_category_name: Name|None = None
     variable_category: VariableCategory|None = None
 
     class DataSharingAttr(Enum):
@@ -1821,9 +1836,13 @@ class Default(Clause):
                 "firstprivate": self.DataSharingAttr.FIRST_PRIVATE,
                 "private": self.DataSharingAttr.PRIVATE,
                 "none": self.DataSharingAttr.NONE,
-            }[self.ndata_sharing_attr.string.lower()],
+            }[self.data_sharing_attr_name.string.lower()],
         )
-        object.__setattr__(self, "variable_category", VariableCategory.from_name(self.nvariable_category))
+        object.__setattr__(
+            self,
+            "variable_category",
+            VariableCategory.from_name(self.variable_category_name)
+        )
 
 
 @dataclass
@@ -1841,7 +1860,7 @@ class If(Clause):
 class FirstPrivate(DataScope):
     id: ClassVar[str] = "first_private"
     # modifiers:
-    saved: Name|None = None
+    saved_name: Name|None = None
 
 
 @dataclass
@@ -1849,7 +1868,7 @@ class Reduction(DataScope):
     id: ClassVar[str] = "reduction"
     op: ReductionOp
     # modifiers:
-    nreduction_modifier: Name|None = None
+    reduction_modifier_name: Name|None = None
     reduction_modifier: ReductionModifier|None = field(init=False)
     original_modifier: Original|None = None
 
@@ -1866,8 +1885,8 @@ class Reduction(DataScope):
                 "default": self.ReductionModifier.DEFAULT,
                 "inscan": self.ReductionModifier.INSCAN,
                 "task": self.ReductionModifier.TASK,
-            }[self.nreduction_modifier.string.lower()]
-            if self.nreduction_modifier is not None
+            }[self.reduction_modifier_name.string.lower()]
+            if self.reduction_modifier_name is not None
             else None
         )
 
@@ -1878,7 +1897,7 @@ class Induction(DataScope):
     op: InductionOp
     # modifiers:
     step_modifier: Step
-    ninduction_modifier: Name|None = None
+    induction_modifier_name: Name|None = None
     induction_modifier: InductionModifier|None = field(init=False)
 
     class InductionModifier(Enum):
@@ -1892,8 +1911,8 @@ class Induction(DataScope):
             {
                 "relaxed": self.InductionModifier.RELAXED,
                 "strict": self.InductionModifier.STRICT,
-            }[self.ninduction_modifier.string.lower()]
-            if self.ninduction_modifier is not None
+            }[self.induction_modifier_name.string.lower()]
+            if self.induction_modifier_name is not None
             else None
         )
 
@@ -1913,7 +1932,7 @@ class Collapse(Clause):
 class LastPrivate(DataScope):
     id: ClassVar[str] = "last_private"
     # modifiers:
-    conditional: Name|None = None
+    conditional_name: Name|None = None
 
 
 @dataclass
@@ -1952,7 +1971,6 @@ class Untied(Clause):
 @dataclass
 class Affinity(DataScope):
     id: ClassVar[str] = "affinity"
-    can_change_threads: PyExpr|None = None
     # modifiers:
     iterator_modifier: Iterator|None = None
 
@@ -2018,16 +2036,16 @@ class NoGroup(Clause):
 class Map(DataScope):
     id: ClassVar[str] = "map"
     # modifiers:
-    always_modifier: Name|None = None
-    close_modifier: Name|None = None
-    present_modifier: Name|None = None
-    self_modifier: Name|None = None
-    delete_modifier: Name|None = None
+    always_modifier_name: Name|None = None
+    close_modifier_name: Name|None = None
+    present_modifier_name: Name|None = None
+    self_modifier_name: Name|None = None
+    delete_modifier_name: Name|None = None
 
-    nref_modifier: Name|None = None
+    ref_modifier_name: Name|None = None
     ref_modifier: RefModifier|None = field(init=False)
 
-    nmap_type: Name|None = None
+    map_type_name: Name|None = None
     map_type: MapType|None = field(init=False)
 
     mapper_modifier: Mapper|None = None
@@ -2052,8 +2070,8 @@ class Map(DataScope):
                 "ref_ptee": self.RefModifier.REF_PTEE,
                 "ref_ptr": self.RefModifier.REF_PTR,
                 "ref_ptr_ptee": self.RefModifier.REF_PTR_PTEE,
-            }[self.nref_modifier.string.lower()]
-            if self.nref_modifier is not None
+            }[self.ref_modifier_name.string.lower()]
+            if self.ref_modifier_name is not None
             else None
         )
         object.__setattr__(
@@ -2064,8 +2082,8 @@ class Map(DataScope):
                 "storage": self.MapType.STORAGE,
                 "to": self.MapType.TO,
                 "tofrom": self.MapType.TOFROM,
-            }[self.nmap_type.string.lower()]
-            if self.nmap_type is not None
+            }[self.map_type_name.string.lower()]
+            if self.map_type_name is not None
             else None
         )
 
@@ -2077,7 +2095,7 @@ class Map(DataScope):
 @dataclass
 class ScheduleType(Modifier):
     id: ClassVar[str] = "type"
-    nkind: Name
+    kind_name: Name
     kind: Kind = field(init=False)
 
     class Kind(Enum):
@@ -2097,7 +2115,7 @@ class ScheduleType(Modifier):
                 "guided": self.Kind.GUIDED,
                 "auto": self.Kind.AUTO,
                 "runtime": self.Kind.RUNTIME,
-            }[self.nkind.string.lower()],
+            }[self.kind_name.string.lower()],
         )
 
 
@@ -2116,7 +2134,7 @@ class InductionOp(Modifier):
 class Original(Modifier):
     id: ClassVar[str] = "original_modifier"
     name: Name # = original
-    nsharing: Name
+    sharing_name: Name
     sharing: Sharing = field(init=False)
 
     class Sharing(Enum):
@@ -2132,7 +2150,7 @@ class Original(Modifier):
                 "default": self.Sharing.DEFAULT,
                 "private": self.Sharing.PRIVATE,
                 "shared": self.Sharing.SHARED,
-            }[self.nsharing.string.lower()]
+            }[self.sharing_name.string.lower()]
         )
 
 
@@ -2165,7 +2183,8 @@ class Iterator(Modifier):
     specifiers: list[IteratorSpecifier] = field(default_factory=list)
 
 @dataclass
-class IteratorSpecifier:
+class IteratorSpecifier(Modifier):
+    id: ClassVar[str] = "iterator_specifier"
     name: PyName
     begin: PyExpr
     end: PyExpr
@@ -2276,7 +2295,6 @@ class LoopModifier(Modifier):
         )
 
 
-# TODO: prefer
 @dataclass
 class Prefer(Modifier):
     id: ClassVar[str] = "prefer_modifier"
@@ -2284,17 +2302,17 @@ class Prefer(Modifier):
     spec: list[list[FrSelector|AttrSelector] | PyName] = field(default_factory=list)
 
 @dataclass
-class FrSelector:
+class FrSelector(Modifier):
     name: Name
     identifier: PyName
 
 @dataclass
-class AttrSelector:
+class AttrSelector(Modifier):
     name: Name
     expr_list: list[PyExpr]
 
 
-# TODO: context selector
+# TODO: this uses context_selector as a stmt_list, which is not exactly what the standard required
 @dataclass
 class ContextSelector(Modifier):
     id: ClassVar[str] = "context_selector"
