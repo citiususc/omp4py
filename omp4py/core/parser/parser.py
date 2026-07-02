@@ -21,10 +21,43 @@ Python's native error reporting system.
 from __future__ import annotations
 
 import ast
+import typing
+from pathlib import Path
 
-from omp4py.core.parser.tree import Directive, Span
+from . import openmp_parser as omp
+from . import string_parser as pre
+
+from .source_view import SourceView
+from .transformer import AstTransformer
+from .tree import Directive, Span
 
 __all__ = ["extract_directive", "parse_directive", "syntax_error"]
+
+@pre.v_args(inline=True)
+class PreTransformer(pre.Transformer):
+    def scape_seq(self, token: pre.Token) -> str:
+        return " "*len(str(token))
+
+    def string_token(self, token: pre.Token) -> str:
+        return str(token)
+
+    @pre.v_args(inline=False)
+    def string_literal(self, children: list) -> str:
+        return (
+            " "*len(str(children[0])) +
+            "".join(children[1:-1]) +
+            " "*len(str(children[-1]))
+        )
+
+    @pre.v_args(inline=False)
+    def start(self, children: list) -> str:
+        if len(children) == 1:
+            return children[0]
+        assert len(children) == 2
+        return " "*len(str(children[0])) + children[1]
+
+preprocesor   = pre.Lark_StandAlone(transformer=PreTransformer())
+openmp_parser = omp.Lark_StandAlone()
 
 
 def syntax_error(message: str, span: Span, source: str, filename: str) -> SyntaxError:
@@ -88,8 +121,21 @@ def extract_directive(node: ast.Constant, full_source: str, filename: str) -> st
     if len(raw_source) - 2 == len(node_value):
         return node_value
 
-    msg = "Complex directives is not supported yet"
-    raise NotImplementedError(msg)
+    return preprocesor.parse(raw_source)
+
+
+# Required for the tests, to avoid duplicating the error handling
+def _parse(code: str, source_view: SourceView) -> Directive:
+    transformer = AstTransformer(source_view)
+    try:
+        parse_tree = openmp_parser.parse(code)
+        return transformer.transform(parse_tree)
+    except omp.UnexpectedToken as e:
+        raise source_view.error(e) from None
+    except omp.VisitError as e:
+        if isinstance(e.orig_exc, SyntaxError):
+            raise e.orig_exc from None
+        raise
 
 
 def parse_directive(code: str, span: Span, filename: str) -> Directive:
@@ -113,6 +159,12 @@ def parse_directive(code: str, span: Span, filename: str) -> Directive:
 
     Returns:
         Directive: Parsed directive representation.
+
+    Raises:
+        SyntaxError if the directive is incorrect.
     """
-    msg = "New parser is not implemented yet"
-    raise NotImplementedError(msg)
+    source_view = SourceView.from_file(span, filename, code)
+    return _parse(code, source_view)
+
+
+
