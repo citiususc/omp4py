@@ -245,7 +245,7 @@ class SourceView:
     def error(
         self,
         error: UnexpectedToken,
-        diagnostics: list[tuple[str, Span]] | None = None,
+        diagnostics: list[tuple[str, Span]|str] | None = None,
     ) -> SyntaxError:
         """Convert a parser ``UnexpectedToken`` into a ``SyntaxError``.
 
@@ -262,9 +262,6 @@ class SourceView:
 
     def _msg_from_error(self, error: UnexpectedToken, span: Span) -> tuple[str, Span]:
         token = typing.cast("Token", error.token)
-
-        print("DEBUG:", error.expected)
-        print("DEBUG:", token.type)
 
         #### Expected tokens ####
 
@@ -311,28 +308,56 @@ class SourceView:
 
         #### Actual token received ####
         found_token = _TOKEN_DISPLAY.get(token.type, f'"{token}"')
+        last_token = typing.cast("Token", error.token_history[-1] if error.token_history else None)
 
-        # If the current token is an identifier and the last token was an integer,
-        # it is probably because the integer was invalid and the lexer broke it into parts:
-        #     "0o9"  ==> integer 0 + "o9" identifier
-        #     "0o19" ==> integer 1 + "9" integer
-        # This is only applies if both tokens are next to each other with no whitespace in between,
-        # because "0 o9" should get a different error.
-        if (token.type == "IDENTIFIER" or token.type == "INTEGER") and error.token_history:
-            last_token = typing.cast("Token", error.token_history[-1])
+        if last_token:
+            assert last_token.column is not None
+            assert last_token.column is not None
+            assert last_token.end_column is not None
+            assert token.column is not None
 
+            # If the current token is an identifier and the last token was an integer,
+            # it is probably because the integer was invalid and the lexer broke it into parts:
+            #     "0o9"  ==> integer 0 + "o9" identifier
+            #     "0o19" ==> integer 1 + "9" integer
+            # This is only applies if both tokens are next to each other with no whitespace in between,
+            # because "0 o9" should get a different error.
             if (
-                last_token and
+                (token.type == "IDENTIFIER" or token.type == "INTEGER") and
                 last_token.type == "INTEGER" and
-                last_token.column is not None and
-                last_token.end_column is not None and
-                token.column is not None and
-                last_token.line == token.line and
-                last_token.end_column == token.column
+                last_token.line == token.line and last_token.end_column == token.column
             ):
                 start_col_offset = self.span.offset if last_token.line == 1 else 0
                 span.offset = start_col_offset + last_token.column - 1
                 return f'invalid integer literal "{last_token}{token}".', span
+
+            # Something similar can happen for the directives and clauses' keywords.
+            # The lexer only considers tokens that are valid in the current state,
+            # so there are cases where they can be mixed up.
+            # For example, parallel accepts the default clause, not the defaultmap:
+            #         File "<stdin>", line 8
+            #           with omp("parallel defaultmap(none)"):
+            #                                     ^^^
+            #       SyntaxError: expected "(" before "map".
+            # The expected error here should be that the clause is invalid.
+            #
+            # So, if a *_DIRECTIVE/*_CLAUSE token is immediately followed by another token
+            # with no whitespace between them, the contextual lexer may have split a
+            # longer keyword into a short one it did recognize here, plus leftover garbage.
+            if (
+                (token.type.endswith(("_DIRECTIVE", "_CLAUSE")) or token.type == "IDENTIFIER") and
+                last_token.type.endswith(("_DIRECTIVE", "_CLAUSE")) and
+                last_token.line == token.line and last_token.end_column == token.column
+            ):
+                start_col_offset = self.span.offset if last_token.line == 1 else 0
+                span.offset = start_col_offset + last_token.column - 1
+                return f'{last_token}{token} clause is invalid for this directive.', span
+
+        if expected_clause and (token.type.endswith(("_DIRECTIVE", "_CLAUSE")) or token.type == "IDENTIFIER"):
+            return f'{token} clause is invalid for this directive.', span
+
+        if expected_end and token.type.endswith("_CLAUSE"):
+            return f'this directive does not accept any clauses.', span
 
         # If the token is PY_CODE, it means that we got unexpected characters.
         # The problem here is that PY_CODE will consume everything until a parentheses,
@@ -344,12 +369,6 @@ class SourceView:
             span.end_offset = span.offset
             span.end_lineno = span.lineno
             return f'expected {expected_str} instead of {display}.', span
-
-        if expected_end and token.type.endswith("_CLAUSE"):
-            return f'this directive does not accept any clauses.', span
-
-        if expected_clause and (token.type.endswith(("_DIRECTIVE", "_CLAUSE")) or token.type == "IDENTIFIER"):
-            return f'{token} clause is invalid for this directive.', span
 
         # If we expected a directive and the token was a directive,
         # it means that this directive was incorrect

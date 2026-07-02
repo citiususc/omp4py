@@ -263,7 +263,7 @@ class DeclareVariant(Construct):
 
 @dataclass
 class Dispatch(Construct):
-    id: ClassVar[str] = "declare_variant"
+    id: ClassVar[str] = "dispatch"
     depend: list[Depend] = field(default_factory=list)
     device: Device|None = None
     interop: list[InteropClause] = field(default_factory=list)
@@ -826,23 +826,23 @@ class CancelDirectiveName(Enum):
 class Cancel(Construct):
     id: ClassVar[str] = "cancel"
     directive_name: DirectiveName|None = None
-    nconstruct_type: Name
+    construct_type_name: Name
     construct_type: CancelDirectiveName = field(init=False)
 
     if_: If|None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "construct_type", CancelDirectiveName.from_name(self.nconstruct_type))
+        object.__setattr__(self, "construct_type", CancelDirectiveName.from_name(self.construct_type_name))
 
 
 @dataclass
 class CancellationPoint(Construct):
     id: ClassVar[str] = "cancellationpoint"
-    nconstruct_type: Name
+    construct_type_name: Name
     construct_type: CancelDirectiveName = field(init=False)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "construct_type", CancelDirectiveName.from_name(self.nconstruct_type))
+        object.__setattr__(self, "construct_type", CancelDirectiveName.from_name(self.construct_type_name))
 
 
 #######################################################################################################################
@@ -892,7 +892,7 @@ class InitComplete(Clause):
 @dataclass
 class DeviceType(Clause):
     id: ClassVar[str] = "device_type"
-    ndevice_type_description: Name
+    device_type_description_name: Name
     device_type_description: Kind = field(init=False)
 
     class Kind(Enum):
@@ -908,7 +908,7 @@ class DeviceType(Clause):
                 "any": self.Kind.ANY,
                 "host": self.Kind.HOST,
                 "nohost": self.Kind.NOHOST,
-            }[self.ndevice_type_description.string.lower()],
+            }[self.device_type_description_name.string.lower()],
         )
 
 
@@ -1041,12 +1041,12 @@ class Uniform(DataScope):
     id: ClassVar[str] = "uniform"
 
 @dataclass
-class InBranch(DataScope):
+class InBranch(Clause):
     id: ClassVar[str] = "in_branch"
     in_branch: PyExpr|None = None
 
 @dataclass
-class NotInBranch(DataScope):
+class NotInBranch(Clause):
     id: ClassVar[str] = "not_in_branch"
     not_in_branch: PyExpr|None = None
 
@@ -1076,7 +1076,7 @@ class Local(DataScope):
 @dataclass
 class AtomicDefaultMemOrder(Clause):
     id: ClassVar[str] = "atomic_default_mem_order"
-    nmemory_order: Name
+    memory_order_name: Name
     memory_order: MemoryOrder = field(init=False)
 
     class MemoryOrder(Enum):
@@ -1094,7 +1094,7 @@ class AtomicDefaultMemOrder(Clause):
                 "acquire": self.MemoryOrder.ACQUIRE,
                 "relaxed": self.MemoryOrder.RELAXED,
                 "seq_cst": self.MemoryOrder.SEQ_CST,
-            }[self.nmemory_order.string.lower()]
+            }[self.memory_order_name.string.lower()]
         )
 
 @dataclass
@@ -1169,7 +1169,7 @@ class NoParallelism(Clause):
 @dataclass(kw_only=True)
 class At(Clause):
     id: ClassVar[str] = "at"
-    naction_time: Name
+    action_time_name: Name
     action_time: ActionTime = field(init=False)
 
     class ActionTime(Enum):
@@ -1183,7 +1183,7 @@ class At(Clause):
             {
                 "compilation": self.ActionTime.COMPILATION,
                 "execution": self.ActionTime.EXECUTION,
-            }[self.naction_time.string.lower()]
+            }[self.action_time_name.string.lower()]
         )
 
 @dataclass
@@ -1194,7 +1194,7 @@ class Message(Clause):
 @dataclass
 class Severity(Clause):
     id: ClassVar[str] = "severity"
-    nseverity_level: Name
+    severity_level_name: Name
     severity_level: SeverityLevel = field(init=False)
 
     class SeverityLevel(Enum):
@@ -1208,7 +1208,7 @@ class Severity(Clause):
             {
                 "fatal": self.SeverityLevel.FATAL,
                 "warning": self.SeverityLevel.WARNING,
-            }[self.nseverity_level.string.lower()]
+            }[self.severity_level_name.string.lower()]
         )
 
 
@@ -1263,7 +1263,7 @@ class NumThreads(Clause):
 @dataclass
 class ProcBind(Clause):
     id: ClassVar[str] = "proc_bind"
-    naffinity_policy: Name
+    affinity_policy_name: Name
     affinity_policy: AffinityPolicy = field(init=False)
 
     class AffinityPolicy(Enum):
@@ -1279,7 +1279,7 @@ class ProcBind(Clause):
                 "close": self.AffinityPolicy.CLOSE,
                 "primary": self.AffinityPolicy.PRIMARY,
                 "spread": self.AffinityPolicy.SPREAD,
-            }[self.naffinity_policy.string.lower()],
+            }[self.affinity_policy_name.string.lower()],
         )
 
 @dataclass
@@ -1393,7 +1393,7 @@ class DistSchedule(Clause):
 @dataclass
 class Bind(Clause):
     id: ClassVar[str] = "bind"
-    nbinding: Name
+    binding_name: Name
     binding: BindingKind = field(init=False)
 
     class BindingKind(Enum):
@@ -1409,7 +1409,7 @@ class Bind(Clause):
                 "parallel": self.BindingKind.PARALLEL,
                 "teams": self.BindingKind.TEAMS,
                 "thread": self.BindingKind.THREAD,
-            }[self.nbinding.string.lower()]
+            }[self.binding_name.string.lower()]
         )
 
 
@@ -1419,7 +1419,7 @@ class GrainSize(Clause):
     id: ClassVar[str] = "grain_size"
     grain_size: PyExpr
     # modifiers:
-    nstrict: Name|None = None
+    strict_name: Name|None = None
 
 @dataclass
 class NumTasks(Clause):
@@ -1594,7 +1594,7 @@ class TaskReduction(DataScope):
 @dataclass
 class MemScope(Clause):
     id: ClassVar[str] = "mem_scope"
-    nscope: Name
+    scope_name: Name
     scope: ScopeType = field(init=False)
 
     class ScopeType(Enum):
@@ -1610,7 +1610,7 @@ class MemScope(Clause):
                 "all": self.ScopeType.ALL,
                 "cgroup": self.ScopeType.CGROUP,
                 "device": self.ScopeType.DEVICE,
-            }[self.nscope.string.lower()]
+            }[self.scope_name.string.lower()]
         )
 
 @dataclass
@@ -1637,7 +1637,7 @@ class Compare(Clause):
 @dataclass
 class Fail(Clause):
     id: ClassVar[str] = "fail"
-    nmem_order: Name
+    mem_order_name: Name
     mem_order: MemOrder = field(init=False)
     class MemOrder(Enum):
         ACQUIRE = 0
@@ -1651,7 +1651,7 @@ class Fail(Clause):
                 "acquire": self.MemOrder.ACQUIRE,
                 "relaxed": self.MemOrder.RELAXED,
                 "seq_cst": self.MemOrder.SEQ_CST,
-            }[self.nmem_order.string.lower()]
+            }[self.mem_order_name.string.lower()]
         )
 @dataclass
 class Weak(Clause):
@@ -2002,7 +2002,7 @@ class Replayable(Clause):
 @dataclass
 class ThreadSet(Clause):
     id: ClassVar[str] = "thread_set"
-    nset: Name
+    set_name: Name
     set: ThreadSetType = field(init=False)
 
     class ThreadSetType(Enum):
@@ -2016,7 +2016,7 @@ class ThreadSet(Clause):
             {
                 "omp_pool": self.ThreadSetType.OMP_POOL,
                 "omp_team": self.ThreadSetType.OMP_TEAM,
-            }[self.nset.string.lower()]
+            }[self.set_name.string.lower()]
         )
 
 
@@ -2158,7 +2158,7 @@ class Original(Modifier):
 class InteropModifier(Modifier):
     id: ClassVar[str] = "iterop_modifier"
     name: Name # = interop
-    nkind: list[Name] = field(default_factory=list)
+    kind_name: list[Name] = field(default_factory=list)
     kind: list[Kind] = field(init=False)
 
     class Kind(Enum):
@@ -2172,7 +2172,7 @@ class InteropModifier(Modifier):
             [{
                 "target": self.Kind.TARGET,
                 "targetsync": self.Kind.TARGETSYNC,
-            }[e.string.lower()] for e in self.nkind]
+            }[e.string.lower()] for e in self.kind_name]
         )
 
 

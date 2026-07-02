@@ -177,9 +177,19 @@ class AstTransformer(Transformer):
         directive_name = None
         if len(node.children) == 3 and isinstance(node.children[1], tree.DirectiveName):
             directive_name = node.children[1]
-            arg = node.children[2]
+            arg = (
+                node.children[2].children[0]
+                if isinstance(node.children[2], Tree)
+                else node.children[2]
+            )
         elif len(node.children) == 2:
-            arg = node.children[1]
+            arg = (
+                node.children[1].children[0]
+                if isinstance(node.children[1], Tree)
+                else node.children[1]
+            )
+        elif len(node.children) == 1:
+            arg = None
         else:
             assert False, "_simple_clause() used on a complex clause"
 
@@ -205,9 +215,13 @@ class AstTransformer(Transformer):
             field_name: str
             if isinstance(mod, Tree):
                 assert _has_field(mod.data, cls), "Incorrect grammar: rule name does not match field"
-                assert len(mod.children) == 1 and isinstance(mod.children[0], Token), "Incorrect grammar: modifier rules must be a single token"
+                assert len(mod.children) == 1, "Incorrect grammar: modifier rules must be a single token"
                 field_name = mod.data
-                mod = self._name_from_token(mod.children[0])
+                mod = (
+                    mod.children[0]
+                    if isinstance(mod.children[0], tree.Modifier)
+                    else self._name_from_token(mod.children[0])
+                )
             elif isinstance(mod, tree.Modifier):
                 field_name = mod.id
             else:
@@ -258,7 +272,7 @@ class AstTransformer(Transformer):
 
             if (
                 not _has_field(clause.id, cls) or
-                (clause.directive_name is not None and clause.directive_name.string != name)
+                (clause.directive_name is not None and clause.directive_name.string != cls.id)
             ):
                 rejected.append(clause)
                 continue
@@ -402,7 +416,7 @@ class AstTransformer(Transformer):
 
     @v_args(inline=True)
     def directive_name(self, token: Token) -> tree.DirectiveName:
-        return tree.DirectiveName(span=self.sv.token2span(token), string=str(token))
+        return tree.DirectiveName(span=self.sv.token2span(token), string=_DIRECTIVE_TYPES[token.type].id)
 
     def directive_list(self, node: Tree) -> list[tree.DirectiveName]:
         return list(cast("list[tree.DirectiveName]", node.children))
@@ -411,12 +425,16 @@ class AstTransformer(Transformer):
 
     # reduction_op: IDENTIFIER | PLUS | MINUS | MULT | ...
     @v_args(inline=True)
-    def reduction_op(self, token: Token) -> tree.ReductionOp:
+    def reduction_op(self, token: Token|tree.PyName) -> tree.ReductionOp:
+        if isinstance(token, tree.PyName):
+            return tree.ReductionOp(span=token.span, value=token.string)
         return tree.ReductionOp(span=self.sv.token2span(token), value=str(token))
 
     # induction_op: IDENTIFIER | PLUS | MULT
     @v_args(inline=True)
-    def induction_op(self, token: Token) -> tree.InductionOp:
+    def induction_op(self, token: Token|tree.PyName) -> tree.InductionOp:
+        if isinstance(token, tree.PyName):
+            return tree.InductionOp(span=token.span, value=token.string)
         return tree.InductionOp(span=self.sv.token2span(token), value=str(token))
 
     # original_modifier: ORIGINAL "(" (DEFAULT | PRIVATE | SHARED) ")"
@@ -552,7 +570,7 @@ class AstTransformer(Transformer):
         return tree.InteropModifier(
             span=self.sv.meta2span(node.meta),
             name=self._name_from_token(node.children[0]),
-            nkind=cast("list[tree.Name]", node.children[1:])
+            kind_name=cast("list[tree.Name]", node.children[1:])
         )
 
     # TODO: this uses context_selector as a stmt_list, which is not exactly what the standard required
@@ -600,7 +618,7 @@ class AstTransformer(Transformer):
 
     # device_type_clause: DEVICE_TYPE_CLAUSE "(" [directive_name ":"] device_type_kind ")"
     def device_type_clause(self, node: Tree) -> tree.DeviceType:
-        return self._simple_clause(tree.DeviceType, "ndevice_type_description", node)
+        return self._simple_clause(tree.DeviceType, "device_type_description_name", node)
 
     # align_clause: ALIGN_CLAUSE "(" [directive_name ":"] py_expr ")"
     def align_clause(self, node: Tree) -> tree.Align:
@@ -707,7 +725,7 @@ class AstTransformer(Transformer):
 
     # atomic_default_mem_order_clause: ATOMIC_DEFAULT_MEM_ORDER_CLAUSE "(" [directive_name ":"] (ACQ_REL | ACQUIRE | RELAXED | SEQ_CST) ")"
     def atomic_default_mem_order_clause(self, node: Tree) -> tree.AtomicDefaultMemOrder:
-        return self._simple_clause(tree.AtomicDefaultMemOrder, "nmemory_order", node)
+        return self._simple_clause(tree.AtomicDefaultMemOrder, "memory_order_name", node)
 
     # dynamic_allocators_clause: DYNAMIC_ALLOCATORS_CLAUSE ["(" [directive_name ":"] py_expr ")"]
     def dynamic_allocators_clause(self, node: Tree) -> tree.DynamicAllocators:
@@ -763,7 +781,7 @@ class AstTransformer(Transformer):
 
     # at_clause: AT_CLAUSE "(" [directive_name ":"] (COMPILATION | EXECUTION) ")"
     def at_clause(self, node: Tree) -> tree.At:
-        return self._simple_clause(tree.At, "naction_time", node)
+        return self._simple_clause(tree.At, "action_time_name", node)
 
     # message_clause: MESSAGE_CLAUSE "(" [directive_name ":"] py_expr ")"
     def message_clause(self, node: Tree) -> tree.Message:
@@ -771,7 +789,7 @@ class AstTransformer(Transformer):
 
     # severity_clause: SEVERITY_CLAUSE "(" [directive_name ":"] (FATAL | WARNING) ")"
     def severity_clause(self, node: Tree) -> tree.Severity:
-        return self._simple_clause(tree.Severity, "nseverity_level", node)
+        return self._simple_clause(tree.Severity, "severity_level_name", node)
 
     # looprange_clause: LOOPRANGE_CLAUSE "(" [directive_name ":"] py_expr "," py_expr ")"
     @v_args(inline=True, meta=True)
@@ -820,7 +838,7 @@ class AstTransformer(Transformer):
 
     # proc_bind_clause: PROC_BIND_CLAUSE "(" [directive_name ":"] (CLOSE | PRIMARY | SPREAD) ")"
     def proc_bind_clause(self, node: Tree) -> tree.ProcBind:
-        return self._simple_clause(tree.ProcBind, "naffinity_policy", node)
+        return self._simple_clause(tree.ProcBind, "affinity_policy_name", node)
 
     # safesync_clause: SAFESYNC_CLAUSE ["(" [directive_name ":"] py_expr ")"]
     def safesync_clause(self, node: Tree) -> tree.SafeSync:
@@ -891,7 +909,7 @@ class AstTransformer(Transformer):
 
     # bind_clause: BIND_CLAUSE "(" [directive_name ":"] _bind_clause_arg ")"
     def bind_clause(self, node: Tree) -> tree.Bind:
-        return self._simple_clause(tree.Bind, "nbinding", node)
+        return self._simple_clause(tree.Bind, "binding_name", node)
 
     # grainsize_clause: GRAINSIZE_CLAUSE "(" [_grainsize_modifier_list ":"] py_expr ")"
     def grainsize_clause(self, node: Tree) -> tree.GrainSize:
@@ -1006,24 +1024,18 @@ class AstTransformer(Transformer):
         return self._simple_clause(tree.Hint, "expr", node)
 
     # task_reduction_clause: TASK_REDUCTION_CLAUSE "(" [directive_name ","] reduction_op ":" var_list ")"
-    @v_args(inline=True, meta=True)
-    def task_reduction_clause(
-        self, meta: Meta, token: Token,
-        directive_name: tree.DirectiveName|None,
-        reduction_op: tree.ReductionOp,
-        var_list: list[tree.PyName],
-    ) -> tree.TaskReduction:
+    def task_reduction_clause(self, node: Tree) -> tree.TaskReduction:
         return tree.TaskReduction(
-            span=self.sv.meta2span(meta),
-            name=self._name_from_token(token),
-            op = reduction_op,
-            targets = var_list,
-            directive_name = directive_name,
+            span=self.sv.meta2span(node.meta),
+            name=self._name_from_token(node.children[0]),
+            op = cast("tree.ReductionOp", node.children[-2]),
+            targets = cast("list[tree.PyName]", node.children[-1]),
+            directive_name = node.children[1] if isinstance(node.children[1], tree.DirectiveName) else None,
         )
 
     # memscope_clause: MEMSCOPE_CLAUSE "(" [directive_name ":"] (ALL | CGROUP | DEVICE) ")"
     def memscope_clause(self, node: Tree) -> tree.MemScope:
-        return self._simple_clause(tree.MemScope, "nscope", node)
+        return self._simple_clause(tree.MemScope, "scope_name", node)
 
     # read_clause: READ_CLAUSE ["(" [directive_name ":"] py_expr ")"]
     def read_clause(self, node: Tree) -> tree.Read:
@@ -1047,7 +1059,7 @@ class AstTransformer(Transformer):
 
     # fail_clause: FAIL_CLAUSE "(" [directive_name ":"] (ACQUIRE | RELAXED | SEQ_CST) ")"
     def fail_clause(self, node: Tree) -> tree.Fail:
-        return self._simple_clause(tree.Fail, "nmem_order", node)
+        return self._simple_clause(tree.Fail, "mem_order_name", node)
 
     # weak_clause: WEAK_CLAUSE ["(" [directive_name ":"] py_expr ")"]
     def weak_clause(self, node: Tree) -> tree.Weak:
@@ -1222,7 +1234,7 @@ class AstTransformer(Transformer):
 
     # threadset_clause: THREADSET_CLAUSE "(" [directive_name ":"] (OMP_TEAM | OMP_POOL) ")"
     def threadset_clause(self, node: Tree) -> tree.ThreadSet:
-        return self._simple_clause(tree.ThreadSet, "nset", node)
+        return self._simple_clause(tree.ThreadSet, "set_name", node)
 
     # transparent_clause: TRANSPARENT_CLAUSE ["(" [directive_name ":"] py_expr ")"]
     def transparent_clause(self, node: Tree) -> tree.Transparent:
@@ -1260,7 +1272,7 @@ class AstTransformer(Transformer):
     def declare_reduction_directive(
         self, meta: Meta, token: Token,
         op: tree.ReductionOp, type_list: list[tree.PyExpr], py_stmt: tree.PyStmt,
-        initializer: tree.Initializer|None
+        initializer: tree.Initializer|None=None
     ) -> tree.DeclareReduction:
         span = self.sv.meta2span(meta)
         name = self._name_from_token(token)
@@ -1283,13 +1295,18 @@ class AstTransformer(Transformer):
         return self._construct(meta, token, clause_list, op=op, ann_list=expr_list)
 
     # DECLARE_MAPPER_DIRECTIVE "(" [IDENTIFIER ":"] IDENTIFIER ":" py_type ")" map_clause+
-    @v_args(inline=True, meta=True)
-    def declare_mapper_directive(
-        self, meta: Meta, token: Token,
-        mapper: tree.PyName|None, var: tree.PyName, type: tree.PyExpr,
-        *clause_list: tree.Clause,
-    ) -> tree.DeclareMapper:
-        return self._construct(meta, token, clause_list, mapper_identifier=mapper, var=var, type=type)
+    def declare_mapper_directive(self, node: Tree) -> tree.DeclareMapper:
+        token, *rest = node.children
+        split = next((i for i, c in enumerate(rest) if isinstance(c, tree.Clause)), len(rest))
+        fixed, clause_list = rest[:split], rest[split:]
+
+        if len(fixed) == 3:
+            mapper, var, type_ = fixed
+        else:
+            mapper = None
+            var, type_ = fixed
+
+        return self._construct(node.meta, token, clause_list, mapper_identifier=mapper, var=var, type=type_) # ty: ignore [invalid-argument-type] # zuban: ignore[arg-type]
 
     # ALLOCATE_DIRECTIVE "(" var_list ")" _allocate_clause_list?
     @v_args(inline=True, meta=True)
@@ -1301,22 +1318,28 @@ class AstTransformer(Transformer):
         return self._construct(meta, token, clause_list, targets=var_list)
 
     # DECLARE_VARIANT_DIRECTIVE "(" [py_expr ":"] py_expr ")" _declare_variant_clause_list
-    @v_args(inline=True, meta=True)
-    def declare_variant_directive(
-        self, meta: Meta, token: Token,
-        base_name: tree.PyExpr|None, variant_name: tree.PyExpr,
-        *clause_list: tree.Clause,
-    ) -> tree.DeclareMapper:
-        return self._construct(meta, token, clause_list, base_name=base_name, variant_name=variant_name)
+    def declare_variant_directive(self, node: Tree) -> tree.DeclareMapper:
+        token, *rest = node.children
+        split = next((i for i, c in enumerate(rest) if isinstance(c, tree.Clause)), len(rest))
+        fixed, clause_list = rest[:split], rest[split:]
+
+        if len(fixed) == 2:
+            base_name, variant_name = fixed
+        else:
+            base_name = None
+            (variant_name,) = fixed
+
+        return self._construct(node.meta, token, clause_list, base_name=base_name, variant_name=variant_name) # ty: ignore [invalid-argument-type] # zuban: ignore[arg-type]
 
     # DECLARE_SIMD_DIRECTIVE ["(" py_expr ")"] _declare_simd_clause_list?
-    @v_args(inline=True, meta=True)
-    def declare_simd_directive(
-        self, meta: Meta, token: Token,
-        proc_name: tree.PyExpr|None,
-        *clause_list: tree.Clause,
-    ) -> tree.DeclareMapper:
-        return self._construct(meta, token, clause_list, proc_name=proc_name)
+    def declare_simd_directive(self, node: Tree) -> tree.DeclareMapper:
+        token, *rest = node.children
+        split = next((i for i, c in enumerate(rest) if isinstance(c, tree.Clause)), len(rest))
+        fixed, clause_list = rest[:split], rest[split:]
+
+        proc_name = fixed[0] if fixed else None
+
+        return self._construct(node.meta, token, clause_list, proc_name=proc_name) # ty: ignore [invalid-argument-type] # zuban: ignore[arg-type]
 
     # DECLARE_TARGET_DIRECTIVE "(" var_list ")" -> declare_target_directive
     @v_args(inline=True, meta=True)
@@ -1326,19 +1349,26 @@ class AstTransformer(Transformer):
         return self._construct(meta, token, [], targets=var_list)
 
     # CRITICAL_DIRECTIVE ["(" IDENTIFIER ")" [","? hint_clause]]
-    @v_args(inline=True, meta=True)
-    def critical_directive(
-        self, meta: Meta, token: Token, name: tree.PyName, hint: tree.Hint|None
-    ) -> tree.Critical:
-        return self._construct(meta, token, [hint] if hint is not None else [], critical_name=name)
+    def critical_directive(self, node: Tree) -> tree.Critical:
+        token, *rest = node.children
+
+        if len(rest) == 0:
+            name, hint = None, None
+        elif len(rest) == 1:
+            name, hint = rest[0], None
+        else:
+            name, hint = rest
+
+        return self._construct(node.meta, token, [hint] if hint is not None else [], critical_name=name) # ty: ignore [invalid-argument-type] # zuban: ignore
 
     # FLUSH_DIRECTIVE [acq_rel_clause | acquire_clause | ...] ["(" var_list ")"]
-    @v_args(inline=True, meta=True)
-    def flush_directive(
-        self, meta: Meta, token: Token,
-        clause: tree.Clause|None, var_list: list[tree.PyName]|None
-    ) -> tree.Flush:
-        return self._construct(meta, token, [clause] if clause is not None else [], targets=var_list)
+    def flush_directive(self, node: Tree) -> tree.Flush:
+        token, *rest = node.children
+
+        clause = next((c for c in rest if isinstance(c, tree.Clause)), None)
+        var_list = next((c for c in rest if not isinstance(c, tree.Clause)), None)
+
+        return self._construct(node.meta, token, [clause] if clause is not None else [], targets=var_list) # ty: ignore [invalid-argument-type] # zuban: ignore[arg-type]
 
     # DEPOBJ_DIRECTIVE "(" IDENTIFIER ")" (destroy_clause | init_clause | depobj_update_clause)
     @v_args(inline=True, meta=True)
@@ -1349,30 +1379,24 @@ class AstTransformer(Transformer):
         return self._construct(meta, token, [clause], object=object)
 
     # CANCEL_DIRECTIVE [directive_name ":"] construct_type_clause [","? if_clause]
-    @v_args(inline=True, meta=True)
-    def cancel_directive(
-        self, meta: Meta, token: Token,
-        _directive_name: tree.DirectiveName|None, construct_type: Token, if_: tree.If|None
-    ) -> tree.Cancel:
+    def cancel_directive(self, node: Tree) -> tree.Cancel:
         # TODO: ignoring directive_name here
+        if_clause = node.children[-1] if isinstance(node.children[-1], tree.If) else None
+        construct_type = node.children[-1 if if_clause is None else -2]
         return tree.Cancel(
-            span = self.sv.meta2span(meta),
-            name = self._name_from_token(token),
-            nconstruct_type = self._name_from_token(construct_type),
-            if_ = if_
+            span=self.sv.meta2span(node.meta),
+            name=self._name_from_token(node.children[0]),
+            construct_type_name=self._name_from_token(construct_type),
+            if_=if_clause,
         )
 
     # CANCELLATION_POINT_DIRECTIVE [directive_name ":"] construct_type_clause
-    @v_args(inline=True, meta=True)
-    def cancellation_point_directive(
-        self, meta: Meta, token: Token,
-        _directive_name: tree.DirectiveName|None, construct_type: Token
-    ) -> tree.CancellationPoint:
+    def cancellation_point_directive(self, node: Tree) -> tree.CancellationPoint:
         # TODO: ignoring directive_name here
         return tree.CancellationPoint(
-            span = self.sv.meta2span(meta),
-            name = self._name_from_token(token),
-            nconstruct_type = self._name_from_token(construct_type),
+            span=self.sv.meta2span(node.meta),
+            name=self._name_from_token(node.children[0]),
+            construct_type_name=self._name_from_token(node.children[-1]),
         )
 
     ############################################################################
@@ -1380,16 +1404,23 @@ class AstTransformer(Transformer):
     # combined_directive: combined_directive_name combined_directive_name+ [combined_clause_list]
     def combined_directive(self, node: Tree) -> tree.Directive:
         span = self.sv.meta2span(node.meta)
-        clause_list = (
-            cast("list[tree.Clause]", node.children[-1].children)
-            if isinstance(node.children[-1], Tree)
-            else []
-        )
+        if isinstance(node.children[-1], Tree):
+            clause_list = cast("list[tree.Clause]", node.children[-1].children)
+            directive_list = node.children[:-1]
+        else:
+            clause_list = []
+            directive_list = node.children
 
         constructs = {}
-        for directive_token in node.children[:-1]:
+        for directive_token in directive_list:
             directive_token = cast("Token", directive_token)
             r: tuple[tree.Construct, list[tree.Clause]] = self._construct_with_rejected(node.meta, directive_token, clause_list)
+            if r[0].id in constructs:
+                raise self.sv.syntax_error(
+                    f"{r[0].id} directive appears more than once.",
+                    r[0].name.span,
+                    diagnostics=[("first defined here.", constructs[r[0].id].name.span)]
+                )
             constructs[r[0].id] = r[0]
             clause_list = r[1]
 
@@ -1415,15 +1446,20 @@ class AstTransformer(Transformer):
         if isinstance(directive, tree.Directive):
             return directive
 
-        # Otherwise, assuming this rule format, process the directive in a general case:
-        #   task_directive: TASK_DIRECTIVE _task_clause_list?
+        if isinstance(directive, tree.Construct):
+            span = directive.span
+            construct = directive
 
-        directive_token = cast("Token", directive.children[0])
-        clause_list     = cast("list[tree.Clause]", directive.children[1:])
-        construct: tree.Construct = self._construct(directive.meta, directive_token, clause_list)
+        if isinstance(directive, Tree):
+            # Otherwise, assuming this rule format, process the directive in a general case:
+            #   task_directive: TASK_DIRECTIVE _task_clause_list?
+            span            = self.sv.meta2span(directive.meta)
+            directive_token = cast("Token", directive.children[0])
+            clause_list     = cast("list[tree.Clause]", directive.children[1:])
+            construct       = self._construct(directive.meta, directive_token, clause_list)
 
         return tree.Directive(
-            span = self.sv.meta2span(directive.meta),
+            span = span,
             string = self.sv.source_text(self.sv.span), # NOTE: this includes the quotes
             constructs = {construct.id: construct},
         )

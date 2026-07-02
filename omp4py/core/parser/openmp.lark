@@ -327,7 +327,7 @@ groupprivate_directive: GROUPPRIVATE_DIRECTIVE [device_type_clause]
 
 DEVICE_TYPE_CLAUSE: "device_type" // unique
 device_type_clause: DEVICE_TYPE_CLAUSE "(" [directive_name ":"] device_type_kind ")"
-device_type_kind: HOST | NOHOST | ANY
+device_type_kind: (HOST | NOHOST | ANY) -> name
 HOST   : "host"
 NOHOST : "nohost"
 ANY    : "any"
@@ -358,7 +358,7 @@ allocator_clause: ALLOCATOR_CLAUSE "(" [directive_name ":"] py_expr ")"
 // ---- metadirective ----
 METADIRECTIVE_DIRECTIVE: "metadirective"
 metadirective_directive: METADIRECTIVE_DIRECTIVE _metadirective_clause_list?
-_metadirective_clause_list: when_clause (","? when_clause)* ["," otherwise_clause]
+_metadirective_clause_list: when_clause (","? when_clause)* [","? otherwise_clause]
 
 WHEN_CLAUSE: "when" // optional, repeteable
 when_clause: WHEN_CLAUSE "(" _when_modifier_list ":" start ")"
@@ -374,13 +374,13 @@ DECLARE_VARIANT_DIRECTIVE: "declare_variant" | /declare\s+variant/
 // Using py_expr here. The standard requires identifier or function type,
 // which for Python that could mean a qualified name (module.function)
 declare_variant_directive: DECLARE_VARIANT_DIRECTIVE "(" [py_expr ":"] py_expr ")" _declare_variant_clause_list
-_declare_variant_clause_list: _declare_variant_clause ("," _declare_variant_clause)*
+_declare_variant_clause_list: _declare_variant_clause (","? _declare_variant_clause)*
 _declare_variant_clause: adjust_args_clause | append_args_clause | match_clause
 
 ADJUST_ARGS_CLAUSE: "adjust_args" // optional, repeteable
 adjust_args_clause: ADJUST_ARGS_CLAUSE "(" _adjust_args_modifier_list ":" var_list ")"
 _adjust_args_modifier_list: adjust_op_name | directive_name "," adjust_op_name | adjust_op_name "," directive_name
-adjust_op_name: (NEED_DEVICE_PTR | NEED_DEVICE_ADDR | NOTHING) -> name // required
+adjust_op_name: NEED_DEVICE_PTR | NEED_DEVICE_ADDR | NOTHING // required
 NEED_DEVICE_ADDR: "need_device_addr"
 NEED_DEVICE_PTR: "need_device_ptr"
 NOTHING: "nothing"
@@ -434,7 +434,7 @@ DECLARE_SIMD_DIRECTIVE: "declare_simd" | /declare\s+simd/
 // Using py_expr here. The standard requires identifier or function type,
 // which for Python that could mean a qualified name (module.function)
 declare_simd_directive: DECLARE_SIMD_DIRECTIVE ["(" py_expr ")"] _declare_simd_clause_list?
-_declare_simd_clause_list: _declare_simd_clause ("," _declare_simd_clause)*
+_declare_simd_clause_list: _declare_simd_clause (","? _declare_simd_clause)*
 _declare_simd_clause: aligned_clause | linear_clause | simdlen_clause | uniform_clause | inbranch_clause | notinbranch_clause
 
 ALIGNED_CLAUSE: "aligned"
@@ -449,7 +449,7 @@ linear_clause: LINEAR_CLAUSE "(" var_list [":" _linear_modifier_list] ")"
 // step_simple_modifier is exclusive and unique, the rest are unique
 _linear_modifier_list: _linear_modifier ("," _linear_modifier)* | step_simple_modifier
 _linear_modifier: step_modifier | linear_modifier_name | directive_name
-linear_modifier_name: (REF|UVAL|VAL) -> name
+linear_modifier_name: REF|UVAL|VAL
 step_simple_modifier: py_expr
 REF: "ref"
 UVAL: "uval"
@@ -473,13 +473,13 @@ DECLARE_TARGET_DIRECTIVE: "declare_target" | /declare\s+target/
 declare_target_directive: \
 	  DECLARE_TARGET_DIRECTIVE "(" var_list ")" -> declare_target_directive
 	| DECLARE_TARGET_DIRECTIVE _declare_target_clause_list -> declare_target_directive_with_clauses
-_declare_target_clause_list: _declare_target_clause ("," _declare_target_clause)*
+_declare_target_clause_list: _declare_target_clause (","? _declare_target_clause)*
 _declare_target_clause: device_type_clause | enter_clause | indirect_clause | link_clause | local_clause
 
 ENTER_CLAUSE: "enter"
 enter_clause: ENTER_CLAUSE "(" [_enter_modifier_list ":"] var_list ")"
 _enter_modifier_list: automap_name | directive_name | automap_name "," directive_name | directive_name "," automap_name
-automap_name: AUTOMAP -> name
+automap_name: AUTOMAP
 AUTOMAP: "automap"
 
 INDIRECT_CLAUSE: "indirect" // unique
@@ -498,7 +498,7 @@ local_clause: LOCAL_CLAUSE "(" [directive_name ":"] var_list ")"
 // ---- requires ----
 REQUIRES_DIRECTIVE: "requires"
 requires_directive: REQUIRES_DIRECTIVE _requires_directive_clause_list
-_requires_directive_clause_list: _requires_directive_clause ("," _requires_directive_clause)*
+_requires_directive_clause_list: _requires_directive_clause (","? _requires_directive_clause)*
 _requires_directive_clause: \
 	  atomic_default_mem_order_clause
 	| device_safesync_clause
@@ -538,7 +538,7 @@ device_safesync_clause: DEVICE_SAFESYNC_CLAUSE ["(" [directive_name ":"] py_expr
 // ---- assume ----
 ASSUME_DIRECTIVE: "assume"
 assume_directive: ASSUME_DIRECTIVE _assume_clause_list
-_assume_clause_list: _assume_clause ("," _assume_clause)*
+_assume_clause_list: _assume_clause (","? _assume_clause)*
 _assume_clause: \
 	  absent_clause
 	| contains_clause
@@ -580,7 +580,7 @@ nothing_directive: NOTHING_DIRECTIVE [apply_clause]
 // ---- error ----
 ERROR_DIRECTIVE: "error"
 error_directive: ERROR_DIRECTIVE _error_clause_list?
-_error_clause_list: _error_clause ("," _error_clause)?
+_error_clause_list: _error_clause (","? _error_clause)?
 _error_clause: at_clause | message_clause | severity_clause
 
 AT_CLAUSE: "at" // unique
@@ -616,7 +616,7 @@ looprange_clause: LOOPRANGE_CLAUSE "(" [directive_name ":"] py_expr "," py_expr 
 // ---- interchange ----
 INTERCHANGE_DIRECTIVE: "interchange"
 interchange_directive: INTERCHANGE_DIRECTIVE _interchange_clause_list?
-_interchange_clause_list: apply_clause | permutation_clause | apply_clause "," permutation_clause | permutation_clause "," apply_clause
+_interchange_clause_list: apply_clause | permutation_clause | apply_clause ","? permutation_clause | permutation_clause ","? apply_clause
 
 PERMUTATION_CLAUSE: "permutation" // unique
 permutation_clause: PERMUTATION_CLAUSE "(" [directive_name ":"] expr_list ")"
@@ -630,7 +630,7 @@ reverse_directive: REVERSE_DIRECTIVE [apply_clause]
 // ---- split ----
 SPLIT_DIRECTIVE: "split"
 split_directive: SPLIT_DIRECTIVE _split_clause_list
-_split_clause_list: counts_clause | apply_clause "," counts_clause | counts_clause "," apply_clause
+_split_clause_list: counts_clause | apply_clause ","? counts_clause | counts_clause ","? apply_clause
 
 COUNTS_CLAUSE: "counts" // unique, required
 counts_clause: COUNTS_CLAUSE "(" [directive_name ":"] expr_list ")"
@@ -639,7 +639,7 @@ counts_clause: COUNTS_CLAUSE "(" [directive_name ":"] expr_list ")"
 // ---- stripe ----
 STRIPE_DIRECTIVE: "stripe"
 stripe_directive: STRIPE_DIRECTIVE _stripe_clause_list
-_stripe_clause_list: sizes_clause | apply_clause "," sizes_clause | sizes_clause "," apply_clause
+_stripe_clause_list: sizes_clause | apply_clause ","? sizes_clause | sizes_clause ","? apply_clause
 
 SIZES_CLAUSE: "sizes" // unique, required
 sizes_clause: SIZES_CLAUSE "(" [directive_name ":"] expr_list ")"
@@ -648,7 +648,7 @@ sizes_clause: SIZES_CLAUSE "(" [directive_name ":"] expr_list ")"
 // ---- tile ----
 TILE_DIRECTIVE: "tile"
 tile_directive: TILE_DIRECTIVE _tile_clause_list?
-_tile_clause_list: sizes_clause | apply_clause "," sizes_clause | sizes_clause "," apply_clause
+_tile_clause_list: sizes_clause | apply_clause ","? sizes_clause | sizes_clause ","? apply_clause
 
 
 // ---- unroll ----
@@ -694,7 +694,7 @@ copyin_clause: COPYIN_CLAUSE "(" [directive_name ":"] var_list ")"
 NUM_THREADS_CLAUSE: "num_threads" // unique
 num_threads_clause: NUM_THREADS_CLAUSE "(" [_num_threads_modifier_list ":"] expr_list ")"
 _num_threads_modifier_list: strict_name | directive_name | directive_name "," strict_name | strict_name "," directive_name
-strict_name: STRICT -> name
+strict_name: STRICT
 STRICT: "strict"
 
 PROC_BIND_CLAUSE: "proc_bind" // unique
@@ -710,7 +710,7 @@ safesync_clause: SAFESYNC_CLAUSE ["(" [directive_name ":"] py_expr ")"]
 // ---- teams ----
 TEAMS_DIRECTIVE: "teams"
 teams_directive: TEAMS_DIRECTIVE _teams_clause_list?
-_teams_clause_list: _teams_clause ("," _teams_clause)?
+_teams_clause_list: _teams_clause (","? _teams_clause)?
 _teams_clause: \
 	  allocate_clause
 	| default_clause
@@ -734,7 +734,7 @@ thread_limit_clause: THREAD_LIMIT_CLAUSE "(" [directive_name ":"] py_expr ")"
 // ---- simd ----
 SIMD_DIRECTIVE: "simd"
 simd_directive: SIMD_DIRECTIVE _simd_clause_list?
-_simd_clause_list: _simd_clause ("," _simd_clause)?
+_simd_clause_list: _simd_clause (","? _simd_clause)?
 _simd_clause: \
 	  aligned_clause
 	| collapse_clause
@@ -755,7 +755,7 @@ nontemporal_clause: NONTEMPORAL_CLAUSE "(" [directive_name ":"] var_list ")"
 ORDER_CLAUSE: "order" // unique
 order_clause: ORDER_CLAUSE "(" [_order_modifier_list ":"] CONCURRENT ")"
 _order_modifier_list: directive_name | order_modifier_name | directive_name "," order_modifier_name | order_modifier_name "," directive_name
-order_modifier_name: (REPRODUCIBLE | UNCONSTRAINED) -> name
+order_modifier_name: REPRODUCIBLE | UNCONSTRAINED
 CONCURRENT: "concurrent"
 REPRODUCIBLE: "reproducible"
 UNCONSTRAINED: "unconstrained"
@@ -793,7 +793,7 @@ copyprivate_clause: COPYPRIVATE_CLAUSE "(" [directive_name ":"] var_list ")"
 // ---- scope ----
 SCOPE_DIRECTIVE: "scope"
 scope_directive: SCOPE_DIRECTIVE _scope_clause_list?
-_scope_clause_list: _scope_clause ("," _scope_clause)?
+_scope_clause_list: _scope_clause (","? _scope_clause)?
 _scope_clause: \
 	  allocate_clause
 	| firstprivate_clause
@@ -855,8 +855,8 @@ SCHEDULE_CLAUSE: "schedule" // unique
 schedule_clause: SCHEDULE_CLAUSE "(" [_schedule_modifier_list ":"] schedule_type ["," py_expr] ")"
 _schedule_modifier_list: _schedule_modifier ("," _schedule_modifier)*
 _schedule_modifier: ordering_modifier_name | chunk_modifier_name | directive_name
-ordering_modifier_name: (MONOTONIC | NONMONOTONIC) -> name
-chunk_modifier_name: SIMD -> name
+ordering_modifier_name: MONOTONIC | NONMONOTONIC
+chunk_modifier_name: SIMD
 schedule_type: STATIC | DYNAMIC | GUIDED | AUTO | RUNTIME
 STATIC  : "static"
 DYNAMIC : "dynamic"
@@ -871,7 +871,7 @@ SIMD : "simd"
 // ---- distribute ----
 DISTRIBUTE_DIRECTIVE: "distribute"
 distribute_directive: DISTRIBUTE_DIRECTIVE _distribute_clause_list?
-_distribute_clause_list: _distribute_clause ("," _distribute_clause)?
+_distribute_clause_list: _distribute_clause (","? _distribute_clause)?
 _distribute_clause: \
 	  allocate_clause
 	| collapse_clause
@@ -889,7 +889,7 @@ dist_schedule_clause: DIST_SCHEDULE_CLAUSE "(" [directive_name ":"] STATIC ["," 
 // ---- loop ----
 LOOP_DIRECTIVE: "loop"
 loop_directive: LOOP_DIRECTIVE _loop_clause_list?
-_loop_clause_list: _loop_clause ("," _loop_clause)?
+_loop_clause_list: _loop_clause (","? _loop_clause)?
 _loop_clause: \
 	  bind_clause
 	| collapse_clause
@@ -937,7 +937,7 @@ _task_clause: \
 // ---- taskloop ----
 TASKLOOP_DIRECTIVE: "taskloop"
 taskloop_directive: TASKLOOP_DIRECTIVE _taskloop_clause_list?
-_taskloop_clause_list: _taskloop_clause ("," _taskloop_clause)?
+_taskloop_clause_list: _taskloop_clause (","? _taskloop_clause)?
 _taskloop_clause: \
 	  allocate_clause
 	| collapse_clause
@@ -973,7 +973,7 @@ _num_tasks_modifier_list: strict_name | directive_name | strict_name "," directi
 // ---- task_iteration ----
 TASK_ITERATION_DIRECTIVE: "task_iteration"
 task_iteration_directive: TASK_ITERATION_DIRECTIVE _task_iteration_clause_list
-_task_iteration_clause_list: _task_iteration_clause ("," _task_iteration_clause)?
+_task_iteration_clause_list: _task_iteration_clause (","? _task_iteration_clause)?
 _task_iteration_clause: affinity_clause | depend_clause | if_clause
 
 
@@ -985,7 +985,7 @@ taskyield_directive: TASKYIELD_DIRECTIVE
 // ---- taskgraph ----
 TASKGRAPH_DIRECTIVE: "taskgraph"
 taskgraph_directive: TASKGRAPH_DIRECTIVE _taskgraph_clause_list?
-_taskgraph_clause_list: _taskgraph_clause ("," _taskgraph_clause)?
+_taskgraph_clause_list: _taskgraph_clause (","? _taskgraph_clause)?
 _taskgraph_clause: graph_id_clause | graph_reset_clause | if_clause | nogroup_clause
 
 // TODO: In section 14.3.1, the graph_id clause does not declare the directive_name_modifier.
@@ -1004,7 +1004,7 @@ graph_reset_clause: GRAPH_RESET_CLAUSE "(" [directive_name ":"] py_expr ")"
 // ---- target_data ----
 TARGET_DATA_DIRECTIVE: "target_data" | /target\s+data/
 target_data_directive: TARGET_DATA_DIRECTIVE _target_data_clause_list
-_target_data_clause_list: _target_data_clause ("," _target_data_clause)?
+_target_data_clause_list: _target_data_clause (","? _target_data_clause)?
 _target_data_clause: \
 	  affinity_clause
 	| allocate_clause
@@ -1036,7 +1036,7 @@ use_device_addr_clause: USE_DEVICE_ADDR_CLAUSE "(" [directive_name ":"] var_list
 // ---- target_enter_data ----
 TARGET_ENTER_DATA_DIRECTIVE: "target_enter_data" | /target\s+enter\s+data/
 target_enter_data_directive: TARGET_ENTER_DATA_DIRECTIVE _target_enter_data_clause_list?
-_target_enter_data_clause_list: _target_enter_data_clause ("," _target_enter_data_clause)?
+_target_enter_data_clause_list: _target_enter_data_clause (","? _target_enter_data_clause)?
 _target_enter_data_clause: \
 	  depend_clause
 	| device_clause
@@ -1050,7 +1050,7 @@ _target_enter_data_clause: \
 // ---- target_exit_data ----
 TARGET_EXIT_DATA_DIRECTIVE: "target_exit_data" | /target\s+exit\s+data/
 target_exit_data_directive: TARGET_EXIT_DATA_DIRECTIVE _target_exit_data_clause_list?
-_target_exit_data_clause_list: _target_exit_data_clause ("," _target_exit_data_clause)?
+_target_exit_data_clause_list: _target_exit_data_clause (","? _target_exit_data_clause)?
 _target_exit_data_clause: \
 	  depend_clause
 	| device_clause
@@ -1064,7 +1064,7 @@ _target_exit_data_clause: \
 // ---- target ----
 TARGET_DIRECTIVE: "target"
 target_directive: TARGET_DIRECTIVE _target_clause_list?
-_target_clause_list: _target_clause ("," _target_clause)?
+_target_clause_list: _target_clause (","? _target_clause)?
 _target_clause: \
 	  allocate_clause
 	| default_clause
@@ -1100,7 +1100,7 @@ _uses_allocator_modifier: memspace_modifier | traits_modifier | directive_name
 // ---- target_update ----
 TARGET_UPDATE_DIRECTIVE: "target_update" | /target\s+update/
 target_update_directive: TARGET_UPDATE_DIRECTIVE _target_update_clause_list?
-_target_update_clause_list: _target_update_clause ("," _target_update_clause)?
+_target_update_clause_list: _target_update_clause (","? _target_update_clause)?
 _target_update_clause: \
 	  depend_clause
 	| device_clause
@@ -1115,7 +1115,7 @@ TO_CLAUSE: "to"
 to_clause: TO_CLAUSE "(" [_to_modifier_list ":"] var_list ")"
 _to_modifier_list: _from_modifier ("," _from_modifier)*
 _to_modifier: present_name | mapper_modifier | iterator_modifier | directive_name
-present_name: PRESENT -> name
+present_name: PRESENT
 
 FROM_CLAUSE: "from"
 from_clause: FROM_CLAUSE "(" [_from_modifier_list ":"] var_list ")"
@@ -1130,7 +1130,7 @@ _from_modifier: present_name | mapper_modifier | iterator_modifier | directive_n
 // ---- interop ----
 INTEROP_DIRECTIVE: "interop"
 interop_directive: INTEROP_DIRECTIVE _interop_clause_list
-_interop_clause_list: _interop_clause ("," _interop_clause)?
+_interop_clause_list: _interop_clause (","? _interop_clause)?
 _interop_clause: \
 	  depend_clause
 	| destroy_clause
@@ -1147,7 +1147,7 @@ init_clause: INIT_CLAUSE "(" [_init_modifier_list ":"] IDENTIFIER ")"
 _init_modifier_list: _init_modifier ("," _init_modifier)*
 // all are unique, except interop_type_modifier, which is repeteable
 _init_modifier: interop_type_modifier_name | prefer_type_modifier | depinfo_modifier | directive_name
-interop_type_modifier_name: (TARGET | TARGETSYNC) -> name
+interop_type_modifier_name: TARGET | TARGETSYNC
 
 USE_CLAUSE: "use" // default
 use_clause: USE_CLAUSE "(" [directive_name ":"] IDENTIFIER ")"
@@ -1173,7 +1173,7 @@ barrier_directive: BARRIER_DIRECTIVE
 // ---- taskgroup ----
 TASKGROUP_DIRECTIVE: "taskgroup"
 taskgroup_directive: TASKGROUP_DIRECTIVE _taskgroup_clause_list?
-_taskgroup_clause_list: _taskgroup_clause ("," _taskgroup_clause)?
+_taskgroup_clause_list: _taskgroup_clause (","? _taskgroup_clause)?
 _taskgroup_clause: allocate_clause | task_reduction_clause
 
 TASK_REDUCTION_CLAUSE: "task_reduction"
@@ -1183,7 +1183,7 @@ task_reduction_clause: TASK_REDUCTION_CLAUSE "(" [directive_name ","] reduction_
 // ---- taskwait ----
 TASKWAIT_DIRECTIVE: "taskwait"
 taskwait_directive: TASKWAIT_DIRECTIVE _taskwait_clause_list?
-_taskwait_clause_list: _taskwait_clause ("," _taskwait_clause)?
+_taskwait_clause_list: _taskwait_clause (","? _taskwait_clause)?
 _taskwait_clause: depend_clause | nowait_clause | replayable_clause
 
 
@@ -1266,7 +1266,7 @@ _ordered_clause_list: threads_clause | simd_clause | threads_clause ","? simd_cl
 DOACROSS_CLAUSE: "doacross" // required
 doacross_clause: DOACROSS_CLAUSE "(" _doacross_modifier_list ":" iterator_specifier ")"
 _doacross_modifier_list: dependence_type_name | directive_name "," dependence_type_name | dependence_type_name "," directive_name
-dependence_type_name: (SINK | SOURCE) -> name
+dependence_type_name: SINK | SOURCE
 SINK: "sink"
 SOURCE: "source"
 
@@ -1284,13 +1284,13 @@ simd_clause: SIMD_CLAUSE ["(" [directive_name ":"] py_expr ")"]
 // ---- cancel ----
 // TODO: directive_name_modifier might be wrong here
 CANCEL_DIRECTIVE: "cancel"
-cancel_directive: CANCEL_DIRECTIVE [directive_name ":"] construct_type_clause [","? if_clause]
-construct_type_clause: PARALLEL_DIRECTIVE | SECTIONS_DIRECTIVE | TASKGROUP_DIRECTIVE | FOR_DIRECTIVE
+cancel_directive: CANCEL_DIRECTIVE [directive_name ":"] _construct_type_clause [","? if_clause]
+_construct_type_clause: PARALLEL_DIRECTIVE | SECTIONS_DIRECTIVE | TASKGROUP_DIRECTIVE | FOR_DIRECTIVE
 
 
 // ---- cancellation_point ----
 CANCELLATION_POINT_DIRECTIVE: "cancellation_point" | /cancellation\s+point/
-cancellation_point_directive: CANCELLATION_POINT_DIRECTIVE [directive_name ":"] construct_type_clause
+cancellation_point_directive: CANCELLATION_POINT_DIRECTIVE [directive_name ":"] _construct_type_clause
 
 
 // -----------------------------------------------------------------------------
@@ -1312,7 +1312,7 @@ depend_clause: DEPEND_CLAUSE "(" [_depend_modifier_list ":"] expr_list ")"
 // Each modifier is unique, but may be declared in any order
 _depend_modifier_list: _depend_modifier ("," _depend_modifier)*
 _depend_modifier: task_dependence_name | iterator_modifier | directive_name
-task_dependence_name: (DEPOBJ | IN | INOUT | INOUTSET | MUTEXINOUTSET | OUT) -> name
+task_dependence_name: DEPOBJ | IN | INOUT | INOUTSET | MUTEXINOUTSET | OUT
 DEPOBJ: "depobj"
 IN: "in"
 INOUT: "inout"
@@ -1325,7 +1325,7 @@ DEVICE_CLAUSE: "device" // unique
 device_clause: DEVICE_CLAUSE "(" [_device_modifier_list ":"] py_expr ")"
 _device_modifier_list: device_modifier_name | directive_name
 	| device_modifier_name "," directive_name | directive_name "," device_modifier_name
-device_modifier_name: (ANCESTOR | DEVICE_NUM) -> name
+device_modifier_name: ANCESTOR | DEVICE_NUM
 ANCESTOR: "ancestor"
 DEVICE_NUM: "device_num"
 
@@ -1334,7 +1334,7 @@ DEFAULT_CLAUSE: "default" // unique
 default_clause: DEFAULT_CLAUSE "(" (NONE | SHARED | FIRSTPRIVATE | PRIVATE) [":" _default_modifier] ")"
 _default_modifier: directive_name | variable_category_name
 	| directive_name "," variable_category_name | variable_category_name "," directive_name
-variable_category_name: (ALL | ALLOCATABLE | POINTER | SCALAR | AGGREGATE) -> name
+variable_category_name: ALL | ALLOCATABLE | POINTER | SCALAR | AGGREGATE
 NONE: "none"
 SHARED: "shared"
 FIRSTPRIVATE: "firstprivate"
@@ -1357,7 +1357,7 @@ if_clause: IF_CLAUSE "(" [directive_name ":"] py_expr ")"
 FIRSTPRIVATE_CLAUSE: "firstprivate"
 firstprivate_clause: FIRSTPRIVATE_CLAUSE "(" [_firstprivate_modifier ":"] var_list ")"
 _firstprivate_modifier: directive_name | saved_name | directive_name "," saved_name | saved_name "," directive_name
-saved_name: SAVED -> name
+saved_name: SAVED
 SAVED: "saved"
 
 
@@ -1365,7 +1365,7 @@ REDUCTION_CLAUSE: "reduction"
 reduction_clause: REDUCTION_CLAUSE  "(" [_reduction_modifier_list ","] reduction_op ":" var_list ")"
 _reduction_modifier_list: _reduction_modifier ("," _reduction_modifier)*
 _reduction_modifier: reduction_modifier_name | original_modifier | directive_name
-reduction_modifier_name: (INSCAN|TASK|DEFAULT) -> name
+reduction_modifier_name: INSCAN|TASK|DEFAULT
 DEFAULT: "default"
 INSCAN: "inscan"
 TASK: "task"
@@ -1389,7 +1389,7 @@ _induction_modifier_list: \
 	| step_modifier "," induction_modifier_name "," directive_name
 	| step_modifier "," directive_name "," induction_modifier_name
 
-induction_modifier_name: (RELAXED|STRICT) -> name
+induction_modifier_name: RELAXED|STRICT
 
 
 SHARED_CLAUSE: "shared"
@@ -1404,7 +1404,7 @@ LASTPRIVATE_CLAUSE: "lastprivate"
 lastprivate_clause: LASTPRIVATE_CLAUSE "(" [_lastprivate_modifier_list ":"] var_list ")"
 _lastprivate_modifier_list: conditional_name | directive_name
 	| directive_name "," conditional_name | conditional_name "," directive_name
-conditional_name: CONDITIONAL -> name
+conditional_name: CONDITIONAL
 CONDITIONAL: "conditional"
 
 
@@ -1482,13 +1482,13 @@ _map_modifier: \
 	| mapper_modifier
 	| iterator_modifier
 	| directive_name
-map_type_name: (FROM | STORAGE | TO | TOFROM) -> name
-ref_modifier_name: (REF_PTEE|REF_PTR|REF_PTR_PTEE) -> name
-always_modifier_name: ALWAYS -> name
-close_modifier_name: CLOSE -> name
-present_modifier_name: PRESENT -> name
-self_modifier_name: SELF -> name
-delete_modifier_name: DELETE -> name
+map_type_name: FROM | STORAGE | TO | TOFROM
+ref_modifier_name: REF_PTEE|REF_PTR|REF_PTR_PTEE
+always_modifier_name: ALWAYS
+close_modifier_name: CLOSE
+present_modifier_name: PRESENT
+self_modifier_name: SELF
+delete_modifier_name: DELETE
 ALWAYS: "always"
 CLOSE: "close"
 PRESENT: "present"
