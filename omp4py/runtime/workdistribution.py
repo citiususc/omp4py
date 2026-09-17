@@ -172,5 +172,12 @@ def single_end():
     thread.current().pop_task()
 
 
-def section(*f):
-    pass
+def section(i: pyint = 0, last: pyint = 0) -> bool:
+    try:
+        t_num: pyint = thread.cvars().dataenv.thread_num
+        t_size: pyint = thread.cvars().dataenv.team_size
+    except Exception:
+        return True
+    if t_size <= 1:
+        return True
+    return (i % t_size) == t_num
