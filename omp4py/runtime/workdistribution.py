@@ -76,7 +76,10 @@ def for_init(bounds: array.iview, kind: pyint, chunk: pyint, monotonic: bool, or
 
     thread.current().set_task(task)
     if kind == _dynamic or kind == _guided:
-        start: pyint = -1 if task.collapse > 1 else bounds[2] - (chunk if kind == _dynamic else 0)
+        if task.collapse > 1:
+            start: pyint = -chunk if kind == _dynamic else 0
+        else:
+            start: pyint = bounds[2] - (chunk if kind == _dynamic else 0)
         task.shared_count = task.parallel.context.push(tasks.ForTaskID, atomic.AtomicInt.new(start))
     else:
         thread_num: pyint = task.cvars.dataenv.thread_num
