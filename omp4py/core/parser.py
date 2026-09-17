@@ -174,7 +174,7 @@ def omp_parse(fc: Any, args: ParserArgs) -> Any:
     src_lines = inspect.getblock(src_full_lines[src_start:])
     src_code: str = ''.join(src_lines)
     src_module: ModuleType = inspect.getmodule(fc)
-    src_filename: str = src_module.__file__
+    src_filename: str = getattr(src_module, "__file__", None) or inspect.getfile(fc)
     cache_key: str = gen_cache_key(src_code, args.compile, args.options) if args.cache or args.compile else ''
 
     if not args.force and (cached := search_cache(src_module, args.cache_dir, cache_key)) is not None:
