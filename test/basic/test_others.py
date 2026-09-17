@@ -92,3 +92,30 @@ def test_master():
     assert list(q.queue) == [0, 0]
 
 ################################################
+
+
+################################################
+
+
+def sample_func_missing_file():
+    x = 0
+    with omp("parallel num_threads(2) reduction(+:x)"):
+        x += 1
+    return x
+
+
+def test_missing_module_file():
+    import sys
+    mod = sys.modules[sample_func_missing_file.__module__]
+    old_file = getattr(mod, "__file__", None)
+    try:
+        if hasattr(mod, "__file__"):
+            del mod.__file__
+        assert not hasattr(mod, "__file__")
+        compiled = omp(sample_func_missing_file)
+        assert compiled() == 2
+    finally:
+        if old_file is not None:
+            mod.__file__ = old_file
+
+################################################
