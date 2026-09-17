@@ -132,7 +132,8 @@ def build(fc: typing.Any, name: str, module: types.ModuleType, omp_ast: ast.Modu
                 f.write(ast.unparse(omp_ast))
             py_compile.compile(py_file)
 
-        omp_object = compile(omp_ast, filename=module.__file__, mode="exec")
+        filename = getattr(module, "__file__", None) or inspect.getfile(fc)
+        omp_object = compile(omp_ast, filename=filename, mode="exec")
         result: dict[str, typing.Any] = {}
         exec(omp_object, module.__dict__, result)
         env(module)
