@@ -572,3 +572,25 @@ def test_parallel_copyin():
     assert sorted(q.queue) == [2, 2]
 
 ################################################
+
+
+################################################
+
+
+def parallel_raise_exception():
+    with omp("parallel num_threads(2)"):
+        raise ValueError("Intentional parallel test exception")
+
+
+def parallel_subsequent_region(q: Queue):
+    with omp("parallel num_threads(2)"):
+        q.put(omp_get_thread_num())
+
+
+def test_parallel_exception_cleanup():
+    with pytest.raises(ValueError, match="Intentional parallel test exception"):
+        omp(parallel_raise_exception)()
+
+    q = Queue()
+    omp(parallel_subsequent_region)(q)
+    assert sorted(q.queue) == [0, 1]

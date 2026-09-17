@@ -14,9 +14,11 @@ def omp_parallel(num: pyint, f: typing.Callable[[], None], cvars: controlvars.Co
     task.cvars.dataenv = task.cvars.dataenv.__copy__()
     task.cvars.dataenv.thread_num = num
     thread.current().set_parallel(task).set_task(task)
-    f()
-    barrier.task_barrier(task)
-    thread.current().pop_task()
+    try:
+        f()
+    finally:
+        barrier.task_barrier(task)
+        thread.current().pop_task()
 
 
 def parallel_run(f: typing.Callable[[], None], c_if: bool, c_message: str, c_nthreads: tuple[pyint, ...],
