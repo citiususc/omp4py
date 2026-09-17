@@ -97,22 +97,19 @@ def for_next(bounds: array.iview) -> bool:
     task.count += task.current_chunk
 
     if task.collapse > 1:
-        if task.count >= task.iters:
+        if count >= task.iters:
             return False
 
-        bounds[0] = task.current_chunk
-        bounds[1] = task.current_chunk
+        rem: pyint = task.iters - count
+        chunk: pyint = task.current_chunk if task.current_chunk < rem else rem
+        bounds[0] = chunk
+        bounds[1] = chunk
+        bounds[5] = count // bounds[7] * bounds[4]
 
-        if task.collapse > 1:
-            bounds[5] = count // bounds[7] * bounds[4]
-
-            i: pyint
-            for i in range(1, task.collapse):
-                bounds[2 + i * 6 + 3] = (count % bounds[2 + i * 6 + 4] //
-                                         bounds[2 + i * 6 + 5] * bounds[2 + i * 6 + 2])
-        else:
-            bounds[0] = bounds[3] + bounds[5]
-            bounds[1] = bounds[0] + task.current_chunk
+        i: pyint
+        for i in range(1, task.collapse):
+            bounds[2 + i * 6 + 3] = (count % bounds[2 + i * 6 + 4] //
+                                     bounds[2 + i * 6 + 5] * bounds[2 + i * 6 + 2])
     elif task.current_chunk > 0:
         if count >= bounds[3]:
             return False
@@ -136,7 +133,7 @@ def for_static(task: tasks.ForTask, bounds: array.iview) -> None:
 
 
 def for_dynamic(task: tasks.ForTask, bounds: array.iview) -> None:
-    task.count = task.shared_count.add(task.step)
+    task.count = task.shared_count.add(task.chunk)
 
 
 def for_guided(task: tasks.ForTask, bounds: array.iview) -> None:
@@ -158,7 +155,7 @@ def for_guided(task: tasks.ForTask, bounds: array.iview) -> None:
             task.count = start
             task.current_chunk = q
             break
-        start = task.count
+        start = task.shared_count.get()
 
 
 def single() -> bool:
