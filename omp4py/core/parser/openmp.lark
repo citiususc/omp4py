@@ -1,0 +1,782 @@
+//////////////////////////////////////////////////////////////////////////////////
+//                                                                              //
+// To generate the OpenMP parser from this grammar use the following command:   //
+//                                                                              //
+//   python -m lark.tools.standalone openmp.lark \                              //
+//     --out openmp_parser.py --start start      \                              //
+//     --lexer contextual --propagate_positions                                 //
+//                                                                              //
+//////////////////////////////////////////////////////////////////////////////////
+
+// -----------------------------------------------------------------------------
+// ---- START ------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+
+start: \
+	  parallel_directive
+	// worksharing contructs
+	| for_directive
+	| sections_directive | section_directive
+	| single_directive
+	// simd constructs
+	| simd_directive
+	| declare_simd_directive
+	// tasking constructs
+	| task_directive
+	| taskloop_directive
+	| taskyield_directive
+	// device contructs
+	| target_data_directive
+	| target_enter_data_directive
+	| target_exit_data_directive
+	| target_directive
+	| target_update_directive
+	| declare_target_directive
+	| teams_directive
+	| distribute_directive
+	// master synchronization constructs
+	| master_directive
+	| critical_directive
+	| barrier_directive
+	| taskwait_directive
+	| taskgroup_directive
+	| atomic_directive
+	| flush_directive
+	| ordered_directive
+	// cancelation constructs
+	| cancel_directive
+	| cancellation_point_directive
+	// others
+	| threadprivate_directive
+	| declare_reduction_directive | declare_reduction_directive6
+	| combined_directive
+
+directive_name: \
+	  PARALLEL_DIRECTIVE | FOR_DIRECTIVE | SECTIONS_DIRECTIVE | SECTION_DIRECTIVE | SINGLE_DIRECTIVE
+	| SIMD_DIRECTIVE | DECLARE_SIMD_DIRECTIVE
+	| TASK_DIRECTIVE | TASKLOOP_DIRECTIVE | TASKYIELD_DIRECTIVE
+	| TARGET_DATA_DIRECTIVE | TARGET_ENTER_DATA_DIRECTIVE | TARGET_EXIT_DATA_DIRECTIVE | TARGET_DIRECTIVE | TARGET_UPDATE_DIRECTIVE | DECLARE_TARGET_DIRECTIVE
+	| TEAMS_DIRECTIVE | DISTRIBUTE_DIRECTIVE
+	| MASTER_DIRECTIVE | CRITICAL_DIRECTIVE | BARRIER_DIRECTIVE | TASKWAIT_DIRECTIVE | TASKGROUP_DIRECTIVE | ATOMIC_DIRECTIVE | FLUSH_DIRECTIVE | ORDERED_DIRECTIVE
+	| CANCEL_DIRECTIVE | CANCELLATION_POINT_DIRECTIVE
+	| THREADPRIVATE_DIRECTIVE | DECLARE_REDUCTION_DIRECTIVE
+	
+
+// -----------------------------------------------------------------------------
+// ---- DIRECTIVES WITH THEIR CLAUSES ------------------------------------------
+// -----------------------------------------------------------------------------
+
+// IMPORTANT: then directive keywords' names must end with ``_DIRECTIVE``
+// and the clauses keywords' names with ``_CLAUSE``.
+// This convention is used by the error system.
+
+// ---- parallel ----
+PARALLEL_DIRECTIVE: "parallel"
+parallel_directive: PARALLEL_DIRECTIVE _parallel_clause_list?
+_parallel_clause_list: _parallel_clause (","? _parallel_clause)*
+_parallel_clause: \
+	  if_clause           // unique
+	| num_threads_clause  // unique
+	| default_clause
+	| private_clause
+	| firstprivate_clause
+	| shared_clause
+	| copyin_clause
+	| reduction_clause
+	| proc_bind_clause    // unique
+
+NUM_THREADS_CLAUSE: "num_threads" // unique
+num_threads_clause: NUM_THREADS_CLAUSE "(" [directive_name  ":"] py_expr ")"
+
+PROC_BIND_CLAUSE: "proc_bind" // unique
+proc_bind_clause: PROC_BIND_CLAUSE "(" [directive_name ":"] affinity_policy_name ")"
+affinity_policy_name: (CLOSE | PRIMARY | SPREAD) -> name
+PRIMARY: "primary"
+SPREAD: "spread"
+CLOSE: "close"
+
+
+//
+// ---- WORKSHARING CONSTRUCTS ----
+//
+
+// ---- for ----
+FOR_DIRECTIVE: "for"
+for_directive: FOR_DIRECTIVE _for_clause_list?
+_for_clause_list: _for_clause (","? _for_clause)*
+_for_clause: \
+	  private_clause
+	| firstprivate_clause
+	| lastprivate_clause
+	| linear_clause
+	| reduction_clause
+	| schedule_clause // unique
+	| collapse_clause // unique
+	| ordered_clause  // unique
+	| nowait_clause   // unique
+
+SCHEDULE_CLAUSE: "schedule" // unique
+schedule_clause: SCHEDULE_CLAUSE "(" [schedule_modifier_name ["," schedule_modifier_name] ":"] schedule_type ["," py_expr] ")"
+schedule_type: STATIC | DYNAMIC | GUIDED | AUTO | RUNTIME
+STATIC  : "static"
+DYNAMIC : "dynamic"
+GUIDED  : "guided"
+AUTO    : "auto"
+RUNTIME : "runtime"
+schedule_modifier_name: MONOTONIC | NONMONOTONIC | SIMD
+MONOTONIC    : "monotonic"
+NONMONOTONIC : "nonmonotonic"
+SIMD         : "simd"
+
+ORDERED_CLAUSE: "ordered" // unique
+ordered_clause: ORDERED_CLAUSE ["(" [directive_name ":"] py_expr ")"]
+
+
+// ---- sections ----
+SECTIONS_DIRECTIVE: "sections"
+sections_directive: SECTIONS_DIRECTIVE _sections_clause_list?
+_sections_clause_list: _sections_clause (","? _sections_clause)*
+_sections_clause: \
+	  private_clause
+	| firstprivate_clause
+	| lastprivate_clause
+	| reduction_clause
+	| nowait_clause // unique
+
+
+// ---- section ----
+SECTION_DIRECTIVE: "section"
+section_directive: SECTION_DIRECTIVE
+
+
+// ---- single ----
+SINGLE_DIRECTIVE: "single"
+single_directive: SINGLE_DIRECTIVE _single_clause_list?
+_single_clause_list: _single_clause (","? _single_clause)*
+_single_clause: \
+	  private_clause
+	| firstprivate_clause
+	| copyprivate_clause
+	| nowait_clause // unique
+
+
+//
+// ---- SIMD CONSTRUCTS ----
+//
+
+// ---- simd ----
+SIMD_DIRECTIVE: "simd"
+simd_directive: SIMD_DIRECTIVE _simd_clause_list?
+_simd_clause_list: _simd_clause (","? _simd_clause)?
+_simd_clause: \
+	  safelen_clause // unique
+	| simdlen_clause // unique
+	| aligned_clause
+	| linear_clause
+	| private_clause
+	| lastprivate_clause
+	| reduction_clause
+	| collapse_clause // unique
+
+SAFELEN_CLAUSE: "safelen" // unique
+safelen_clause: SAFELEN_CLAUSE "(" [directive_name ":"] py_expr ")"
+
+SIMDLEN_CLAUSE: "simdlen" // unique
+simdlen_clause: SIMDLEN_CLAUSE "(" [directive_name ":"] py_expr ")"
+
+ALIGNED_CLAUSE: "aligned"
+aligned_clause: ALIGNED_CLAUSE "(" var_list [":" _aligned_modifier_list] ")"
+// alignment is unique and ultimate (because it is post-modified, must be first)
+_aligned_modifier_list: alignment_modifier "," directive_name | alignment_modifier | directive_name
+alignment_modifier: py_expr
+
+
+// ---- declare_simd ----
+DECLARE_SIMD_DIRECTIVE: "declare_simd" | /declare\s+simd/
+declare_simd_directive: DECLARE_SIMD_DIRECTIVE ["(" IDENTIFIER ")"] _declare_simd_clause_list?
+_declare_simd_clause_list: _declare_simd_clause (","? _declare_simd_clause)*
+_declare_simd_clause: \
+	  linear_clause
+	| simdlen_clause     // unique
+	| aligned_clause
+	| uniform_clause
+	| inbranch_clause    // exclusive with notinbranch
+	| notinbranch_clause // exclusive with inbranch
+
+UNIFORM_CLAUSE: "uniform"
+uniform_clause: UNIFORM_CLAUSE "(" [directive_name ":"] var_list ")"
+
+INBRANCH: "inbranch"
+inbranch_clause: INBRANCH ["(" [directive_name ":"] py_expr ")"]
+
+NOTINBRANCH: "notinbranch"
+notinbranch_clause: NOTINBRANCH ["(" [directive_name ":"] py_expr ")"]
+
+
+//
+// ---- TASKING CONSTRUCTS ----
+//
+
+// ---- task ----
+TASK_DIRECTIVE: "task"
+task_directive: TASK_DIRECTIVE _task_clause_list?
+_task_clause_list: _task_clause (","? _task_clause)*
+_task_clause: \
+	  if_clause        // unique
+	| final_clause     // unique
+	| untied_clause    // unique
+	| default_clause   // unique
+	| mergeable_clause // unique
+	| private_clause
+	| firstprivate_clause
+	| shared_clause
+	| depend_clause
+	| priority_clause  // unique
+
+
+FINAL_CLAUSE: "final" // unique
+final_clause: FINAL_CLAUSE "(" [directive_name ":"] py_expr ")"
+
+UNTIED_CLAUSE: "untied" // unique
+untied_clause: UNTIED_CLAUSE ["(" [directive_name ":"] py_expr ")"]
+
+MERGEABLE_CLAUSE: "mergeable" // unique
+mergeable_clause: MERGEABLE_CLAUSE ["(" [directive_name ":"] py_expr ")"]
+
+PRIORITY_CLAUSE: "priority" // unique
+priority_clause: PRIORITY_CLAUSE "(" [directive_name ":"] py_expr ")"
+
+
+// ---- taskloop ----
+TASKLOOP_DIRECTIVE: "taskloop"
+taskloop_directive: TASKLOOP_DIRECTIVE _taskloop_clause_list?
+_taskloop_clause_list: _taskloop_clause (","? _taskloop_clause)?
+_taskloop_clause: \
+	  if_clause       // unique
+	| shared_clause
+	| private_clause
+	| firstprivate_clause
+	| lastprivate_clause
+	| default_clause   // unique
+	| grainsize_clause // unique, exclusive with num_tasks
+	| num_tasks_clause // unique, exclusive with grainsize
+	| collapse_clause  // unique
+	| final_clause     // unique
+	| priority_clause  // unique
+	| untied_clause    // unique
+	| mergeable_clause // unique
+	| nogroup_clause   // unique
+
+GRAINSIZE_CLAUSE: "grainsize" // unique
+grainsize_clause: GRAINSIZE_CLAUSE "(" [directive_name ":"] py_expr ")"
+
+NUM_TASKS_CLAUSE: "num_tasks" // unique
+num_tasks_clause: NUM_TASKS_CLAUSE "(" [directive_name ":"] py_expr ")"
+
+NOGROUP_CLAUSE: "nogroup" // unique
+nogroup_clause: NOGROUP_CLAUSE ["(" [directive_name ":"] py_expr ")"]
+
+
+
+// ---- taskyield ----
+TASKYIELD_DIRECTIVE: "taskyield"
+taskyield_directive: TASKYIELD_DIRECTIVE
+
+
+//
+// ---- DEVICE CONSTRUCTS ----
+//
+
+// ---- target_data ----
+TARGET_DATA_DIRECTIVE: "target_data" | /target\s+data/
+target_data_directive: TARGET_DATA_DIRECTIVE _target_data_clause_list
+_target_data_clause_list: _target_data_clause (","? _target_data_clause)?
+_target_data_clause: \
+	  if_clause     // unique
+	| device_clause // unique
+	| map_clause    // unique
+	| use_device_ptr_clause
+
+
+DEVICE_CLAUSE: "device" // unique
+device_clause: DEVICE_CLAUSE "(" [directive_name ":"] py_expr ")"
+
+USE_DEVICE_PTR_CLAUSE: "use_device_ptr"
+use_device_ptr_clause: USE_DEVICE_PTR_CLAUSE "(" [directive_name ":"] var_list ")"
+
+
+// ---- target_enter_data ----
+TARGET_ENTER_DATA_DIRECTIVE: "target_enter_data" | /target\s+enter\s+data/
+target_enter_data_directive: TARGET_ENTER_DATA_DIRECTIVE _target_enter_data_clause_list?
+_target_enter_data_clause_list: _target_enter_data_clause (","? _target_enter_data_clause)?
+_target_enter_data_clause: \
+	  if_clause     // unique
+	| device_clause // unique
+	| map_clause    // unique
+	| depend_clause
+	| nowait_clause // unique
+
+
+// ---- target_exit_data ----
+TARGET_EXIT_DATA_DIRECTIVE: "target_exit_data" | /target\s+exit\s+data/
+target_exit_data_directive: TARGET_EXIT_DATA_DIRECTIVE _target_exit_data_clause_list?
+_target_exit_data_clause_list: _target_exit_data_clause (","? _target_exit_data_clause)?
+_target_exit_data_clause: \
+	  if_clause     // unique
+	| device_clause // unique
+	| map_clause    // unique
+	| depend_clause
+	| nowait_clause // unique
+
+
+// ---- target ----
+TARGET_DIRECTIVE: "target"
+target_directive: TARGET_DIRECTIVE _target_clause_list?
+_target_clause_list: _target_clause (","? _target_clause)?
+_target_clause: \
+	  if_clause         // unique
+	| device_clause     // unique
+	| private_clause
+	| firstprivate_clause
+	| map_clause
+	| is_device_ptr_clause
+	| defaultmap_clause // unique
+	| nowait_clause     // unique
+	| depend_clause
+
+IS_DEVICE_PTR_CLAUSE: "is_device_ptr"
+is_device_ptr_clause: IS_DEVICE_PTR_CLAUSE "(" [directive_name ":"] var_list ")"
+
+
+// ---- target_update ----
+TARGET_UPDATE_DIRECTIVE: "target_update" | /target\s+update/
+target_update_directive: TARGET_UPDATE_DIRECTIVE _target_update_clause_list?
+_target_update_clause_list: _target_update_clause (","? _target_update_clause)?
+_target_update_clause: \
+	  if_clause     // unique
+	| device_clause // unique
+	| nowait_clause // unique
+	| depend_clause
+	| to_clause     // exclusive with from, required
+	| from_clause   // exclusive with to, required
+	
+TO_CLAUSE: "to"
+to_clause: TO_CLAUSE "(" [directive_name ":"] var_list ")"
+
+FROM_CLAUSE: "from"
+from_clause: FROM_CLAUSE "(" [directive_name ":"] var_list ")"
+
+
+// ---- declare_target ----
+DECLARE_TARGET_DIRECTIVE: "declare_target" | /declare\s+target/
+declare_target_directive: \
+	  DECLARE_TARGET_DIRECTIVE "(" var_list ")"             -> declare_target_directive_list
+	| DECLARE_TARGET_DIRECTIVE _declare_target_clause_list? -> declare_target_directive
+_declare_target_clause_list: _declare_target_clause (","? _declare_target_clause)*
+_declare_target_clause: link_clause | to_clause
+
+LINK_CLAUSE: "link"
+link_clause: LINK_CLAUSE "(" [directive_name ":"] var_list ")"
+
+
+// ---- teams ----
+TEAMS_DIRECTIVE: "teams"
+teams_directive: TEAMS_DIRECTIVE _teams_clause_list?
+_teams_clause_list: _teams_clause (","? _teams_clause)?
+_teams_clause: \
+	  num_teams_clause    // unique
+	| thread_limit_clause // unique
+	| default_clause      // unique
+	| private_clause
+	| firstprivate_clause
+	| shared_clause
+	| reduction_clause
+
+NUM_TEAMS_CLAUSE: "num_teams" // unique
+num_teams_clause: NUM_TEAMS_CLAUSE "(" [directive_name ":"] py_expr ")"
+
+THREAD_LIMIT_CLAUSE: "thread_limit" // unique
+thread_limit_clause: THREAD_LIMIT_CLAUSE "(" [directive_name ":"] py_expr ")"
+
+
+// ---- distribute ----
+DISTRIBUTE_DIRECTIVE: "distribute"
+distribute_directive: DISTRIBUTE_DIRECTIVE _distribute_clause_list?
+_distribute_clause_list: _distribute_clause (","? _distribute_clause)?
+_distribute_clause: \
+	  private_clause
+	| firstprivate_clause
+	| lastprivate_clause
+	| collapse_clause
+	| dist_schedule_clause
+
+DIST_SCHEDULE_CLAUSE: "dist_schedule" // unique
+dist_schedule_clause: DIST_SCHEDULE_CLAUSE "(" [directive_name ":"] STATIC ["," py_expr] ")"
+
+//
+// ---- MASTER AND SYNCH CONSTRUCTS ----
+//
+
+// ---- master ---
+MASTER_DIRECTIVE: "master"
+master_directive: MASTER_DIRECTIVE
+
+
+// ---- critical ----
+CRITICAL_DIRECTIVE: "critical"
+critical_directive: CRITICAL_DIRECTIVE ["(" IDENTIFIER ")" [","? hint_clause]]
+
+HINT_CLAUSE: "hint" // unique
+hint_clause: HINT_CLAUSE "(" [directive_name ":"] py_expr ")"
+
+
+// ---- barrier ----
+BARRIER_DIRECTIVE: "barrier"
+barrier_directive: BARRIER_DIRECTIVE
+
+
+// ---- taskwait ----
+TASKWAIT_DIRECTIVE: "taskwait"
+taskwait_directive: TASKWAIT_DIRECTIVE
+
+
+// ---- taskgroup ----
+TASKGROUP_DIRECTIVE: "taskgroup"
+taskgroup_directive: TASKGROUP_DIRECTIVE
+
+
+// ---- atomic ----
+ATOMIC_DIRECTIVE: "atomic"
+atomic_directive: ATOMIC_DIRECTIVE _atomic_clause_list
+_atomic_clause_list: _atomic_clause (","? _atomic_clause)*
+_atomic_clause: \
+	  read_clause
+	| write_clause
+	| update_clause
+	| capture_clause
+	| seq_cst_clause
+
+SEQ_CST_CLAUSE: "seq_cst"
+seq_cst_clause: SEQ_CST_CLAUSE ["(" [directive_name ":"] py_expr ")"]
+
+READ_CLAUSE: "read" // unique
+read_clause: READ_CLAUSE ["(" [directive_name ":"] py_expr ")"]
+
+WRITE_CLAUSE: "write" // unique
+write_clause: WRITE_CLAUSE ["(" [directive_name ":"] py_expr ")"]
+
+UPDATE_CLAUSE: "update" // unique
+update_clause: UPDATE_CLAUSE ["(" [directive_name ":"] py_expr ")"]
+
+CAPTURE_CLAUSE: "capture" // unique
+capture_clause: CAPTURE_CLAUSE ["(" [directive_name ":"] py_expr ")"]
+
+
+// ---- flush ----
+FLUSH_DIRECTIVE: "flush"
+flush_directive: FLUSH_DIRECTIVE ["(" var_list ")"]
+
+
+// ---- ordered ----
+ORDERED_DIRECTIVE: "ordered"
+ordered_directive: ORDERED_DIRECTIVE _ordered_clause_list?
+_ordered_clause_list: _ordered_clause (","? _ordered_clause)*
+_ordered_clause: \
+	  threads_clause // unique
+	| simd_clause    // unique
+	| depend_clause
+
+THREADS_CLAUSE: "threads" // unique
+threads_clause: THREADS_CLAUSE ["(" [directive_name ":"] py_expr ")"]
+
+SIMD_CLAUSE: "simd" // unique
+simd_clause: SIMD_CLAUSE ["(" [directive_name ":"] py_expr ")"]
+
+
+//
+// ---- CANCELLATION CONSTRUCTS ----
+//
+
+// ---- cancel ----
+CANCEL_DIRECTIVE: "cancel"
+cancel_directive: CANCEL_DIRECTIVE _construct_type_clause [","? if_clause]
+_construct_type_clause: PARALLEL_DIRECTIVE | SECTIONS_DIRECTIVE | TASKGROUP_DIRECTIVE | FOR_DIRECTIVE
+
+
+// ---- cancellation_point ----
+CANCELLATION_POINT_DIRECTIVE: "cancellation_point" | /cancellation\s+point/
+cancellation_point_directive: CANCELLATION_POINT_DIRECTIVE _construct_type_clause
+
+//
+// ---- OTHER CONSTRUCTS ----
+//
+
+// ---- threadprivate ----
+THREADPRIVATE_DIRECTIVE: "threadprivate"
+threadprivate_directive: THREADPRIVATE_DIRECTIVE "(" var_list ")"
+
+// ---- declare_reduction ----
+DECLARE_REDUCTION_DIRECTIVE: "declare_reduction" | /declare\s+reduction/
+declare_reduction_directive: DECLARE_REDUCTION_DIRECTIVE "(" reduction_op ":" type_list ":" py_stmt ")" [initializer_clause]
+
+INITIALIZER_CLAUSE: "initializer" // unique
+initializer_clause: INITIALIZER_CLAUSE "(" [directive_name ":"] py_stmt ")"
+
+
+declare_reduction_directive6: DECLARE_REDUCTION_DIRECTIVE "(" reduction_op ":" type_list ")" _declare_reduction_clause_list
+_declare_reduction_clause_list: \
+	  combiner_clause
+	| combiner_clause    ","? initializer_clause
+	| initializer_clause ","? combiner_clause
+
+COMBINER_CLAUSE: "combiner" // required, unique
+combiner_clause: COMBINER_CLAUSE "(" [directive_name ":"] py_stmt ")"
+
+
+// -----------------------------------------------------------------------------
+// ---- COMBINED CONSTRUCTS ----------------------------------------------------
+// -----------------------------------------------------------------------------
+
+// for simd
+// parallel for
+// parallel for simd
+// parallel sections
+// taskloop simd
+// distribute simd
+// distribute parallel for
+// distribute parallel for simd
+// target parallel
+// target parallel for
+// target parallel for simd
+// target simd
+// target teams
+// target distribute
+// target distribute simd
+// target teams distribute
+// target teams distribute simd
+// target teams distribute parallel for
+// target teams distribute parallel for simd
+// teams distribute parallel for
+// teams distribute parallel for simd
+combined_directive: _combined_directive_name _combined_directive_name+ [combined_clause_list]
+_combined_directive_name: \
+	  PARALLEL_DIRECTIVE
+	| FOR_DIRECTIVE
+	| SECTIONS_DIRECTIVE
+	| SIMD_DIRECTIVE
+	| TASKLOOP_DIRECTIVE
+	| DISTRIBUTE_DIRECTIVE
+	| TARGET_DIRECTIVE
+	| TEAMS_DIRECTIVE
+
+combined_clause_list: _combined_clause (","? _combined_clause)*
+_combined_clause: \
+	  aligned_clause
+	| collapse_clause
+	| copyin_clause
+	| default_clause
+	| defaultmap_clause
+	| depend_clause
+	| device_clause
+	| dist_schedule_clause
+	| final_clause
+	| firstprivate_clause
+	| grainsize_clause
+	| if_clause
+	| is_device_ptr_clause
+	| lastprivate_clause
+	| linear_clause
+	| map_clause
+	| mergeable_clause
+	| nogroup_clause
+	| nowait_clause
+	| num_tasks_clause
+	| num_teams_clause
+	| num_threads_clause
+	| ordered_clause
+	| priority_clause
+	| private_clause
+	| proc_bind_clause
+	| reduction_clause
+	| safelen_clause
+	| schedule_clause
+	| shared_clause
+	| simdlen_clause
+	| thread_limit_clause
+	| untied_clause
+
+
+// -----------------------------------------------------------------------------
+// ---- COMMON CLAUSES ---------------------------------------------------------
+// -----------------------------------------------------------------------------
+
+IF_CLAUSE: "if" // unique
+if_clause: IF_CLAUSE "(" [directive_name ":"] py_expr ")"
+
+
+NOWAIT_CLAUSE: "nowait" // unique
+nowait_clause: NOWAIT_CLAUSE ["(" [directive_name ":"] py_expr ")"]
+
+
+COLLAPSE_CLAUSE: "collapse" // unique
+collapse_clause: COLLAPSE_CLAUSE "(" [directive_name ":"] py_expr ")"
+
+
+//
+// ---- DATA SHARING CLAUSES ----
+//
+
+DEFAULT_CLAUSE: "default" // unique
+default_clause: DEFAULT_CLAUSE "(" data_sharing_attr_name [":" directive_name] ")"
+data_sharing_attr_name: NONE | SHARED
+NONE: "none"
+SHARED: "shared"
+
+
+SHARED_CLAUSE: "shared"
+shared_clause: SHARED_CLAUSE "(" [directive_name ":"] var_list ")"
+
+
+PRIVATE_CLAUSE: "private"
+private_clause: PRIVATE_CLAUSE "(" [directive_name ":"] var_list ")"
+
+
+FIRSTPRIVATE_CLAUSE: "firstprivate"
+firstprivate_clause: FIRSTPRIVATE_CLAUSE "(" [directive_name ":"] var_list ")"
+
+
+LASTPRIVATE_CLAUSE: "lastprivate"
+lastprivate_clause: LASTPRIVATE_CLAUSE "(" [directive_name ":"] var_list ")"
+
+
+REDUCTION_CLAUSE: "reduction"
+reduction_clause: REDUCTION_CLAUSE  "(" [directive_name ","] reduction_op ":" var_list ")"
+reduction_op: IDENTIFIER | PLUS | MULT | BITWISE_AND | BITWISE_OR | BITWISE_XOR | LOGIC_AND | LOGIC_OR | MAX | MIN
+PLUS        : "+"
+MULT        : "*"
+BITWISE_AND : "&"
+BITWISE_OR  : "|"
+BITWISE_XOR : "^"
+LOGIC_AND   : "and"  // NOTE: original was "&&"
+LOGIC_OR    : "or"   // NOTE: original was "||"
+MAX         : "max"
+MIN         : "min"
+
+
+LINEAR_CLAUSE: "linear"
+linear_clause: LINEAR_CLAUSE "(" linear_list [":" py_expr] ")"
+linear_list: var_list | linear_modifier_name "(" var_list ")"
+linear_modifier_name: (REF|UVAL|VAL) -> name
+REF: "ref"
+UVAL: "uval"
+VAL: "val"
+
+
+//
+// ---- DATA COPYING CLAUSES ----
+//
+
+COPYIN_CLAUSE: "copyin" // outermost-leaf
+copyin_clause: COPYIN_CLAUSE "(" [directive_name ":"] var_list ")"
+
+
+COPYPRIVATE_CLAUSE: "copyprivate" // innermost-leaf
+copyprivate_clause: COPYPRIVATE_CLAUSE "(" [directive_name ":"] var_list ")"
+
+//
+// ---- MASTER AND SYNCH CLAUSES ----
+//
+
+// TODO: directive_name
+DEPEND_CLAUSE: "depend"
+depend_clause: DEPEND_CLAUSE "(" [task_dependence_name ":"] expr_list ")"
+task_dependence_name: IN | OUT | INOUT | SOURCE | SINK
+SOURCE: "source"
+SINK: "sink"
+IN: "in"
+OUT: "out"
+INOUT: "inout"
+
+//
+// ---- DATA MAPPING CLAUSES ----
+//
+
+// TODO: directive_name
+MAP_CLAUSE: "map"
+map_clause: MAP_CLAUSE "(" [[always_modifier_name ","?] map_type_name ":"] var_list ")"
+always_modifier_name: ALWAYS
+map_type_name: TO | FROM | TOFROM | ALLOC | RELEASE | DELETE
+ALWAYS: "always"
+TO: "to"
+FROM: "from"
+TOFROM: "tofrom"
+ALLOC: "alloc"
+RELEASE: "release"
+DELETE: "delete"
+
+
+// TODO: directive_name
+DEFAULTMAP_CLAUSE: "defaultmap" // unique
+defaultmap_clause: DEFAULTMAP_CLAUSE "(" tofrom_modifier_name [":" scalar_modifier_name] ")"
+tofrom_modifier_name: TOFROM
+scalar_modifier_name: SCALAR
+SCALAR: "scalar"
+
+
+// -----------------------------------------------------------------------------
+// ---- MODIFIERS --------------------------------------------------------------
+// -----------------------------------------------------------------------------
+
+
+// ---- whitespace ----
+_WHITESPACE: /\s+/
+%ignore _WHITESPACE
+
+
+// ---- lists ----
+var_list  : IDENTIFIER ("," IDENTIFIER)*
+expr_list : py_expr ("," py_expr)*
+type_list : py_type ("," py_type)* -> expr_list
+stmt_list : py_stmt ("," py_stmt)*
+
+
+// ---- python ----
+// TODO: Handle strings correctly, "foo('test[')" is a valid expression
+// but this gives an error because '[' is unbalanced.
+// This can be handled in the preprocesor, by adding the notion of a nested string.
+
+// The lower priority is important,
+// otherwise clauses taking python code and with optional modifiers,
+// the lexer will always start by assuming code,
+// thus making the modifiers impossible to provide.
+PY_CODE_OUT.-1 : /[^(){}\[\]:,]+/
+PY_CODE_IN.-1  : /[^(){}\[\]]+/
+py_code_out    : (PY_CODE_OUT | "(" py_code_in? ")" | "{" py_code_in? "}" | "[" py_code_in? "]")+
+py_code_in     : (PY_CODE_IN  | "(" py_code_in? ")" | "{" py_code_in? "}" | "[" py_code_in? "]")+
+
+py_expr: py_code_out
+py_type: py_code_out -> py_expr
+py_stmt: py_code_out
+
+
+// ---- python integer ----
+// https://docs.python.org/3/reference/lexical_analysis.html#grammar-token-python-grammar-integer
+_DIGIT          : "0".."9"
+_NON_ZERO_DIGIT : "1".."9"
+_BIN_DIGIT      : "0" | "1"
+_OCT_DIGIT      : "0".."7"
+_HEX_DIGIT      : _DIGIT | "a".."f" | "A".."F"
+
+_DEC_INTEGER  : _NON_ZERO_DIGIT ("_"? _DIGIT)*
+_BIN_INTEGER  : "0" ("b" | "B") ("_"? _BIN_DIGIT)+
+_OCT_INTEGER  : "0" ("o" | "O") ("_"? _OCT_DIGIT)+
+_HEX_INTEGER  : "0" ("x" | "X") ("_"? _HEX_DIGIT)+
+_ZERO_INTEGER : "0"+            ("_"? "0")*
+
+INTEGER: _DEC_INTEGER | _BIN_INTEGER | _OCT_INTEGER | _HEX_INTEGER | _ZERO_INTEGER
+
+
+// ---- python identifier ----
+// https://docs.python.org/3/reference/lexical_analysis.html#names-identifiers-and-keywords
+IDENTIFIER: /[^\W\d]\w*/
+

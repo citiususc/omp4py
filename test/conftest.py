@@ -13,8 +13,9 @@ def pytest_addoption(parser: pytest.Parser) -> None:
     parser.addoption("--pure", action="store_true", help="force omp4py pure runtime")
 
 
-def pytest_configure(config: pytest.Config)-> None:
+def pytest_configure(config: pytest.Config) -> None:
     os.environ["OMP4PY_PURE"] = str(config.getoption("pure"))
+    config.addinivalue_line("markers", "no_isolate")
 
 
 def worker(q: multiprocessing.Queue, f: Callable[..., Any], timeout: float | None, *args, **kwargs)-> None:
@@ -58,6 +59,8 @@ def pytest_collection_modifyitems(session: pytest.Session, config: pytest.Config
     if len(items) > 0:
         timeout: str | None = config.getoption("timeout")
         for item in items:
+            if item.get_closest_marker("no_isolate"):
+                continue
             item.obj = isolate(timeout if timeout is None else int(timeout), item.obj)
 
 
