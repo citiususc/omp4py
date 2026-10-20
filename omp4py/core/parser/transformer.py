@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import ast as pyast
 from dataclasses import fields, MISSING
-from typing import cast, get_type_hints, get_origin, get_args, Union, Iterable
+from typing import cast, get_type_hints, get_origin, get_args, Union, Iterable, Any
+from types import UnionType
 
 from . import tree
 from .openmp_parser import Transformer, v_args, Token, Tree, Meta
@@ -10,74 +11,64 @@ from .source_view import SourceView
 
 __all__ = ["AstTransformer"]
 
+# Rule name to tree class look-up table
 _DIRECTIVE_TYPES = {
-    "THREADPRIVATE_DIRECTIVE": tree.ThreadPrivate,
-    "DECLARE_REDUCTION_DIRECTIVE": tree.DeclareReduction,
-    "DECLARE_INDUCTION_DIRECTIVE": tree.DeclareInduction,
-    "SCAN_DIRECTIVE": tree.Scan,
-    "DECLARE_MAPPER_DIRECTIVE": tree.DeclareMapper,
-    "GROUPPRIVATE_DIRECTIVE": tree.GroupPrivate,
-    "ALLOCATE_DIRECTIVE": tree.Allocate,
-    "METADIRECTIVE_DIRECTIVE": tree.Metadirective,
-    "DECLARE_VARIANT_DIRECTIVE": tree.DeclareVariant,
-    "DISPATCH_DIRECTIVE": tree.Dispatch,
-    "DECLARE_SIMD_DIRECTIVE": tree.DeclareSimd,
-    "DECLARE_TARGET_DIRECTIVE": tree.DeclareTarget,
-    "REQUIRES_DIRECTIVE": tree.Requires,
-    "ASSUME_DIRECTIVE": tree.Assume,
-    "NOTHING_DIRECTIVE": tree.Nothing,
-    "ERROR_DIRECTIVE": tree.Error,
-    "FUSE_DIRECTIVE": tree.Fuse,
-    "INTERCHANGE_DIRECTIVE": tree.Interchange,
-    "SPLIT_DIRECTIVE": tree.Split,
-    "STRIPE_DIRECTIVE": tree.Stripe,
-    "TILE_DIRECTIVE": tree.Tile,
-    "UNROLL_DIRECTIVE": tree.Unroll,
     "PARALLEL_DIRECTIVE": tree.Parallel,
-    "TEAMS_DIRECTIVE": tree.Teams,
-    "SIMD_DIRECTIVE": tree.Simd,
-    "MASKED_DIRECTIVE": tree.Masked,
-    "SINGLE_DIRECTIVE": tree.Single,
-    "SCOPE_DIRECTIVE": tree.Scope,
+    "FOR_DIRECTIVE": tree.For,
     "SECTIONS_DIRECTIVE": tree.Sections,
     "SECTION_DIRECTIVE": tree.Section,
-    "WORKSHARE_DIRECTIVE": tree.Workshare,
-    "WORKDISTRIBUTE_DIRECTIVE": tree.Workdistribute,
-    "FOR_DIRECTIVE": tree.For,
-    "DISTRIBUTE_DIRECTIVE": tree.Distribute,
-    "LOOP_DIRECTIVE": tree.Loop,
+    "SINGLE_DIRECTIVE": tree.Single,
+    "SIMD_DIRECTIVE": tree.Simd,
+    "DECLARE_SIMD_DIRECTIVE": tree.DeclareSimd,
     "TASK_DIRECTIVE": tree.Task,
     "TASKLOOP_DIRECTIVE": tree.Taskloop,
-    "TASK_ITERATION_DIRECTIVE": tree.TaskIteration,
     "TASKYIELD_DIRECTIVE": tree.Taskyield,
-    "TASKGRAPH_DIRECTIVE": tree.Taskgraph,
     "TARGET_DATA_DIRECTIVE": tree.TargetData,
     "TARGET_ENTER_DATA_DIRECTIVE": tree.TargetEnterData,
     "TARGET_EXIT_DATA_DIRECTIVE": tree.TargetExitData,
     "TARGET_DIRECTIVE": tree.Target,
     "TARGET_UPDATE_DIRECTIVE": tree.TargetUpdate,
-    "INTEROP_DIRECTIVE": tree.InteropConstruct,
+    "DECLARE_TARGET_DIRECTIVE": tree.DeclareTarget,
+    "TEAMS_DIRECTIVE": tree.Teams,
+    "DISTRIBUTE_DIRECTIVE": tree.Distribute,
+    "MASTER_DIRECTIVE": tree.Master,
     "CRITICAL_DIRECTIVE": tree.Critical,
     "BARRIER_DIRECTIVE": tree.Barrier,
-    "TASKGROUP_DIRECTIVE": tree.Taskgroup,
     "TASKWAIT_DIRECTIVE": tree.Taskwait,
+    "TASKGROUP_DIRECTIVE": tree.Taskgroup,
     "ATOMIC_DIRECTIVE": tree.Atomic,
     "FLUSH_DIRECTIVE": tree.Flush,
-    "DEPOBJ_DIRECTIVE": tree.Depobj,
     "ORDERED_DIRECTIVE": tree.Ordered,
     "CANCEL_DIRECTIVE": tree.Cancel,
     "CANCELLATION_POINT_DIRECTIVE": tree.CancellationPoint,
+    "THREADPRIVATE_DIRECTIVE": tree.ThreadPrivate,
+    "DECLARE_REDUCTION_DIRECTIVE": tree.DeclareReduction,
 }
 
 # TODO: possible lru_cache here
-def _has_field(field_name: str, obj: type, ignore: set[str] = {"span", "name"}) -> bool:
+def _has_field(field_name: str, cls: type[Any], ignore: set[str]|None = None) -> bool:
+    """Checks if the dataclass `cls` contains the field `field_name`,
+    excluding any listed in the `ignore` set.
+    Note that this function does not check if it is from the same dataclass.
+    """
+    # avoid mutable default arguments
+    if ignore is None:
+        ignore = {"span", "name"}
+
+    # check ignore set
     if field_name in ignore:
         return False
-    field_names = {f.name for f in fields(obj)}
+
+    # check if field name is present
+    field_names = {f.name for f in fields(cls)}
     return field_name in field_names
 
 # TODO: possible lru_cache here
-def _required_fields(cls: type, ignore: set[str] = {"span", "name"}) -> set[str]:
+def _required_fields(cls: type[Any], ignore: set[str] = {"span", "name"}) -> set[str]:
+    """Returns the names of the fields of the dataclass `cls`
+    that must be supplied when initializing it,
+    excluding any fields listed in `ignore`.
+    """
     return {
         f.name
         for f in fields(cls)
@@ -85,12 +76,24 @@ def _required_fields(cls: type, ignore: set[str] = {"span", "name"}) -> set[str]
     }
 
 def _is_clause_type(hint) -> bool:
+    """Checks if type annotation represents a `tree.Clause`,
+    a list of clauses, or a union containing one of those types.
+
+    Examples:
+    ```
+    _is_clause_type(tree.Clause)              # True
+    _is_clause_type(list[tree.Clause])        # True
+    _is_clause_type(Union[tree.Clause, None]) # True
+    _is_clause_type(str)                      # False
+    _is_clause_type(list[str])                # False
+    ```
+    """
     origin = get_origin(hint)
     if origin is list:
         args = get_args(hint)
         return bool(args) and isinstance(args[0], type) and issubclass(args[0], tree.Clause)
 
-    if origin is Union:
+    if origin is (Union, UnionType):
         args = get_args(hint)
         return any(_is_clause_type(a) for a in args if a is not type(None))
 
@@ -112,8 +115,8 @@ class AstTransformer(Transformer):
 
     #### PYTHON CODE HELPERS ###################################################
 
-    # Retrieves the original code and passes it to ast.parse()
     def _parse_py_code(self, meta: Meta) -> tuple[pyast.Module, tree.Span, str]:
+        """Retrieves the original code and passes it to `ast.parse()`."""
         try:
             # Get the source of the expression and pass it to ast.parse()
             span = self.sv.meta2span(meta)
@@ -141,8 +144,8 @@ class AstTransformer(Transformer):
             msg = f"invalid Python code: {e.msg}"
             raise self.sv.syntax_error(msg, span) from None
 
-    # Modifies the Python AST's positions so they are relative to the whole file
     def _apply_span[T: pyast.AST](self, code: T, span: tree.Span, leading_ws: int = 0) -> T:
+        """Modifies the Python AST's positions so they are relative to the whole file."""
         node: pyast.AST
         for node in pyast.walk(code):
             starts_on_first_line = False
@@ -167,14 +170,40 @@ class AstTransformer(Transformer):
 
     #### CLAUSE HELPERS ########################################################
 
-    # Handles clause rules with one optional modifier and a single argument
-    # private_clause: PRIVATE_CLAUSE "(" [directive_name ":"] var_list ")"
-    # ==> _simple_clause(tree.Private, "targets", node)
     def _simple_clause[T: tree.Clause](self, cls: type[T], field: str, node: Tree) -> T:
+        """Build a clause with one optional modifier and a single argument.
+
+        Extracts the source span and clause name from the parse tree,
+        then identifies the optional directive name and argument.
+        The argument is stored in the specified field of the resulting clause.
+
+        This helper is intended for simple clause rules
+        whose modifier cannot be repeated.
+        Use `_clause_with_mods` for clauses with modifier rules.
+
+        Args:
+            cls: Clause class to instantiate.
+            field: Name of the clause field that receives the argument.
+            node: Parse tree node representing the clause.
+
+        Returns:
+            An instance of `cls` populated with
+            the source span, clause name, optional directive name, and argument.
+
+        Raises:
+            AssertionError: If the parse tree has an unexpected structure.
+
+        Example:
+            private_clause: PRIVATE_CLAUSE "(" [directive_name ":"] var_list ")"
+
+            This rule can be handled with:
+                _simple_clause(tree.Private, "targets", node)
+        """
         span = self.sv.meta2span(node.meta)
         name = self._name_from_token(node.children[0])
-
         directive_name = None
+
+        # Three children indicate a directive name and an argument
         if len(node.children) == 3 and isinstance(node.children[1], tree.DirectiveName):
             directive_name = node.children[1]
             arg = (
@@ -182,14 +211,20 @@ class AstTransformer(Transformer):
                 if isinstance(node.children[2], Tree)
                 else node.children[2]
             )
+
+        # Two children indicate an argument without a directive name
         elif len(node.children) == 2:
             arg = (
                 node.children[1].children[0]
                 if isinstance(node.children[1], Tree)
                 else node.children[1]
             )
+
+        # A single child represents a clause with no argument
         elif len(node.children) == 1:
             arg = None
+
+        # Reject grammar structures that this helper cannot represent
         else:
             assert False, "_simple_clause() used on a complex clause"
 
@@ -204,6 +239,34 @@ class AstTransformer(Transformer):
         mod_list: list,
         **kwargs
     ) -> T:
+        """Build a clause from a token and a collection of optional modifiers.
+
+        Converts parsed modifier rules into keyword arguments for the clause constructor.
+        Validates modifier names, rejects duplicate modifiers,
+        and checks that all required constructor fields are provided.
+
+        Modifier rules may be represented by parse-tree nodes
+        or existing `tree.Modifier` instances.
+        A modifier rule represented by a parse-tree node must contain exactly one child.
+
+        Args:
+            cls: Clause class to instantiate.
+            meta: Parser metadata used to determine the source span.
+            token: Token identifying the clause.
+            mod_list: Parsed modifiers, possibly containing absent modifiers represented by None.
+            **kwargs: Additional clause fields supplied by the caller.
+
+        Returns:
+            An instance of `cls` populated with
+            the clause name, source span, modifiers, and additional fields.
+
+        Raises:
+            AssertionError: If the token or modifier grammar structure is invalid.
+            TypeError: If a modifier has an unsupported representation.
+            SyntaxError: If a modifier is duplicated
+                or a required field is missing,
+                using the syntax-error mechanism provided by `self.sv`.
+        """
         span = self.sv.meta2span(meta)
         assert isinstance(token, Token)
         name = self._name_from_token(token)
@@ -213,20 +276,28 @@ class AstTransformer(Transformer):
                 continue
 
             field_name: str
+            # Parse-tree nodes carry the destination field name in their rule
             if isinstance(mod, Tree):
                 assert _has_field(mod.data, cls), "Incorrect grammar: rule name does not match field"
                 assert len(mod.children) == 1, "Incorrect grammar: modifier rules must be a single token"
+
+                # Use the grammar rule name as the destination field
                 field_name = mod.data
                 mod = (
                     mod.children[0]
                     if isinstance(mod.children[0], tree.Modifier)
                     else self._name_from_token(mod.children[0])
                 )
+
+            # An existing Modifier already identifies its destination field
             elif isinstance(mod, tree.Modifier):
                 field_name = mod.id
+
+            # Reject modifier representations this helper does not understand
             else:
                 raise TypeError(f"unexpected modifier kind: {mod!r}")
 
+            # A previously supplied value means the same modifier appeared twice
             if field_name in kwargs:
                 raise self.sv.syntax_error(
                     f'"{field_name}" modifier is already defined for {cls.id} clause.', span,
@@ -257,8 +328,38 @@ class AstTransformer(Transformer):
         name: Token,
         clause_list: Iterable[tree.Clause|None],
         **extra_args,
-        ) -> tuple[T, list[tree.Clause]]:
-        # TODO: innermost-leaf or outermost-leaf properties are not handled here
+    ) -> tuple[T, list[tree.Clause]]:
+        """Build a construct and return clauses that it cannot consume.
+
+        Selects the construct class associated with the directive token,
+        then assigns compatible clauses to the construct's fields.
+        Clauses that do not correspond to a field,
+        or whose directive name targets another construct,
+        are collected and returned as rejected clauses.
+
+        Repeated clauses are accumulated when the corresponding field is a list.
+        Duplicate clauses targeting a non-list field produce a syntax error.
+        Required fields annotated as clause types must be supplied.
+
+        Args:
+            meta: Parser metadata used to determine the construct's source span.
+            name: Token identifying the construct directive.
+            clause_list: Candidate clauses to assign to the construct.
+                None entries are ignored.
+            **extra_args: Additional keyword arguments passed to the constructor.
+
+        Returns:
+            A tuple containing the constructed directive
+            and a list of clauses that were not consumed by it.
+
+        Raises:
+            SyntaxError: If a non-repeatable clause is duplicated
+                or a required clause field is missing,
+                using the syntax-error mechanism provided by `self.sv`.
+
+        Note:
+            Handling of innermost-leaf and outermost-leaf properties is not implemented here.
+        """
 
         cls: type[T] = _DIRECTIVE_TYPES[name.type] # ty:ignore[invalid-assignment] # zuban:ignore[assignment]
         span = self.sv.meta2span(meta)
@@ -270,6 +371,8 @@ class AstTransformer(Transformer):
             if clause is None:
                 continue
 
+            # Reject clauses that do not match a construct field
+            # or target another directive through their explicit directive name.
             if (
                 not _has_field(clause.id, cls) or
                 (clause.directive_name is not None and clause.directive_name.string != cls.id)
@@ -277,6 +380,7 @@ class AstTransformer(Transformer):
                 rejected.append(clause)
                 continue
 
+            # A clause with an already populated field may be a repeated clause.
             if clause.id in kwargs:
                 current = kwargs[clause.id]
 
@@ -338,7 +442,30 @@ class AstTransformer(Transformer):
         clause_list: Iterable[tree.Clause|None],
         **extra_args,
     ) -> T:
+        """Build a construct and reject any clauses that it cannot consume.
+
+        Delegates clause assignment and required-field validation to `_construct_with_rejected`.
+        If any clauses remain unconsumed,
+        raises a syntax error with a diagnostic pointing to each rejected clause.
+
+        Args:
+            meta: Parser metadata used to determine the construct's source span.
+            name: Token identifying the construct directive.
+            clause_list: Candidate clauses to assign to the construct.
+                None entries are ignored.
+            **extra_args: Additional keyword arguments passed to the constructor.
+
+        Returns:
+            The fully constructed directive.
+
+        Raises:
+            SyntaxError: If clause assignment fails, a required clause is missing,
+                or one or more clauses cannot be used by the construct.
+        """
+        # Build the construct and retrieve clauses that could not be assigned
         construct, clause_list = self._construct_with_rejected(meta, name, clause_list, **extra_args) # zuban:ignore[var-annotated]
+
+        # Reject any leftover clauses instead of silently discarding them
         if clause_list:
             raise self.sv.syntax_error(
                 f"some clauses were not used in this construct.",
@@ -372,7 +499,7 @@ class AstTransformer(Transformer):
         #     0xXX   ==> Base 16
         return tree.PyInt(span=self.sv.token2span(token), value=int(token, 0))
 
-    #### COMMON DEFINITIONS ####################################################
+    #### PYTHON DEFINITIONS ####################################################
 
     def py_expr(self, node: Tree) -> tree.PyExpr:
         code, span, source = self._parse_py_code(node.meta)
@@ -398,6 +525,8 @@ class AstTransformer(Transformer):
             source = source,
         )
 
+    #### LISTS DEFINITIONS #####################################################
+
     # var_list: IDENTIFIER ("," IDENTIFIER)*
     def var_list(self, node: Tree) -> list[tree.PyName]:
         return list(cast("list[tree.PyName]", node.children))
@@ -418,10 +547,54 @@ class AstTransformer(Transformer):
     def directive_name(self, token: Token) -> tree.DirectiveName:
         return tree.DirectiveName(span=self.sv.token2span(token), string=_DIRECTIVE_TYPES[token.type].id)
 
+    # TODO: may be unused
     def directive_list(self, node: Tree) -> list[tree.DirectiveName]:
         return list(cast("list[tree.DirectiveName]", node.children))
 
-    #### MODIFIERS #############################################################
+
+    #### COMMON CLAUSES ########################################################
+
+    # if_clause: IF_CLAUSE "(" [directive_name ":"] py_expr ")"
+    def if_clause(self, node: Tree) -> tree.If:
+        return self._simple_clause(tree.If, "expr", node)
+
+    # nowait_clause: NOWAIT_CLAUSE ["(" [directive_name ":"] py_expr ")"]
+    def nowait_clause(self, node: Tree) -> tree.NoWait:
+        return self._simple_clause(tree.NoWait, "dont_synchronize", node)
+
+    # collapse_clause: COLLAPSE_CLAUSE "(" [directive_name ":"] py_expr ")"
+    def collapse_clause(self, node: Tree) -> tree.Collapse:
+        return self._simple_clause(tree.Collapse, "num", node)
+
+
+    #### data sharing clauses ####
+
+    # default_clause: DEFAULT_CLAUSE "(" data_sharing_attr_name [":" directive_name] ")"
+    def default_clause(self, node: Tree) -> tree.Default:
+        return self._clause_with_mods(tree.Default, node.meta, node.children[0], node.children[1:])
+
+    # shared_clause: SHARED_CLAUSE "(" [directive_name ":"] var_list ")"
+    def shared_clause(self, node: Tree) -> tree.Shared:
+        return self._simple_clause(tree.Shared, "targets", node)
+
+    # private_clause: PRIVATE_CLAUSE "(" [directive_name ":"] var_list ")"
+    def private_clause(self, node: Tree) -> tree.Private:
+        return self._simple_clause(tree.Private, "targets", node)
+
+    # firstprivate_clause: FIRSTPRIVATE_CLAUSE "(" [directive_name ":"] var_list ")"
+    def firstprivate_clause(self, node: Tree) -> tree.FirstPrivate:
+        return self._simple_clause(tree.FirstPrivate, "targets", node)
+
+    # lastprivate_clause: LASTPRIVATE_CLAUSE "(" [directive_name ":"] var_list ")"
+    def lastprivate_clause(self, node: Tree) -> tree.LastPrivate:
+        return self._simple_clause(tree.LastPrivate, "targets", node)
+
+    # reduction_clause: REDUCTION_CLAUSE  "(" [directive_name ","] reduction_op ":" var_list ")"
+    def reduction_clause(self, node: Tree) -> tree.Reduction:
+        return self._clause_with_mods(
+            tree.Reduction, node.meta, node.children[0], node.children[1:-1],
+            targets=node.children[-1]
+        )
 
     # reduction_op: IDENTIFIER | PLUS | MINUS | MULT | ...
     @v_args(inline=True)
@@ -430,154 +603,62 @@ class AstTransformer(Transformer):
             return tree.ReductionOp(span=token.span, value=token.string)
         return tree.ReductionOp(span=self.sv.token2span(token), value=str(token))
 
-    # induction_op: IDENTIFIER | PLUS | MULT
-    @v_args(inline=True)
-    def induction_op(self, token: Token|tree.PyName) -> tree.InductionOp:
-        if isinstance(token, tree.PyName):
-            return tree.InductionOp(span=token.span, value=token.string)
-        return tree.InductionOp(span=self.sv.token2span(token), value=str(token))
-
-    # original_modifier: ORIGINAL "(" (DEFAULT | PRIVATE | SHARED) ")"
-    @v_args(inline=True, meta=True)
-    def original_modifier(self, meta: Meta, token: Token, sharing_name: Token) -> tree.Original:
-        return tree.Original(
-            span=self.sv.meta2span(meta),
-            name=self._name_from_token(token),
-            sharing_name=self._name_from_token(sharing_name),
+    # linear_clause: LINEAR_CLAUSE "(" linear_list [":" py_expr] ")"
+    # TODO: this does not handle REF/UVAL/VAL properly
+    def linear_clause(self, node: Tree) -> tree.Linear:
+        return self._clause_with_mods(
+            tree.Linear, node.meta, node.children[0], node.children[2:],
+            targets=node.children[1]
         )
 
-    # iterator_modifier: ITERATOR "(" iterator_specifier ("," iterator_specifier)* ")"
-    def iterator_modifier(self, node: Tree) -> tree.Iterator:
-        return tree.Iterator(
-            span=self.sv.meta2span(node.meta),
-            name=self._name_from_token(node.children[0]),
-            specifiers=cast("list[tree.IteratorSpecifier]", node.children[1:]),
+
+    #### data copying clauses ####
+
+    # copyin_clause: COPYIN_CLAUSE "(" [directive_name ":"] var_list ")"
+    def copyin_clause(self, node: Tree) -> tree.CopyIn:
+        return self._simple_clause(tree.CopyIn, "targets", node)
+
+    # copyprivate_clause: COPYPRIVATE_CLAUSE "(" [directive_name ":"] var_list ")"
+    def copyprivate_clause(self, node: Tree) -> tree.CopyPrivate:
+        return self._simple_clause(tree.CopyPrivate, "targets", node)
+
+
+    #### master & synch clauses ####
+
+    # depend_clause: DEPEND_CLAUSE "(" [task_dependence_name ":"] expr_list ")"
+    def depend_clause(self, node: Tree) -> tree.Depend:
+        return self._clause_with_mods(
+            tree.Depend, node.meta, node.children[0], node.children[1:-1],
+            locator_list=node.children[-1]
         )
 
-    # iterator_specifier: IDENTIFIER "=" py_expr ":" py_expr [":" py_expr]
-    @v_args(inline=True, meta=True)
-    def iterator_specifier(
-        self, meta: Meta,
-        name: tree.PyName,
-        begin: tree.PyExpr, end: tree.PyExpr, step: tree.PyExpr|None
-    ) -> tree.IteratorSpecifier:
-        return tree.IteratorSpecifier(
-            span=self.sv.meta2span(meta),
-            name=name, begin=begin, end=end, step=step,
+    #### data mapping clauses ####
+
+    # map_clause: MAP_CLAUSE "(" [[always_modifier_name ","?] map_type_name ":"] var_list ")"
+    def map_clause(self, node: Tree) -> tree.Map:
+        return self._clause_with_mods(
+            tree.Map, node.meta, node.children[0], node.children[1:-1],
+            targets=node.children[-1]
         )
 
-    # step_modifier: STEP "(" py_expr ")"
-    @v_args(inline=True, meta=True)
-    def step_modifier(self, meta: Meta, token: Token, expr: tree.PyExpr) -> tree.Step:
-        return tree.Step(
-            span=self.sv.meta2span(meta),
-            name=self._name_from_token(token),
-            expr=expr,
-        )
+    # defaultmap_clause: DEFAULTMAP_CLAUSE "(" tofrom_modifier_name [":" scalar_modifier_name] ")"
+    def defaultmap_clause(self, node: Tree) -> tree.DefaultMap:
+        return self._clause_with_mods(tree.DefaultMap, node.meta, node.children[0], node.children[1:])
 
-    # allocator_modifier: ALLOCATOR "(" py_expr ")"
-    @v_args(inline=True, meta=True)
-    def allocator_modifier(self, meta: Meta, token: Token, expr: tree.PyExpr) -> tree.AllocatorModifier:
-        return tree.AllocatorModifier(
-            span=self.sv.meta2span(meta),
-            name=self._name_from_token(token),
-            allocator=expr,
-        )
+    #### CONSTRUCT SPECIFIC CLAUSES ############################################
 
-    # align_modifier: ALIGN "(" py_expr ")"
-    @v_args(inline=True, meta=True)
-    def align_modifier(self, meta: Meta, token: Token, expr: tree.PyExpr) -> tree.AlignModifier:
-        return tree.AlignModifier(
-            span=self.sv.meta2span(meta),
-            name=self._name_from_token(token),
-            alignment=expr,
-        )
+    #### parallel construct clauses ####
 
-    # mapper_modifier: MAPPER "(" IDENTIFIER ")"
-    @v_args(inline=True, meta=True)
-    def mapper_modifier(self, meta: Meta, token: Token, identifier: tree.PyName) -> tree.Mapper:
-        return tree.Mapper(
-            span=self.sv.meta2span(meta),
-            name=self._name_from_token(token),
-            identifier=identifier,
-        )
+    # num_threads_clause: NUM_THREADS_CLAUSE "(" [directive_name  ":"] py_expr ")"
+    def num_threads_clause(self, node: Tree) -> tree.NumThreads:
+        return self._simple_clause(tree.NumThreads, "nthreads", node)
 
-    # memspace_modifier: MEMSPACE "(" py_expr ")"
-    @v_args(inline=True, meta=True)
-    def memspace_modifier(self, meta: Meta, token: Token, handle: tree.PyExpr) -> tree.MemSpace:
-        return tree.MemSpace(
-            span=self.sv.meta2span(meta),
-            name=self._name_from_token(token),
-            handle=handle,
-        )
+    # proc_bind_clause: PROC_BIND_CLAUSE "(" [directive_name ":"] (CLOSE | PRIMARY | SPREAD) ")"
+    def proc_bind_clause(self, node: Tree) -> tree.ProcBind:
+        return self._simple_clause(tree.ProcBind, "affinity_policy_name", node)
 
-    # traits_modifier: TRAITS "(" py_expr ")"
-    @v_args(inline=True, meta=True)
-    def traits_modifier(self, meta: Meta, token: Token, traits: tree.PyExpr) -> tree.Traits:
-        return tree.Traits(
-            span=self.sv.meta2span(meta),
-            name=self._name_from_token(token),
-            traits=traits,
-        )
 
-    # depinfo_modifier: (IN | INOUT| INOUTSET | MUTEXINOUTSET | OUT) "(" var_list ")"
-    @v_args(inline=True, meta=True)
-    def depinfo_modifier(self, meta: Meta, token: Token, locator_list: list[tree.PyName]) -> tree.DepInfo:
-        return tree.DepInfo(
-            span=self.sv.meta2span(meta),
-            name=self._name_from_token(token),
-            locator_list=locator_list,
-        )
-
-    # loop_modifier: (FUSED | GRID | ...)  ["(" expr_list ")"]
-    @v_args(inline=True, meta=True)
-    def loop_modifier(self, meta: Meta, token: Token, indices: list[tree.PyExpr]|None) -> tree.LoopModifier:
-        return tree.LoopModifier(
-            span=self.sv.meta2span(meta),
-            name=self._name_from_token(token),
-            indices=indices or [],
-        )
-
-    # FR "(" IDENTIFIER ")" -> fr_selector
-    @v_args(inline=True, meta=True)
-    def fr_selector(self, meta: Meta, token: Token, identifier: tree.PyName) -> tree.FrSelector:
-        return tree.FrSelector(
-            span = self.sv.meta2span(meta),
-            name = self._name_from_token(token),
-            identifier = identifier,
-        )
-
-    # ATTR "(" expr_list ")" -> attr_selector
-    @v_args(inline=True, meta=True)
-    def attr_selector(self, meta: Meta, token: Token, expr_list: list[tree.PyExpr]) -> tree.AttrSelector:
-        return tree.AttrSelector(
-            span = self.sv.meta2span(meta),
-            name = self._name_from_token(token),
-            expr_list = expr_list,
-        )
-
-    # prefer_type_modifier: PREFER_TYPE "(" preference_specification ("," preference_specification )* ")"
-    # preference_specification: "{" _preference_selector ("," _preference_selector)* "}" | IDENTIFIER
-    def prefer_type_modifier(self, node: Tree) -> tree.Prefer:
-        return tree.Prefer(
-            span=self.sv.meta2span(node.meta),
-            name=self._name_from_token(node.children[0]),
-            spec=[s if isinstance(s, tree.PyName) else list(s.children) for s in node.children[1:]] # ty:ignore[invalid-argument-type] # zuban:ignore[arg-type]
-        )
-
-    # append_op: INTEROP "(" _interop_type ("," _interop_type)* ")"
-    def append_op(self, node: Tree) -> tree.InteropModifier:
-        return tree.InteropModifier(
-            span=self.sv.meta2span(node.meta),
-            name=self._name_from_token(node.children[0]),
-            kind_name=cast("list[tree.Name]", node.children[1:])
-        )
-
-    # TODO: this uses context_selector as a stmt_list, which is not exactly what the standard required
-    # context_selector: stmt_list
-    @v_args(inline=True, meta=True)
-    def context_selector(self, meta: Meta, stmt_list: list[tree.PyStmt]) -> tree.ContextSelector:
-        return tree.ContextSelector(span=self.sv.meta2span(meta), stmt_list=stmt_list)
+    #### for construct clauses ####
 
     # schedule_type: STATIC | DYNAMIC | GUIDED | AUTO | RUNTIME
     @v_args(inline=True)
@@ -586,93 +667,29 @@ class AstTransformer(Transformer):
         name = tree.Name(span=span, string=str(token))
         return tree.ScheduleType(span=span, kind_name=name)
 
-    #### CLAUSES ###############################################################
-
-    # combiner_clause: COMBINER_CLAUSE "(" [directive_name ":"] py_stmt ")"
-    def combiner_clause(self, node: Tree) -> tree.Combiner:
-        return self._simple_clause(tree.Combiner, "combiner_stmt", node)
-
-    # initializer_clause: INITIALIZER_CLAUSE "(" [directive_name ":"] py_stmt ")"
-    def initializer_clause(self, node: Tree) -> tree.Initializer:
-        return self._simple_clause(tree.Initializer, "initializer_stmt", node)
-
-    # inductor_clause: INDUCTOR_CLAUSE "(" [directive_name ":"] py_stmt ")"
-    def inductor_clause(self, node: Tree) -> tree.Inductor:
-        return self._simple_clause(tree.Inductor, "inductor_stmt", node)
-
-    # collector_clause: COLLECTOR_CLAUSE "(" [directive_name ":"] py_expr ")"
-    def collector_clause(self, node: Tree) -> tree.Collector:
-        return self._simple_clause(tree.Collector, "collector_expr", node)
-
-    # exclusive_clause: EXCLUSIVE_CLAUSE "(" [directive_name ":"] var_list ")"
-    def exclusive_clause(self, node: Tree) -> tree.Exclusive:
-        return self._simple_clause(tree.Exclusive, "targets", node)
-
-    # inclusive_clause: INCLUSIVE_CLAUSE "(" [directive_name ":"] var_list ")"
-    def inclusive_clause(self, node: Tree) -> tree.Inclusive:
-        return self._simple_clause(tree.Inclusive, "targets", node)
-
-    # init_complete_clause: INIT_COMPLETE_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def init_complete_clause(self, node: Tree) -> tree.InitComplete:
-        return self._simple_clause(tree.InitComplete, "create_init_phase", node)
-
-    # device_type_clause: DEVICE_TYPE_CLAUSE "(" [directive_name ":"] device_type_kind ")"
-    def device_type_clause(self, node: Tree) -> tree.DeviceType:
-        return self._simple_clause(tree.DeviceType, "device_type_description_name", node)
-
-    # align_clause: ALIGN_CLAUSE "(" [directive_name ":"] py_expr ")"
-    def align_clause(self, node: Tree) -> tree.Align:
-        return self._simple_clause(tree.Align, "alignment", node)
-
-    # allocator_clause: ALLOCATOR_CLAUSE "(" [directive_name ":"] py_expr ")"
-    def allocator_clause(self, node: Tree) -> tree.Allocator:
-        return self._simple_clause(tree.Allocator, "allocator", node)
-
-    # when_clause: WHEN_CLAUSE "(" _when_modifier_list ":" start ")"
-    def when_clause(self, node: Tree) -> tree.When:
+    # schedule_clause: SCHEDULE_CLAUSE "(" [_schedule_modifier_list ":"] schedule_type ["," py_expr] ")"
+    def schedule_clause(self, node: Tree) -> tree.Schedule:
+        schedule_pos = -2 if isinstance(node.children[-1], tree.ScheduleType) else -1
         return self._clause_with_mods(
-            tree.When, node.meta, node.children[0], node.children[1:-1],
-            directive=node.children[-1]
+            tree.Schedule, node.meta, node.children[0], node.children[1:schedule_pos],
+            type=node.children[schedule_pos],
+            chunk=node.children[-1] if schedule_pos == -2 else None,
         )
 
-    # otherwise_clause: OTHERWISE_CLAUSE ["(" [directive_name ":"] start ")"]
-    def otherwise_clause(self, node: Tree) -> tree.Otherwise:
-        return self._simple_clause(tree.Otherwise, "directive", node)
+    # ordered_clause: ORDERED_CLAUSE ["(" [directive_name ":"] py_expr ")"]
+    def ordered_clause(self, node: Tree) -> tree.OrderedClause:
+        return self._simple_clause(tree.OrderedClause, "n", node)
 
-    # adjust_args_clause: ADJUST_ARGS_CLAUSE "(" _adjust_args_modifier_list ":" var_list ")"
-    def adjust_args_clause(self, node: Tree) -> tree.AdjustArgs:
-        return self._clause_with_mods(
-            tree.AdjustArgs, node.meta, node.children[0], node.children[1:-1],
-            targets=node.children[-1]
-        )
 
-    # append_args_clause: APPEND_ARGS_CLAUSE "(" [directive_name ":"] append_args_arg ")"
-    def append_args_clause(self, node: Tree) -> tree.AppendArgs:
-        return self._simple_clause(tree.AppendArgs, "append_op", node)
+    #### simd construct clauses ####
 
-    # match_clause: MATCH_CLAUSE "(" [directive_name ":"] context_selector ")"
-    def match_clause(self, node: Tree) -> tree.Match:
-        return self._simple_clause(tree.Match, "context_selector", node)
+    # safelen_clause: SAFELEN_CLAUSE "(" [directive_name ":"] py_expr ")"
+    def safelen_clause(self, node: Tree) -> tree.SafeLen:
+        return self._simple_clause(tree.SafeLen, "length", node)
 
-    # interop_clause: INTEROP_CLAUSE "(" [directive_name ":"] var_list ")"
-    def interop_clause(self, node: Tree) -> tree.InteropClause:
-        return self._simple_clause(tree.InteropClause, "targets", node)
-
-    # is_device_ptr_clause: IS_DEVICE_PTR_CLAUSE "(" [directive_name ":"] var_list ")"
-    def is_device_ptr_clause(self, node: Tree) -> tree.IsDevicePtr:
-        return self._simple_clause(tree.IsDevicePtr, "targets", node)
-
-    # has_device_addr_clause: HAS_DEVICE_ADDR_CLAUSE "(" [directive_name ":"] var_list ")"
-    def has_device_addr_clause(self, node: Tree) -> tree.HasDeviceAddr:
-        return self._simple_clause(tree.HasDeviceAddr, "targets", node)
-
-    # nocontext_clause: NOCONTEXT_CLAUSE "(" [directive_name ":"] py_expr ")"
-    def nocontext_clause(self, node: Tree) -> tree.NoContext:
-        return self._simple_clause(tree.NoContext, "dont_update_context", node)
-
-    # novariants_clause: NOVARIANTS_CLAUSE "(" [directive_name ":"] py_expr ")"
-    def novariants_clause(self, node: Tree) -> tree.NoVariants:
-        return self._simple_clause(tree.NoVariants, "dont_use_variant", node)
+    # simdlen_clause: SIMDLEN_CLAUSE "(" [directive_name ":"] py_expr ")"
+    def simdlen_clause(self, node: Tree) -> tree.Simdlen:
+        return self._simple_clause(tree.Simdlen, "length", node)
 
     # aligned_clause: ALIGNED_CLAUSE "(" var_list [":" _aligned_modifier_list] ")"
     def aligned_clause(self, node: Tree) -> tree.Aligned:
@@ -681,16 +698,8 @@ class AstTransformer(Transformer):
             targets=node.children[1]
         )
 
-    # linear_clause: LINEAR_CLAUSE "(" var_list [":" _linear_modifier_list] ")"
-    def linear_clause(self, node: Tree) -> tree.Linear:
-        return self._clause_with_mods(
-            tree.Linear, node.meta, node.children[0], node.children[2:],
-            targets=node.children[1]
-        )
 
-    # simdlen_clause: SIMDLEN_CLAUSE "(" [directive_name ":"] py_expr ")"
-    def simdlen_clause(self, node: Tree) -> tree.Simdlen:
-        return self._simple_clause(tree.Simdlen, "length", node)
+    #### declare simd construct clauses ####
 
     # uniform_clause: UNIFORM_CLAUSE "(" [directive_name ":"] var_list ")"
     def uniform_clause(self, node: Tree) -> tree.Uniform:
@@ -704,192 +713,89 @@ class AstTransformer(Transformer):
     def notinbranch_clause(self, node: Tree) -> tree.NotInBranch:
         return self._simple_clause(tree.NotInBranch, "not_in_branch", node)
 
-    # enter_clause: ENTER_CLAUSE "(" [_enter_modifier_list ":"] var_list ")"
-    def enter_clause(self, node: Tree) -> tree.Enter:
-        return self._clause_with_mods(
-            tree.Enter, node.meta, node.children[0], node.children[1:-1],
-            targets=node.children[-1]
-        )
 
-    # indirect_clause: INDIRECT_CLAUSE ["(" [directive_name ":"] py_type ")"]
-    def indirect_clause(self, node: Tree) -> tree.Indirect:
-        return self._simple_clause(tree.Indirect, "invoked_by_fptr", node)
+    #### task construct clauses ####
+
+    # final_clause: FINAL_CLAUSE "(" [directive_name ":"] py_expr ")"
+    def final_clause(self, node: Tree) -> tree.Final:
+        return self._simple_clause(tree.Final, "finalize", node)
+
+    # mergeable_clause: MERGEABLE_CLAUSE ["(" [directive_name ":"] py_expr ")"]
+    def mergeable_clause(self, node: Tree) -> tree.Mergeable:
+        return self._simple_clause(tree.Mergeable, "can_merge", node)
+
+    # untied_clause: UNTIED_CLAUSE ["(" [directive_name ":"] py_expr ")"]
+    def untied_clause(self, node: Tree) -> tree.Untied:
+        return self._simple_clause(tree.Untied, "can_change_threads", node)
+
+    # priority_clause: PRIORITY_CLAUSE "(" [directive_name ":"] py_expr ")"
+    def priority_clause(self, node: Tree) -> tree.Priority:
+        return self._simple_clause(tree.Priority, "value", node)
+
+
+    #### taskloop construct clauses ####
+
+    # grainsize_clause: GRAINSIZE_CLAUSE "(" [directive_name ":"] py_expr ")"
+    def grainsize_clause(self, node: Tree) -> tree.GrainSize:
+        return self._simple_clause(tree.GrainSize, "grain_size", node)
+
+    # num_tasks_clause: NUM_TASKS_CLAUSE "(" [_num_tasks_modifier_list ":"] py_expr ")"
+    def num_tasks_clause(self, node: Tree) -> tree.NumTasks:
+        return self._simple_clause(tree.NumTasks, "num_tasks", node)
+
+    # nogroup_clause: NOGROUP_CLAUSE ["(" [directive_name ":"] py_expr ")"]
+    def nogroup_clause(self, node: Tree) -> tree.NoGroup:
+        return self._simple_clause(tree.NoGroup, "dont_synchronize", node)
+
+
+    #### target_data construct clauses ####
+
+    # device_clause: DEVICE_CLAUSE "(" [directive_name ":"] py_expr ")"
+    def device_clause(self, node: Tree) -> tree.Device:
+        return self._simple_clause(tree.Device, "device_description", node)
+
+    # use_device_ptr_clause: USE_DEVICE_PTR_CLAUSE "(" [directive_name ":"] var_list ")"
+    def use_device_ptr_clause(self, node: Tree) -> tree.UseDevicePtr:
+        return self._simple_clause(tree.UseDevicePtr, "targets", node)
+
+
+    #### target construct clauses ####
+
+    # is_device_ptr_clause: IS_DEVICE_PTR_CLAUSE "(" [directive_name ":"] var_list ")"
+    def is_device_ptr_clause(self, node: Tree) -> tree.IsDevicePtr:
+        return self._simple_clause(tree.IsDevicePtr, "targets", node)
+
+
+    #### target_update construct clauses ####
+
+    # to_clause: TO_CLAUSE "(" [directive_name ":"] var_list ")"
+    def to_clause(self, node: Tree) -> tree.To:
+        return self._simple_clause(tree.To, "targets", node)
+
+    # from_clause: FROM_CLAUSE "(" [directive_name ":"] var_list ")"
+    def from_clause(self, node: Tree) -> tree.From:
+        return self._simple_clause(tree.From, "targets", node)
+
+
+    #### declare target construct clauses ####
 
     # link_clause: LINK_CLAUSE "(" [directive_name ":"] var_list ")"
     def link_clause(self, node: Tree) -> tree.Link:
         return self._simple_clause(tree.Link, "targets", node)
 
-    # local_clause: LOCAL_CLAUSE "(" [directive_name ":"] var_list ")"
-    def local_clause(self, node: Tree) -> tree.Local:
-        return self._simple_clause(tree.Local, "targets", node)
 
-    # atomic_default_mem_order_clause: ATOMIC_DEFAULT_MEM_ORDER_CLAUSE "(" [directive_name ":"] (ACQ_REL | ACQUIRE | RELAXED | SEQ_CST) ")"
-    def atomic_default_mem_order_clause(self, node: Tree) -> tree.AtomicDefaultMemOrder:
-        return self._simple_clause(tree.AtomicDefaultMemOrder, "memory_order_name", node)
+    #### teams construct clauses ####
 
-    # dynamic_allocators_clause: DYNAMIC_ALLOCATORS_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def dynamic_allocators_clause(self, node: Tree) -> tree.DynamicAllocators:
-        return self._simple_clause(tree.DynamicAllocators, "required", node)
-
-    # reverse_offload_clause: REVERSE_OFFLOAD_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def reverse_offload_clause(self, node: Tree) -> tree.ReverseOffload:
-        return self._simple_clause(tree.ReverseOffload, "required", node)
-
-    # unified_address_clause: UNIFIED_ADDRESS_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def unified_address_clause(self, node: Tree) -> tree.UnifiedAddress:
-        return self._simple_clause(tree.UnifiedAddress, "required", node)
-
-    # unified_shared_memory_clause: UNIFIED_SHARED_MEMORY_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def unified_shared_memory_clause(self, node: Tree) -> tree.UnifiedSharedMemory:
-        return self._simple_clause(tree.UnifiedSharedMemory, "required", node)
-
-    # self_maps_clause: SELF_MAPS_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def self_maps_clause(self, node: Tree) -> tree.SelfMaps:
-        return self._simple_clause(tree.SelfMaps, "required", node)
-
-    # device_safesync_clause: DEVICE_SAFESYNC_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def device_safesync_clause(self, node: Tree) -> tree.DeviceSafesync:
-        return self._simple_clause(tree.DeviceSafesync, "required", node)
-
-    # absent_clause: ABSENT_CLAUSE "(" [directive_name ":"] directive_list ")"
-    def absent_clause(self, node: Tree) -> tree.Absent:
-        return self._simple_clause(tree.Absent, "directive_names", node)
-
-    # contains_clause: CONTAINS_CLAUSE "(" [directive_name ":"] directive_list ")"
-    def contains_clause(self, node: Tree) -> tree.Contains:
-        return self._simple_clause(tree.Contains, "directive_names", node)
-
-    # holds_clause: HOLDS_CLAUSE "(" [directive_name ":"] py_expr ")"
-    def holds_clause(self, node: Tree) -> tree.Holds:
-        return self._simple_clause(tree.Holds, "hold_expr", node)
-
-    # no_openmp_clause: NO_OPENMP_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def no_openmp_clause(self, node: Tree) -> tree.NoOpenmp:
-        return self._simple_clause(tree.NoOpenmp, "can_assume", node)
-
-    # no_openmp_constructs_clause: NO_OPENMP_CONSTRUCTS_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def no_openmp_constructs_clause(self, node: Tree) -> tree.NoOpenmpConstructs:
-        return self._simple_clause(tree.NoOpenmpConstructs, "can_assume", node)
-
-    # no_openmp_routines_clause: NO_OPENMP_ROUTINES_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def no_openmp_routines_clause(self, node: Tree) -> tree.NoOpenmpRoutines:
-        return self._simple_clause(tree.NoOpenmpRoutines, "can_assume", node)
-
-    # no_parallelism_clause: NO_PARALLELISM_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def no_parallelism_clause(self, node: Tree) -> tree.NoParallelism:
-        return self._simple_clause(tree.NoParallelism, "can_assume", node)
-
-    # at_clause: AT_CLAUSE "(" [directive_name ":"] (COMPILATION | EXECUTION) ")"
-    def at_clause(self, node: Tree) -> tree.At:
-        return self._simple_clause(tree.At, "action_time_name", node)
-
-    # message_clause: MESSAGE_CLAUSE "(" [directive_name ":"] py_expr ")"
-    def message_clause(self, node: Tree) -> tree.Message:
-        return self._simple_clause(tree.Message, "msg_string", node)
-
-    # severity_clause: SEVERITY_CLAUSE "(" [directive_name ":"] (FATAL | WARNING) ")"
-    def severity_clause(self, node: Tree) -> tree.Severity:
-        return self._simple_clause(tree.Severity, "severity_level_name", node)
-
-    # looprange_clause: LOOPRANGE_CLAUSE "(" [directive_name ":"] py_expr "," py_expr ")"
-    @v_args(inline=True, meta=True)
-    def looprange_clause(
-        self, meta: Meta, token: Token,
-        directive_name: tree.DirectiveName|None, first: tree.PyExpr, count: tree.PyExpr,
-    ) -> tree.LoopRange:
-        return tree.LoopRange(
-            span = self.sv.meta2span(meta),
-            name = self._name_from_token(token),
-            first = first,
-            count = count,
-            directive_name = directive_name,
-        )
-
-    # permutation_clause: PERMUTATION_CLAUSE "(" [directive_name ":"] expr_list ")"
-    def permutation_clause(self, node: Tree) -> tree.Permutation:
-        return self._simple_clause(tree.Permutation, "permutation_list", node)
-
-    # counts_clause: COUNTS_CLAUSE "(" [directive_name ":"] expr_list ")"
-    def counts_clause(self, node: Tree) -> tree.Counts:
-        return self._simple_clause(tree.Counts, "count_list", node)
-
-    # sizes_clause: SIZES_CLAUSE "(" [directive_name ":"] expr_list ")"
-    def sizes_clause(self, node: Tree) -> tree.Sizes:
-        return self._simple_clause(tree.Sizes, "size_list", node)
-
-    # full_clause: FULL_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def full_clause(self, node: Tree) -> tree.Full:
-        return self._simple_clause(tree.Full, "fully_unroll", node)
-
-    # partial_clause: PARTIAL_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def partial_clause(self, node: Tree) -> tree.Partial:
-        return self._simple_clause(tree.Partial, "unroll_factor", node)
-
-    # copyin_clause: COPYIN_CLAUSE "(" [directive_name ":"] var_list ")"
-    def copyin_clause(self, node: Tree) -> tree.CopyIn:
-        return self._simple_clause(tree.CopyIn, "targets", node)
-
-    # num_threads_clause: NUM_THREADS_CLAUSE "(" [_num_threads_modifier_list ":"] expr_list ")"
-    def num_threads_clause(self, node: Tree) -> tree.NumThreads:
-        return self._clause_with_mods(
-            tree.NumThreads, node.meta, node.children[0], node.children[1:-1],
-            upper_bound=node.children[-1]
-        )
-
-    # proc_bind_clause: PROC_BIND_CLAUSE "(" [directive_name ":"] (CLOSE | PRIMARY | SPREAD) ")"
-    def proc_bind_clause(self, node: Tree) -> tree.ProcBind:
-        return self._simple_clause(tree.ProcBind, "affinity_policy_name", node)
-
-    # safesync_clause: SAFESYNC_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def safesync_clause(self, node: Tree) -> tree.SafeSync:
-        return self._simple_clause(tree.SafeSync, "width", node)
-
-    # num_teams_clause: NUM_TEAMS_CLAUSE "(" [_num_teams_modifier_list ":"] py_expr ")"
+    # num_teams_clause: NUM_TEAMS_CLAUSE "(" [directive_name ":"] py_expr ")"
     def num_teams_clause(self, node: Tree) -> tree.NumTeams:
-        return self._clause_with_mods(
-            tree.NumTeams, node.meta, node.children[0], node.children[1:-1],
-            upper_bound=node.children[-1]
-        )
+        return self._simple_clause(tree.NumTeams, "upper_bound", node)
 
     # thread_limit_clause: THREAD_LIMIT_CLAUSE "(" [directive_name ":"] py_expr ")"
     def thread_limit_clause(self, node: Tree) -> tree.ThreadLimit:
         return self._simple_clause(tree.ThreadLimit, "threadlim", node)
 
-    # nontemporal_clause: NONTEMPORAL_CLAUSE "(" [directive_name ":"] var_list ")"
-    def nontemporal_clause(self, node: Tree) -> tree.NonTemporal:
-        return self._simple_clause(tree.NonTemporal, "targets", node)
 
-    # order_clause: ORDER_CLAUSE "(" [_order_modifier_list ":"] CONCURRENT ")"
-    def order_clause(self, node: Tree) -> tree.Order:
-        return self._clause_with_mods(
-            tree.Order, node.meta, node.children[0], node.children[1:-1],
-            ordering=self._name_from_token(node.children[-1])
-        )
-
-    # safelen_clause: SAFELEN_CLAUSE "(" [directive_name ":"] py_expr ")"
-    def safelen_clause(self, node: Tree) -> tree.SafeLen:
-        return self._simple_clause(tree.SafeLen, "length", node)
-
-    # filter_clause: FILTER_CLAUSE "(" [directive_name ":"] py_expr ")"
-    def filter_clause(self, node: Tree) -> tree.Filter:
-        return self._simple_clause(tree.Filter, "thread_num", node)
-
-    # copyprivate_clause: COPYPRIVATE_CLAUSE "(" [directive_name ":"] var_list ")"
-    def copyprivate_clause(self, node: Tree) -> tree.CopyPrivate:
-        return self._simple_clause(tree.CopyPrivate, "targets", node)
-
-    # ordered_clause: ORDERED_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def ordered_clause(self, node: Tree) -> tree.OrderedClause:
-        return self._simple_clause(tree.OrderedClause, "n", node)
-
-    # schedule_clause: SCHEDULE_CLAUSE "(" [_schedule_modifier_list ":"] schedule_type ["," py_expr] ")"
-    def schedule_clause(self, node: Tree) -> tree.Schedule:
-        schedule_pos = -2 if isinstance(node.children[-1], tree.ScheduleType) else -1
-        return self._clause_with_mods(
-            tree.Schedule, node.meta, node.children[0], node.children[1:schedule_pos],
-            type=node.children[schedule_pos],
-            chunk=node.children[-1] if schedule_pos == -2 else None,
-        )
+    #### distribute construct clauses ####
 
     # dist_schedule_clause: DIST_SCHEDULE_CLAUSE "(" [directive_name ":"] STATIC ["," py_expr] ")"
     @v_args(inline=True, meta=True)
@@ -907,196 +813,38 @@ class AstTransformer(Transformer):
             directive_name = directive_name,
         )
 
-    # bind_clause: BIND_CLAUSE "(" [directive_name ":"] _bind_clause_arg ")"
-    def bind_clause(self, node: Tree) -> tree.Bind:
-        return self._simple_clause(tree.Bind, "binding_name", node)
 
-    # grainsize_clause: GRAINSIZE_CLAUSE "(" [_grainsize_modifier_list ":"] py_expr ")"
-    def grainsize_clause(self, node: Tree) -> tree.GrainSize:
-        return self._clause_with_mods(
-            tree.GrainSize, node.meta, node.children[0], node.children[1:-1],
-            grain_size=node.children[-1]
-        )
-
-    # num_tasks_clause: NUM_TASKS_CLAUSE "(" [_num_tasks_modifier_list ":"] py_expr ")"
-    def num_tasks_clause(self, node: Tree) -> tree.NumTasks:
-        return self._clause_with_mods(
-            tree.NumTasks, node.meta, node.children[0], node.children[1:-1],
-            grain_size=node.children[-1]
-        )
-
-    # graph_id_clause: GRAPH_ID_CLAUSE "(" [directive_name ":"] py_expr ")"
-    def graph_id_clause(self, node: Tree) -> tree.GraphId:
-        return self._simple_clause(tree.GraphId, "graph_id_value", node)
-
-    # graph_reset_clause: GRAPH_RESET_CLAUSE "(" [directive_name ":"] py_expr ")"
-    def graph_reset_clause(self, node: Tree) -> tree.GraphReset:
-        return self._simple_clause(tree.GraphReset, "expr", node)
-
-    # use_device_ptr_clause: USE_DEVICE_PTR_CLAUSE "(" [directive_name ":"] var_list ")"
-    def use_device_ptr_clause(self, node: Tree) -> tree.UseDevicePtr:
-        return self._simple_clause(tree.UseDevicePtr, "targets", node)
-
-    # use_device_addr_clause: USE_DEVICE_ADDR_CLAUSE "(" [directive_name ":"] var_list ")"
-    def use_device_addr_clause(self, node: Tree) -> tree.UseDeviceAddr:
-        return self._simple_clause(tree.UseDeviceAddr, "targets", node)
-
-    # defaultmap_clause: DEFAULTMAP_CLAUSE "(" _defaultmap_arg [":" _defaultmap_modifier_list] ")"
-    def defaultmap_clause(self, node: Tree) -> tree.DefaultMap:
-        return self._clause_with_mods(
-            tree.DefaultMap, node.meta, node.children[0], node.children[2:],
-            implicit_behavior_name=self._name_from_token(node.children[1])
-        )
-
-    # uses_allocators_clause: USES_ALLOCATORS_CLAUSE "(" [_uses_allocator_modifier_list ":"] py_expr ")"
-    def uses_allocators_clause(self, node: Tree) -> tree.UsesAllocators:
-        return self._clause_with_mods(
-            tree.UsesAllocators, node.meta, node.children[0], node.children[1:-1],
-            grain_size=node.children[-1]
-        )
-
-    # to_clause: TO_CLAUSE "(" [_to_modifier_list ":"] var_list ")"
-    def to_clause(self, node: Tree) -> tree.To:
-        return self._clause_with_mods(
-            tree.To, node.meta, node.children[0], node.children[1:-1],
-            targets=node.children[-1]
-        )
-
-    # from_clause: FROM_CLAUSE "(" [_from_modifier_list ":"] var_list ")"
-    def from_clause(self, node: Tree) -> tree.From:
-        return self._clause_with_mods(
-            tree.From, node.meta, node.children[0], node.children[1:-1],
-            targets=node.children[-1]
-        )
-
-    # destroy_clause: DESTROY_CLAUSE "(" [directive_name ":"] IDENTIFIER ")"
-    def destroy_clause(self, node: Tree) -> tree.Destroy:
-        return self._simple_clause(tree.Destroy, "destroy_var", node)
-
-    # init_clause: INIT_CLAUSE "(" [_init_modifier_list ":"] IDENTIFIER ")"
-    def init_clause(self, node: Tree) -> tree.Init:
-        span = self.sv.meta2span(node.meta)
-        kwargs: dict[str, tree.Construct|list[tree.Name]] = {}
-        for mod in node.children[1:-1]:
-            if mod is None:
-                continue
-
-            # interop_type_modifier_name
-            if isinstance(mod, tree.Name):
-                if "interop_type_modifier_name" not in kwargs:
-                    kwargs["interop_type_modifier_name"] = [mod]
-                else:
-                    assert isinstance(kwargs["interop_type_modifier_name"], list)
-                    kwargs["interop_type_modifier_name"].append(mod) # ty:ignore[invalid-argument-type]
-
-            # prefer_type_modifier
-            if not isinstance(mod, tree.Prefer):
-                continue
-
-            # depinfo_modifier
-            if not isinstance(mod, tree.DepInfo):
-                continue
-
-            # directive_name_modifier
-            if not isinstance(mod, tree.DirectiveName):
-                continue
-
-            if mod.id in kwargs:
-                raise self.sv.syntax_error(
-                    f'"{mod.id}" modifier is already defined for init clause.', span,
-                    diagnostics=[("first defined here", kwargs[mod.id].span)] # ty:ignore[unresolved-attribute] # zuban:ignore[union-attr]
-                )
-            kwargs[mod.id] = mod # ty:ignore[invalid-assignment] # zuban:ignore[assignment]
-
-        return tree.Init(
-            span = span,
-            name = self._name_from_token(node.children[0]),
-            init_var = cast("tree.PyName", node.children[-1]),
-            **kwargs # ty:ignore[invalid-argument-type] # zuban:ignore[arg-type]
-        )
-
-    # use_clause: USE_CLAUSE "(" [directive_name ":"] IDENTIFIER ")"
-    def use_clause(self, node: Tree) -> tree.Use:
-        return self._simple_clause(tree.Use, "interop_var", node)
+    #### critical construct clauses ####
 
     # hint_clause: HINT_CLAUSE "(" [directive_name ":"] py_expr ")"
     def hint_clause(self, node: Tree) -> tree.Hint:
         return self._simple_clause(tree.Hint, "expr", node)
 
-    # task_reduction_clause: TASK_REDUCTION_CLAUSE "(" [directive_name ","] reduction_op ":" var_list ")"
-    def task_reduction_clause(self, node: Tree) -> tree.TaskReduction:
-        return tree.TaskReduction(
-            span=self.sv.meta2span(node.meta),
-            name=self._name_from_token(node.children[0]),
-            op = cast("tree.ReductionOp", node.children[-2]),
-            targets = cast("list[tree.PyName]", node.children[-1]),
-            directive_name = node.children[1] if isinstance(node.children[1], tree.DirectiveName) else None,
-        )
 
-    # memscope_clause: MEMSCOPE_CLAUSE "(" [directive_name ":"] (ALL | CGROUP | DEVICE) ")"
-    def memscope_clause(self, node: Tree) -> tree.MemScope:
-        return self._simple_clause(tree.MemScope, "scope_name", node)
-
-    # read_clause: READ_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def read_clause(self, node: Tree) -> tree.Read:
-        return self._simple_clause(tree.Read, "", node)
-
-    # atomic_update_clause: UPDATE_CLAUSE ["(" [directive_name ":"] py_expr ")"] // innermost-leaf, unique
-    def atomic_update_clause(self, node: Tree) -> tree.Update:
-        return self._simple_clause(tree.Update, "use_semantics", node)
-
-    # write_clause: WRITE_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def write_clause(self, node: Tree) -> tree.Write:
-        return self._simple_clause(tree.Write, "use_semantics", node)
-
-    # capture_clause: CAPTURE_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def capture_clause(self, node: Tree) -> tree.Capture:
-        return self._simple_clause(tree.Capture, "use_semantics", node)
-
-    # compare_clause: COMPARE_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def compare_clause(self, node: Tree) -> tree.Compare:
-        return self._simple_clause(tree.Compare, "use_semantics", node)
-
-    # fail_clause: FAIL_CLAUSE "(" [directive_name ":"] (ACQUIRE | RELAXED | SEQ_CST) ")"
-    def fail_clause(self, node: Tree) -> tree.Fail:
-        return self._simple_clause(tree.Fail, "mem_order_name", node)
-
-    # weak_clause: WEAK_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def weak_clause(self, node: Tree) -> tree.Weak:
-        return self._simple_clause(tree.Weak, "use_semantics", node)
-
-    # acq_rel_clause: ACQ_REL_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def acq_rel_clause(self, node: Tree) -> tree.AcqRel:
-        return self._simple_clause(tree.AcqRel, "use_semantics", node)
-
-    # acquire_clause: ACQUIRE_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def acquire_clause(self, node: Tree) -> tree.Acquire:
-        return self._simple_clause(tree.Acquire, "use_semantics", node)
-
-    # relaxed_clause: RELAXED_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def relaxed_clause(self, node: Tree) -> tree.Relaxed:
-        return self._simple_clause(tree.Relaxed, "use_semantics", node)
-
-    # release_clause: RELEASE_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def release_clause(self, node: Tree) -> tree.Release:
-        return self._simple_clause(tree.Release, "use_semantics", node)
+    #### atomic construct clauses ####
 
     # seq_cst_clause: SEQ_CST_CLAUSE ["(" [directive_name ":"] py_expr ")"]
     def seq_cst_clause(self, node: Tree) -> tree.SeqCst:
         return self._simple_clause(tree.SeqCst, "use_semantics", node)
 
-    # depobj_update_clause: UPDATE_CLAUSE "(" [_depobj_update_modifier_list ":"] IDENTIFIER ")"
-    def depobj_update_clause(self, node: Tree) -> tree.DepobjUpdate:
-        return self._clause_with_mods(
-            tree.DepobjUpdate, node.meta, node.children[0], node.children[1:-1],
-            update_var=node.children[-1]
-        )
-    # doacross_clause: DOACROSS_CLAUSE "(" _doacross_modifier_list ":" _iterator_specifier ")"
-    def doacross_clause(self, node: Tree) -> tree.DoAcross:
-        return self._clause_with_mods(
-            tree.DoAcross, node.meta, node.children[0], node.children[1:-1],
-            targets=node.children[-1]
-        )
+    # read_clause: READ_CLAUSE ["(" [directive_name ":"] py_expr ")"]
+    def read_clause(self, node: Tree) -> tree.Read:
+        return self._simple_clause(tree.Read, "use_semantics", node)
+
+    # write_clause: WRITE_CLAUSE ["(" [directive_name ":"] py_expr ")"]
+    def write_clause(self, node: Tree) -> tree.Write:
+        return self._simple_clause(tree.Write, "use_semantics", node)
+
+    # update_clause: UPDATE_CLAUSE ["(" [directive_name ":"] py_expr ")"]
+    def update_clause(self, node: Tree) -> tree.Update:
+        return self._simple_clause(tree.Update, "use_semantics", node)
+
+    # capture_clause: CAPTURE_CLAUSE ["(" [directive_name ":"] py_expr ")"]
+    def capture_clause(self, node: Tree) -> tree.Capture:
+        return self._simple_clause(tree.Capture, "use_semantics", node)
+
+
+    #### ordered construct clauses ####
 
     # threads_clause: THREADS_CLAUSE ["(" [directive_name ":"] py_expr ")"]
     def threads_clause(self, node: Tree) -> tree.Threads:
@@ -1106,152 +854,88 @@ class AstTransformer(Transformer):
     def simd_clause(self, node: Tree) -> tree.SimdClause:
         return self._simple_clause(tree.SimdClause, "appy_to_simd", node)
 
-    #### COMMON CLAUSES ########################################################
 
-    # apply_clause: APPLY_CLAUSE "(" [_apply_modifier_list ":"] apply_clause_arg ")"
-    def apply_clause(self, node: Tree) -> tree.Apply:
-        return self._clause_with_mods(
-            tree.Apply, node.meta, node.children[0], node.children[1:-1],
-            directives=[self._name_from_token(t) for t in node.children[-1].children]
-        )
+    #### declare_reduction construct clauses ####
 
-    # depend_clause: DEPEND_CLAUSE "(" [_depend_modifier_list ":"] expr_list ")"
-    def depend_clause(self, node: Tree) -> tree.Depend:
-        return self._clause_with_mods(
-            tree.Depend, node.meta, node.children[0], node.children[1:-1],
-            locator_list=node.children[-1]
-        )
+    # initializer_clause: INITIALIZER_CLAUSE "(" [directive_name ":"] py_stmt ")"
+    def initializer_clause(self, node: Tree) -> tree.Initializer:
+        return self._simple_clause(tree.Initializer, "initializer_stmt", node)
 
-    # device_clause: DEVICE_CLAUSE "(" [_device_modifier_list ":"] py_expr ")"
-    def device_clause(self, node: Tree) -> tree.Device:
-        return self._clause_with_mods(
-            tree.Device, node.meta, node.children[0], node.children[1:-1],
-            directive=node.children[-1]
-        )
+    # combiner_clause: COMBINER_CLAUSE "(" [directive_name ":"] py_stmt ")"
+    def combiner_clause(self, node: Tree) -> tree.Combiner:
+        return self._simple_clause(tree.Combiner, "combiner_stmt", node)
 
-    # default_clause: DEFAULT_CLAUSE "(" (NONE | SHARED | FIRSTPRIVATE | PRIVATE) [":" _default_modifier] ")"
-    def default_clause(self, node: Tree) -> tree.When:
-        return self._clause_with_mods(
-            tree.When, node.meta, node.children[0], node.children[2:],
-            data_sharing_attr_name=self._name_from_token(node.children[1]),
-        )
-
-    # private_clause: PRIVATE_CLAUSE "(" [directive_name ":"] var_list ")"
-    def private_clause(self, node: Tree) -> tree.Private:
-        return self._simple_clause(tree.Private, "targets", node)
-
-    # if_clause: IF_CLAUSE "(" [directive_name ":"] py_expr ")"
-    def if_clause(self, node: Tree) -> tree.If:
-        return self._simple_clause(tree.If, "expr", node)
-
-    # firstprivate_clause: FIRSTPRIVATE_CLAUSE "(" [_firstprivate_modifier ":"] var_list ")"
-    def firstprivate_clause(self, node: Tree) -> tree.FirstPrivate:
-        return self._clause_with_mods(
-            tree.FirstPrivate, node.meta, node.children[0], node.children[1:-1],
-            targets=node.children[-1]
-        )
-
-    # reduction_clause: REDUCTION_CLAUSE  "(" [_reduction_modifier_list ","] reduction_op ":" var_list ")"
-    def reduction_clause(self, node: Tree) -> tree.Reduction:
-        return self._clause_with_mods(
-            tree.Reduction, node.meta, node.children[0], node.children[1:-2],
-            targets=node.children[-1],
-            op=node.children[-2],
-        )
-
-    # induction_clause: INDUCTION_CLAUSE "(" _induction_modifier_list "," induction_op ":" var_list ")"
-    def induction_clause(self, node: Tree) -> tree.Induction:
-        return self._clause_with_mods(
-            tree.Induction, node.meta, node.children[0], node.children[1:-2],
-            targets=node.children[-1],
-            op=node.children[-2],
-        )
-
-    # shared_clause: SHARED_CLAUSE "(" [directive_name ":"] var_list ")"
-    def shared_clause(self, node: Tree) -> tree.Shared:
-        return self._simple_clause(tree.Shared, "targets", node)
-
-    # collapse_clause: COLLAPSE_CLAUSE "(" [directive_name ":"] py_expr ")"
-    def collapse_clause(self, node: Tree) -> tree.Collapse:
-        return self._simple_clause(tree.Collapse, "num", node)
-
-    # lastprivate_clause: LASTPRIVATE_CLAUSE "(" [_lastprivate_modifier_list ":"] var_list ")"
-    def lastprivate_clause(self, node: Tree) -> tree.LastPrivate:
-        return self._clause_with_mods(
-            tree.LastPrivate, node.meta, node.children[0], node.children[1:-1],
-            targets=node.children[-1]
-        )
-
-    # allocate_clause: ALLOCATE_CLAUSE "(" [_allocate_modifier_list ":"] var_list ")"
-    def allocate_clause(self, node: Tree) -> tree.AllocateClause:
-        return self._clause_with_mods(
-            tree.AllocateClause, node.meta, node.children[0], node.children[1:-1],
-            targets=node.children[-1]
-        )
-
-    # nowait_clause: NOWAIT_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def nowait_clause(self, node: Tree) -> tree.NoWait:
-        return self._simple_clause(tree.NoWait, "dont_synchronize", node)
-
-    # final_clause: FINAL_CLAUSE "(" [directive_name ":"] py_expr ")"
-    def final_clause(self, node: Tree) -> tree.Final:
-        return self._simple_clause(tree.Final, "finalize", node)
-
-    # mergeable_clause: MERGEABLE_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def mergeable_clause(self, node: Tree) -> tree.Mergeable:
-        return self._simple_clause(tree.Mergeable, "can_merge", node)
-
-    # untied_clause: UNTIED_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def untied_clause(self, node: Tree) -> tree.Untied:
-        return self._simple_clause(tree.Untied, "can_change_threads", node)
-
-    # affinity_clause: AFFINITY_CLAUSE "(" [_affinity_modifier_list ":"] var_list ")"
-    def affinity_clause(self, node: Tree) -> tree.When:
-        return self._clause_with_mods(
-            tree.When, node.meta, node.children[0], node.children[1:-1],
-            targets=node.children[-1]
-        )
-
-    # detach_clause: DETACH_CLAUSE "(" [directive_name ":"] IDENTIFIER ")"
-    def detach_clause(self, node: Tree) -> tree.Detach:
-        return self._simple_clause(tree.Detach, "event_handle", node)
-
-    # in_reduction_clause: IN_REDUCTION_CLAUSE "(" [directive_name ","] reduction_op ":" var_list ")"
-    def in_reduction_clause(self, node: Tree) -> tree.InReduction:
-        return self._clause_with_mods(
-            tree.InReduction, node.meta, node.children[0], node.children[1:-2],
-            targets=node.children[-1],
-            op=node.children[-2],
-        )
-
-    # priority_clause: PRIORITY_CLAUSE "(" [directive_name ":"] py_expr ")"
-    def priority_clause(self, node: Tree) -> tree.Priority:
-        return self._simple_clause(tree.Priority, "value", node)
-
-    # replayable_clause: REPLAYABLE_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def replayable_clause(self, node: Tree) -> tree.Replayable:
-        return self._simple_clause(tree.Replayable, "expr", node)
-
-    # threadset_clause: THREADSET_CLAUSE "(" [directive_name ":"] (OMP_TEAM | OMP_POOL) ")"
-    def threadset_clause(self, node: Tree) -> tree.ThreadSet:
-        return self._simple_clause(tree.ThreadSet, "set_name", node)
-
-    # transparent_clause: TRANSPARENT_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def transparent_clause(self, node: Tree) -> tree.Transparent:
-        return self._simple_clause(tree.Transparent, "impex_type", node)
-
-    # nogroup_clause: NOGROUP_CLAUSE ["(" [directive_name ":"] py_expr ")"]
-    def nogroup_clause(self, node: Tree) -> tree.NoGroup:
-        return self._simple_clause(tree.NoGroup, "dont_synchronize", node)
-
-    # map_clause: MAP_CLAUSE "(" [[_map_modifier_list ","] map_type_name ":"] var_list ")"
-    def map_clause(self, node: Tree) -> tree.Map:
-        return self._clause_with_mods(
-            tree.Map, node.meta, node.children[0], node.children[1:-1],
-            targets=node.children[-1]
-        )
 
     #### SPECIAL CASE CONSTRUCTS ###############################################
+
+    # DECLARE_SIMD_DIRECTIVE ["(" py_expr ")"] _declare_simd_clause_list?
+    def declare_simd_directive(self, node: Tree) -> tree.DeclareSimd:
+        token, *rest = node.children
+        split = next((i for i, c in enumerate(rest) if isinstance(c, tree.Clause)), len(rest))
+        fixed, clause_list = rest[:split], rest[split:]
+
+        proc_name = fixed[0] if fixed else None
+
+        return self._construct(node.meta, token, clause_list, proc_name=proc_name) # ty: ignore [invalid-argument-type] # zuban: ignore[arg-type]
+
+
+    # DECLARE_TARGET_DIRECTIVE _declare_target_clause_list? -> declare_target_directive
+    def declare_target_directive(self, node: Tree) -> tree.DeclareTarget:
+        return self._construct(
+            node.meta,
+            cast(Token, node.children[0]),
+            cast(Iterable[tree.Clause], node.children[1:])
+        )
+
+    # DECLARE_TARGET_DIRECTIVE "(" var_list ")" -> declare_target_directive_list
+    def declare_target_directive_list(self, node: Tree) -> tree.DeclareTarget:
+        return self._construct(
+            node.meta,
+            cast(Token, node.children[0]),
+            [],
+            targets=node.children[1]
+        )
+
+    # CRITICAL_DIRECTIVE ["(" IDENTIFIER ")" [","? hint_clause]]
+    def critical_directive(self, node: Tree) -> tree.Critical:
+        token, *rest = node.children
+
+        if len(rest) == 0:
+            name, hint = None, None
+        elif len(rest) == 1:
+            name, hint = rest[0], None
+        else:
+            name, hint = rest
+
+        return self._construct(node.meta, token, [hint] if hint is not None else [], critical_name=name) # ty: ignore [invalid-argument-type] # zuban: ignore
+
+    # flush_directive: FLUSH_DIRECTIVE ["(" var_list ")"]
+    def flush_directive(self, node: Tree) -> tree.Flush:
+        token, *rest = node.children
+
+        clause = next((c for c in rest if isinstance(c, tree.Clause)), None)
+        var_list = next((c for c in rest if not isinstance(c, tree.Clause)), None)
+
+        return self._construct(node.meta, token, [clause] if clause is not None else [], targets=var_list) # ty: ignore [invalid-argument-type] # zuban: ignore[arg-type]
+
+    # CANCEL_DIRECTIVE construct_type_clause [","? if_clause]
+    def cancel_directive(self, node: Tree) -> tree.Cancel:
+        if_clause = node.children[-1] if isinstance(node.children[-1], tree.If) else None
+        construct_type = node.children[-1 if if_clause is None else -2]
+        return tree.Cancel(
+            span=self.sv.meta2span(node.meta),
+            name=self._name_from_token(node.children[0]),
+            construct_type_name=self._name_from_token(construct_type),
+            if_=if_clause,
+        )
+
+    # CANCELLATION_POINT_DIRECTIVE construct_type_clause
+    def cancellation_point_directive(self, node: Tree) -> tree.CancellationPoint:
+        return tree.CancellationPoint(
+            span=self.sv.meta2span(node.meta),
+            name=self._name_from_token(node.children[0]),
+            construct_type_name=self._name_from_token(node.children[-1]),
+        )
 
     # THREADPRIVATE "(" var_list ")"
     @v_args(inline=True, meta=True)
@@ -1283,120 +967,6 @@ class AstTransformer(Transformer):
             ann_list = type_list,
             combiner = tree.Combiner(span=span, name=name, combiner_stmt=py_stmt),
             initializer = initializer,
-        )
-
-    # DECLARE_INDUCTION_DIRECTIVE "(" induction_op ":" expr_list ")" _declare_induction_clause_list
-    @v_args(inline=True, meta=True)
-    def declare_induction_directive(
-        self, meta: Meta, token: Token,
-        op: tree.InductionOp, expr_list: list[tree.PyExpr],
-        *clause_list: tree.Clause,
-    ) -> tree.DeclareInduction:
-        return self._construct(meta, token, clause_list, op=op, ann_list=expr_list)
-
-    # DECLARE_MAPPER_DIRECTIVE "(" [IDENTIFIER ":"] IDENTIFIER ":" py_type ")" map_clause+
-    def declare_mapper_directive(self, node: Tree) -> tree.DeclareMapper:
-        token, *rest = node.children
-        split = next((i for i, c in enumerate(rest) if isinstance(c, tree.Clause)), len(rest))
-        fixed, clause_list = rest[:split], rest[split:]
-
-        if len(fixed) == 3:
-            mapper, var, type_ = fixed
-        else:
-            mapper = None
-            var, type_ = fixed
-
-        return self._construct(node.meta, token, clause_list, mapper_identifier=mapper, var=var, type=type_) # ty: ignore [invalid-argument-type] # zuban: ignore[arg-type]
-
-    # ALLOCATE_DIRECTIVE "(" var_list ")" _allocate_clause_list?
-    @v_args(inline=True, meta=True)
-    def allocate_directive(
-        self, meta: Meta, token: Token,
-        var_list: list[tree.PyName],
-        *clause_list: tree.Clause,
-    ) -> tree.DeclareMapper:
-        return self._construct(meta, token, clause_list, targets=var_list)
-
-    # DECLARE_VARIANT_DIRECTIVE "(" [py_expr ":"] py_expr ")" _declare_variant_clause_list
-    def declare_variant_directive(self, node: Tree) -> tree.DeclareMapper:
-        token, *rest = node.children
-        split = next((i for i, c in enumerate(rest) if isinstance(c, tree.Clause)), len(rest))
-        fixed, clause_list = rest[:split], rest[split:]
-
-        if len(fixed) == 2:
-            base_name, variant_name = fixed
-        else:
-            base_name = None
-            (variant_name,) = fixed
-
-        return self._construct(node.meta, token, clause_list, base_name=base_name, variant_name=variant_name) # ty: ignore [invalid-argument-type] # zuban: ignore[arg-type]
-
-    # DECLARE_SIMD_DIRECTIVE ["(" py_expr ")"] _declare_simd_clause_list?
-    def declare_simd_directive(self, node: Tree) -> tree.DeclareMapper:
-        token, *rest = node.children
-        split = next((i for i, c in enumerate(rest) if isinstance(c, tree.Clause)), len(rest))
-        fixed, clause_list = rest[:split], rest[split:]
-
-        proc_name = fixed[0] if fixed else None
-
-        return self._construct(node.meta, token, clause_list, proc_name=proc_name) # ty: ignore [invalid-argument-type] # zuban: ignore[arg-type]
-
-    # DECLARE_TARGET_DIRECTIVE "(" var_list ")" -> declare_target_directive
-    @v_args(inline=True, meta=True)
-    def declare_target_directive(
-        self, meta: Meta, token: Token, var_list: list[tree.PyName]
-    ) -> tree.DeclareMapper:
-        return self._construct(meta, token, [], targets=var_list)
-
-    # CRITICAL_DIRECTIVE ["(" IDENTIFIER ")" [","? hint_clause]]
-    def critical_directive(self, node: Tree) -> tree.Critical:
-        token, *rest = node.children
-
-        if len(rest) == 0:
-            name, hint = None, None
-        elif len(rest) == 1:
-            name, hint = rest[0], None
-        else:
-            name, hint = rest
-
-        return self._construct(node.meta, token, [hint] if hint is not None else [], critical_name=name) # ty: ignore [invalid-argument-type] # zuban: ignore
-
-    # FLUSH_DIRECTIVE [acq_rel_clause | acquire_clause | ...] ["(" var_list ")"]
-    def flush_directive(self, node: Tree) -> tree.Flush:
-        token, *rest = node.children
-
-        clause = next((c for c in rest if isinstance(c, tree.Clause)), None)
-        var_list = next((c for c in rest if not isinstance(c, tree.Clause)), None)
-
-        return self._construct(node.meta, token, [clause] if clause is not None else [], targets=var_list) # ty: ignore [invalid-argument-type] # zuban: ignore[arg-type]
-
-    # DEPOBJ_DIRECTIVE "(" IDENTIFIER ")" (destroy_clause | init_clause | depobj_update_clause)
-    @v_args(inline=True, meta=True)
-    def depobj_directive(
-        self, meta: Meta, token: Token,
-        object: tree.PyName, clause: tree.Clause
-    ) -> tree.Depobj:
-        return self._construct(meta, token, [clause], object=object)
-
-    # CANCEL_DIRECTIVE [directive_name ":"] construct_type_clause [","? if_clause]
-    def cancel_directive(self, node: Tree) -> tree.Cancel:
-        # TODO: ignoring directive_name here
-        if_clause = node.children[-1] if isinstance(node.children[-1], tree.If) else None
-        construct_type = node.children[-1 if if_clause is None else -2]
-        return tree.Cancel(
-            span=self.sv.meta2span(node.meta),
-            name=self._name_from_token(node.children[0]),
-            construct_type_name=self._name_from_token(construct_type),
-            if_=if_clause,
-        )
-
-    # CANCELLATION_POINT_DIRECTIVE [directive_name ":"] construct_type_clause
-    def cancellation_point_directive(self, node: Tree) -> tree.CancellationPoint:
-        # TODO: ignoring directive_name here
-        return tree.CancellationPoint(
-            span=self.sv.meta2span(node.meta),
-            name=self._name_from_token(node.children[0]),
-            construct_type_name=self._name_from_token(node.children[-1]),
         )
 
     ############################################################################

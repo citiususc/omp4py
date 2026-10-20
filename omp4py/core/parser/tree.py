@@ -19,59 +19,35 @@ if TYPE_CHECKING:
 
 __all__ = [
     # Base
-    "Span",
-    "OmpNode",
-    "Name",
-    "Directive",
-    "Construct",
-    "Clause",
-    "DataScope",
-    "Modifier",
-    # Constructs
-    "ThreadPrivate", "DeclareReduction", "DeclareInduction", "Scan", "DeclareMapper", "GroupPrivate",
-    "Allocate",
-    "Metadirective", "DeclareVariant", "Dispatch", "DeclareSimd", "DeclareTarget",
-    "Requires", "Assume", "Nothing", "Error",
-    "Fuse", "Interchange", "Reverse", "Split", "Stripe", "Tile", "Unroll",
-    "Parallel", "Teams", "Simd", "Masked",
-    "Single", "Scope", "Sections", "Section", "Workshare", "Workdistribute", "For", "Distribute", "Loop",
-    "Task", "Taskloop", "TaskIteration", "Taskyield", "Taskgraph",
-    "TargetData", "TargetEnterData", "TargetExitData", "Target", "TargetUpdate",
-    "InteropConstruct",
-    "Critical", "Barrier", "Taskgroup", "Taskwait", "Atomic", "Flush", "Depobj", "Ordered",
-    "Cancel", "CancellationPoint",
-    # Clauses
-    "Combiner", "Initializer", "Inductor", "Collector",
-    "Exclusive", "Inclusive", "InitComplete",
-    "DeviceType",
-    "Align", "Allocator", "When", "Otherwise",
-    "AdjustArgs", "AppendArgs", "Match",
-    "InteropClause",
-    "IsDevicePtr", "HasDeviceAddr", "NoContext", "NoVariants",
-    "Aligned", "Linear", "Simdlen", "Uniform", "InBranch", "NotInBranch",
-    "Enter", "Indirect", "Link", "Local",
-    "AtomicDefaultMemOrder", "DynamicAllocators", "ReverseOffload", "UnifiedAddress", "UnifiedSharedMemory", "SelfMaps", "DeviceSafesync",
-    "Absent", "Contains", "Holds", "NoOpenmp", "NoOpenmpConstructs", "NoOpenmpRoutines", "NoParallelism",
-    "At", "Message", "Severity",
-    "LoopRange", "Permutation", "Counts", "Sizes", "Full", "Partial",
-    "CopyIn", "NumThreads", "ProcBind", "SafeSync", "NumTeams",
-    "ThreadLimit", "NonTemporal", "Order", "SafeLen", "Filter",
-    "CopyPrivate", "OrderedClause", "Schedule", "DistSchedule",
-    "Bind", "GrainSize", "NumTasks", "GraphId", "GraphReset", "UseDevicePtr", "UseDeviceAddr",
-    "DefaultMap", "UsesAllocators", "From", "To",
-    "Destroy", "Init", "Use",
-    "Hint", "TaskReduction", "MemScope",
-    "Read", "Update", "Write", "Capture", "Compare", "Fail", "Weak", "AcqRel", "Acquire", "Relaxed", "Release", "SeqCst", "DepobjUpdate", "DoAcross", "SimdClause", "Threads",
-    "Apply", "Depend", "Device", "Default",
-    "Private", "If", "FirstPrivate", "Reduction", "Induction", "Shared", "Collapse", "LastPrivate", "AllocateClause", "NoWait",
-    "Final", "Mergeable", "Untied", "Affinity", "Detach", "InReduction", "Priority", "Replayable", "ThreadSet", "Transparent", "NoGroup", "Map",
-    # Modifiers
-    "DirectiveName",
-    "ScheduleType",
-    "ReductionOp", "InductionOp",
-    "Original", "InteropModifier", "Iterator", "Step", "AllocatorModifier", "AlignModifier",
-    "Mapper", "MemSpace", "Traits", "DepInfo", "LoopModifier", "Prefer", "ContextSelector",
+    "Name", "Directive", "Construct", "Clause", "DataScope", "Modifier", "DirectiveName",
     "PyExpr", "PyInt", "PyName", "PyStmt",
+
+    # Constructs
+    "Parallel", "For", "Sections", "Section", "Single",
+    "Simd", "DeclareSimd",
+    "Task", "Taskloop", "Taskyield",
+    "TargetData", "TargetEnterData", "TargetExitData", "Target", "TargetUpdate", "DeclareTarget", "Teams", "Distribute",
+    "Master", "Critical", "Barrier", "Taskwait", "Taskgroup", "Atomic", "Flush", "Ordered",
+    "CancelDirectiveName", "Cancel", "CancellationPoint",
+    "ThreadPrivate", "DeclareReduction",
+
+    # Clauses
+    "If", "NoWait", "Collapse",
+    "Default", "Shared", "Private", "FirstPrivate", "LastPrivate", "Reduction", "Linear",
+    "CopyIn", "CopyPrivate",
+    "TaskDependenceKind", "Depend", "Map", "DefaultMap",
+
+    "NumThreads", "ProcBind", "Schedule", "OrderedClause",
+    "SafeLen", "Simdlen", "Aligned",
+    "Uniform", "InBranch", "NotInBranch",
+    "Final", "Untied", "Mergeable", "Priority",
+    "GrainSize", "NumTasks", "NoGroup",
+    "Device", "UseDevicePtr", "IsDevicePtr",
+    "To", "From", "Link",
+    "NumTeams", "ThreadLimit", "DistSchedule",
+    "Read", "Write", "Update", "Capture", "SeqCst",
+    "Threads", "SimdClause", "Initializer", "Combiner",
+    "ScheduleType", "ReductionOp",
 ]
 
 
@@ -172,549 +148,211 @@ class DirectiveName(Modifier):
 ##################################################### Constructs ######################################################
 #######################################################################################################################
 
+@dataclass
+class Parallel(Construct):
+    id: ClassVar[str] = "parallel"
+    if_: If|None = None
+    num_threads: NumThreads | None = None
+    default: Default|None = None
+    private: list[Private] = field(default_factory=list)
+    first_private: list[FirstPrivate] = field(default_factory=list)
+    shared: list[Shared] = field(default_factory=list)
+    copyin: list[CopyIn] = field(default_factory=list)
+    reduction: list[Reduction] = field(default_factory=list)
+    proc_bind: ProcBind|None = None
 
-#### DATA ENVIRONMENT DIRECTIVES ####
+
+#### WORKSHARING CONTRUCTS ####
 
 @dataclass
-class ThreadPrivate(Construct):
-    id: ClassVar[str] = "threadprivate"
-    targets: list[PyName] = field(default_factory=list)
-
-    @property
-    def str_targets(self) -> list[str]:
-        return [v.string for v in self.targets]
-
-
-@dataclass
-class DeclareReduction(Construct):
-    id: ClassVar[str] = "declare_reduction"
-    op: ReductionOp
-    ann_list: list[PyExpr]
-    combiner: Combiner
-    initializer: Initializer | None = None
-
+class For(Construct):
+    id: ClassVar[str] = "for"
+    private: list[Private] = field(default_factory=list)
+    first_private: list[FirstPrivate] = field(default_factory=list)
+    last_private: list[LastPrivate] = field(default_factory=list)
+    linear: list[Linear] = field(default_factory=list)
+    reduction: list[Reduction] = field(default_factory=list)
+    schedule: Schedule|None = None
+    collapse: Collapse|None = None
+    ordered: OrderedClause|None = None
+    no_wait: NoWait|None = None
 
 @dataclass
-class DeclareInduction(Construct):
-    id: ClassVar[str] = "declare_induction"
-    op: InductionOp
-    ann_list: list[PyExpr]
-    collector: Collector
-    inductor: Inductor
-
-
-@dataclass
-class Scan(Construct):
-    id: ClassVar[str] = "scan"
-    exclusive: Exclusive|None = None
-    inclusive: Inclusive|None = None
-    init_complete: InitComplete|None = None
-
-
-@dataclass(kw_only=True)
-class DeclareMapper(Construct):
-    id: ClassVar[str] = "declare_mapper"
-    mapper_identifier: PyName|None = None
-    var: PyName
-    type: PyExpr
-    map: list[Map] = field(default_factory=list)
-
+class Sections(Construct):
+    id: ClassVar[str] = "sections"
+    private: list[Private] = field(default_factory=list)
+    first_private: list[FirstPrivate] = field(default_factory=list)
+    last_private: list[LastPrivate] = field(default_factory=list)
+    reduction: list[Reduction] = field(default_factory=list)
+    no_wait: NoWait|None = None
 
 @dataclass
-class GroupPrivate(Construct):
-    id: ClassVar[str] = "groupprivate"
-    device_type: DeviceType|None = None
-
-
-#### MEMORY MANAGEMENT DIRECTIVES ####
+class Section(Construct):
+    id: ClassVar[str] = "section"
 
 @dataclass
-class Allocate(Construct):
-    id: ClassVar[str] = "allocate"
-    targets: list[PyName] = field(default_factory=list)
-
-    align: Align|None = None
-    allocator: Allocator|None = None
-
-    @property
-    def str_targets(self) -> list[str]:
-        return [v.string for v in self.targets]
-
-
-#### VARIANT DIRECTIVES ####
-
-@dataclass
-class Metadirective(Construct):
-    id: ClassVar[str] = "metadirective"
-    when: list[When] = field(default_factory=list)
-    otherwise: Otherwise|None = None
-
-
-@dataclass(kw_only=True)
-class DeclareVariant(Construct):
-    id: ClassVar[str] = "declare_variant"
-    base_name: PyExpr|None = None
-    variant_name: PyExpr
-
-    adjust_args: list[AdjustArgs] = field(default_factory=list)
-    append_args: AppendArgs|None = None
-    match: Match
-
-
-@dataclass
-class Dispatch(Construct):
-    id: ClassVar[str] = "dispatch"
-    depend: list[Depend] = field(default_factory=list)
-    device: Device|None = None
-    interop: list[InteropClause] = field(default_factory=list)
-    is_device_ptr: list[IsDevicePtr] = field(default_factory=list)
-    has_device_addr: list[HasDeviceAddr] = field(default_factory=list)
-    no_context: NoContext|None = None
-    no_variants: NoVariants|None = None
+class Single(Construct):
+    id: ClassVar[str] = "single"
+    private: list[Private] = field(default_factory=list)
+    first_private: list[FirstPrivate] = field(default_factory=list)
+    copyprivate: list[CopyPrivate] = field(default_factory=list)
     no_wait: NoWait|None = None
 
 
+#### SIMD CONTRUCTS ####
+
+@dataclass
+class Simd(Construct):
+    id: ClassVar[str] = "simd"
+    safelen: SafeLen|None = None
+    simdlen: Simdlen|None = None
+    aligned: list[Aligned] = field(default_factory=list)
+    linear: list[Linear] = field(default_factory=list)
+    private: list[Private] = field(default_factory=list)
+    last_private: list[LastPrivate] = field(default_factory=list)
+    reduction: list[Reduction] = field(default_factory=list)
+    collapse: Collapse|None = None
 
 @dataclass
 class DeclareSimd(Construct):
     id: ClassVar[str] = "declare_simd"
     proc_name: PyExpr|None = None
 
-    aligned: list[Aligned] = field(default_factory=list)
     linear: list[Linear] = field(default_factory=list)
     simdlen: Simdlen|None = None
+    aligned: list[Aligned] = field(default_factory=list)
     uniform: list[Uniform] = field(default_factory=list)
-    # TODO: InBranch and NotInBranch are exclusive
     in_branch: InBranch|None = None
     not_in_branch: NotInBranch|None = None
 
 
-@dataclass
-class DeclareTarget(Construct):
-    id: ClassVar[str] = "declare_target"
-    targets: list[PyName]|None = None
-
-    device_type: DeviceType|None = None
-    enter: list[Enter] = field(default_factory=list)
-    indirect: Indirect|None = None
-    link: list[Link] = field(default_factory=list)
-    local: list[Local] = field(default_factory=list)
-
-    @property
-    def str_targets(self) -> list[str]:
-        return [v.string for v in self.targets or []]
-
-
-#### INFORMATIONAL AND UTILITY DIRECTIVES ####
-
-@dataclass
-class Requires(Construct):
-    id: ClassVar[str] = "requires"
-    atomic_default_mem_order: AtomicDefaultMemOrder|None = None
-    dynamic_allocators: DynamicAllocators|None = None
-    reverse_offload: ReverseOffload|None = None
-    unified_address: UnifiedAddress|None = None
-    unified_shared_memory: UnifiedSharedMemory|None = None
-    self_maps: SelfMaps|None = None
-    device_safesync: DeviceSafesync|None = None
-
-
-@dataclass
-class Assume(Construct):
-    id: ClassVar[str] = "assume"
-    absent: Absent|None = None
-    contains: Contains|None = None
-    holds: Holds|None = None
-    no_openmp: NoOpenmp|None = None
-    no_openmop_contructs: NoOpenmpConstructs|None = None
-    no_openmp_routines: NoOpenmpRoutines|None = None
-    no_parallelism: NoParallelism|None = None
-
-
-@dataclass
-class Nothing(Construct):
-    id: ClassVar[str] = "nothing"
-    apply: list[Apply] = field(default_factory=list)
-
-
-@dataclass
-class Error(Construct):
-    id: ClassVar[str] = "error"
-    at: At|None = None
-    message: Message|None = None
-    severity: Severity|None = None
-
-
-#### LOOP TRANSFORMING CONSTRUCTS ####
-
-@dataclass
-class Fuse(Construct):
-    id: ClassVar[str] = "fuse"
-    apply: Apply|None = None
-    looprange: LoopRange|None = None
-
-
-@dataclass
-class Interchange(Construct):
-    id: ClassVar[str] = "interchange"
-    apply: Apply|None = None
-    permutation: Permutation|None = None
-
-
-@dataclass
-class Reverse(Construct):
-    id: ClassVar[str] = "reverse"
-    apply: Apply|None = None
-
-
-@dataclass(kw_only=True)
-class Split(Construct):
-    id: ClassVar[str] = "split"
-    apply: Apply|None = None
-    counts: Counts
-
-
-@dataclass(kw_only=True)
-class Stripe(Construct):
-    id: ClassVar[str] = "stripe"
-    apply: list[Apply] = field(default_factory=list)
-    sizes: Sizes
-
-
-@dataclass(kw_only=True)
-class Tile(Construct):
-    id: ClassVar[str] = "tile"
-    apply: Apply|None = None
-    sizes: Sizes
-
-
-@dataclass
-class Unroll(Construct):
-    id: ClassVar[str] = "unroll"
-    apply: Apply|None = None
-    full: Full|None = None
-    partial: Partial|None = None
-
-
-#### PARALLELISM CONSTRUCTS ####
-
-@dataclass
-class Parallel(Construct):
-    id: ClassVar[str] = "parallel"
-    allocate: list[AllocateClause] = field(default_factory=list)
-    copyin: list[CopyIn] = field(default_factory=list)
-    default: Default|None = None
-    first_private: list[FirstPrivate] = field(default_factory=list)
-    if_: If|None = None
-    message: Message|None = None
-    num_threads: NumThreads | None = None
-    private: list[Private] = field(default_factory=list)
-    proc_bind: ProcBind|None = None
-    reduction: list[Reduction] = field(default_factory=list)
-    safesync: SafeSync|None = None
-    severity: Severity|None = None
-    shared: list[Shared] = field(default_factory=list)
-
-
-@dataclass
-class Teams(Construct):
-    id: ClassVar[str] = "teams"
-    allocate: list[AllocateClause] = field(default_factory=list)
-    default: Default|None = None
-    first_private: list[FirstPrivate] = field(default_factory=list)
-    if_: If|None = None
-    num_teams: NumTeams|None = None
-    reduction: list[Reduction] = field(default_factory=list)
-    shared: list[Shared] = field(default_factory=list)
-    thread_limit: ThreadLimit|None = None
-
-
-@dataclass
-class Simd(Construct):
-    id: ClassVar[str] = "simd"
-    aligned: list[Aligned] = field(default_factory=list)
-    collapse: Collapse|None = None
-    if_: If|None = None
-    induction: list[Induction] = field(default_factory=list)
-    last_private: list[LastPrivate] = field(default_factory=list)
-    linear: list[Linear] = field(default_factory=list)
-    non_temporal: list[NonTemporal] = field(default_factory=list)
-    order: Order|None = None
-    private: list[Private] = field(default_factory=list)
-    reduction: list[Reduction] = field(default_factory=list)
-    safelen: SafeLen|None = None
-    simdlen: Simdlen|None = None
-
-
-@dataclass
-class Masked(Construct):
-    id: ClassVar[str] = "masked"
-    filter: Filter|None = None
-
-
-#### WORKSHARING CONTRUCTS ####
-
-@dataclass
-class Single(Construct):
-    id: ClassVar[str] = "single"
-    # TODO: CopyPrivate and NoWait are exclusive
-    allocate: list[AllocateClause] = field(default_factory=list)
-    copyprivate: list[CopyPrivate] = field(default_factory=list)
-    first_private: list[FirstPrivate] = field(default_factory=list)
-    no_wait: NoWait | None = None
-    private: list[Private] = field(default_factory=list)
-
-
-@dataclass
-class Scope(Construct):
-    id: ClassVar[str] = "scope"
-    allocate: list[AllocateClause] = field(default_factory=list)
-    first_private: list[FirstPrivate] = field(default_factory=list)
-    no_wait: NoWait | None = None
-    private: list[Private] = field(default_factory=list)
-    reduction: list[Reduction] = field(default_factory=list)
-
-
-@dataclass
-class Sections(Construct):
-    id: ClassVar[str] = "sections"
-    allocate: list[AllocateClause] = field(default_factory=list)
-    first_private: list[FirstPrivate] = field(default_factory=list)
-    last_private: list[LastPrivate] = field(default_factory=list)
-    no_wait: NoWait | None = None
-    private: list[Private] = field(default_factory=list)
-    reduction: list[Reduction] = field(default_factory=list)
-
-@dataclass
-class Section(Construct):
-    id: ClassVar[str] = "section"
-
-
-@dataclass
-class Workshare(Construct):
-    id: ClassVar[str] = "workshare"
-    no_wait: NoWait | None = None
-
-
-@dataclass
-class Workdistribute(Construct):
-    id: ClassVar[str] = "workdistribute"
-
-
-@dataclass
-class For(Construct):
-    id: ClassVar[str] = "for"
-    allocate: list[AllocateClause] = field(default_factory=list)
-    collapse: Collapse|None = None
-    first_private: list[FirstPrivate] = field(default_factory=list)
-    induction: list[Induction] = field(default_factory=list)
-    last_private: list[LastPrivate] = field(default_factory=list)
-    linear: list[Linear] = field(default_factory=list)
-    no_wait: NoWait|None = None
-    order: Order|None = None
-    ordered: OrderedClause|None = None
-    private: list[Private] = field(default_factory=list)
-    reduction: list[Reduction] = field(default_factory=list)
-    schedule: Schedule|None = None
-
-
-@dataclass
-class Distribute(Construct):
-    id: ClassVar[str] = "distribute"
-    allocate: list[AllocateClause] = field(default_factory=list)
-    collapse: Collapse|None = None
-    dist_schedule: DistSchedule|None = None
-    first_private: list[FirstPrivate] = field(default_factory=list)
-    induction: list[Induction] = field(default_factory=list)
-    last_private: list[LastPrivate] = field(default_factory=list)
-    order: Order|None = None
-    private: list[Private] = field(default_factory=list)
-
-
-@dataclass
-class Loop(Construct):
-    id: ClassVar[str] = "loop"
-    bind: Bind|None = None
-
-
-#### TASKING CONSTRUCTS ####
+#### TASKING CONTRUCTS ####
 
 @dataclass
 class Task(Construct):
     id: ClassVar[str] = "task"
-    # TODO: Detach and Mergeable are exclusive
-    affinity: list[Affinity] = field(default_factory=list)
-    allocate: list[AllocateClause] = field(default_factory=list)
-    default: Default|None = None
-    depend: list[Depend] = field(default_factory=list)
-    detach: Detach|None = None
-    final: Final|None = None
-    first_private: list[FirstPrivate] = field(default_factory=list)
     if_: If|None = None
-    in_reduction: list[InReduction] = field(default_factory=list)
-    mergeable: Mergeable|None = None
-    priority: Priority|None = None
-    private: list[Private] = field(default_factory=list)
-    replayable: list[Replayable] = field(default_factory=list)
-    shared: list[Shared] = field(default_factory=list)
-    thread_set: ThreadSet|None = None
-    transparent: Transparent|None = None
+    final: Final|None = None
     untied: Untied|None = None
-
+    default: Default|None = None
+    mergeable: Mergeable|None = None
+    private: list[Private] = field(default_factory=list)
+    first_private: list[FirstPrivate] = field(default_factory=list)
+    shared: list[Shared] = field(default_factory=list)
+    depend: list[Depend] = field(default_factory=list)
+    priority: Priority|None = None
 
 @dataclass
 class Taskloop(Construct):
     id: ClassVar[str] = "taskloop"
-    # TODO: NoGroup and Reduction are exclusive
-    # TODO: GrainSize and NumTasks are exclusive
-    allocate: list[AllocateClause] = field(default_factory=list)
-    collapse: Collapse|None = None
-    default: Default|None = None
-    final: Final|None = None
-    first_private: list[FirstPrivate] = field(default_factory=list)
-    grain_size: GrainSize|None = None
     if_: If|None = None
-    in_reduction: list[InReduction] = field(default_factory=list)
-    induction: list[Induction] = field(default_factory=list)
+    shared: list[Shared] = field(default_factory=list)
+    private: list[Private] = field(default_factory=list)
+    first_private: list[FirstPrivate] = field(default_factory=list)
     last_private: list[LastPrivate] = field(default_factory=list)
+    default: Default|None = None
+    grain_size: GrainSize|None = None
+    num_tasks: NumTasks|None = None
+    collapse: Collapse|None = None
+    final: Final|None = None
+    priority: Priority|None = None
+    untied: Untied|None = None
     mergeable: Mergeable|None = None
     no_group: NoGroup|None = None
-    num_tasks: list[NumTasks] = field(default_factory=list)
-    priority: Priority|None = None
-    private: list[Private] = field(default_factory=list)
-    reduction: list[Reduction] = field(default_factory=list)
-    replayable: list[Replayable] = field(default_factory=list)
-    shared: list[Shared] = field(default_factory=list)
-    thread_set: ThreadSet|None = None
-    transparent: Transparent|None = None
-    untied: Untied|None = None
-
-
-@dataclass
-class TaskIteration(Construct):
-    id: ClassVar[str] = "task_iteration"
-    affinity: list[Affinity] = field(default_factory=list)
-    depend: list[Depend] = field(default_factory=list)
-    if_: If|None = None
-
 
 @dataclass
 class Taskyield(Construct):
     id: ClassVar[str] = "taskyield"
 
 
-@dataclass
-class Taskgraph(Construct):
-    id: ClassVar[str] = "taskgraph"
-    graph_id: GraphId|None = None
-    graph_reset: GraphReset|None = None
-    if_: If|None = None
-    no_group: NoGroup|None = None
-
-
-#### DEVICE DIRECTIVES & CONSTRUCTS ####
+#### DEVICE CONTRUCTS ####
 
 @dataclass(kw_only=True)
 class TargetData(Construct):
     id: ClassVar[str] = "target_data"
-    # TODO: Map, UseDeviceAddr, UseDevicePtr are required
-    affinity: list[Affinity] = field(default_factory=list)
-    allocate: list[AllocateClause] = field(default_factory=list)
-    default: Default|None = None
-    depend: list[Depend] = field(default_factory=list)
-    detach: Detach|None = None
-    device: Device|None = None
-    first_private: list[FirstPrivate] = field(default_factory=list)
     if_: If|None = None
-    in_reduction: list[InReduction] = field(default_factory=list)
-    map: list[Map] = field(default_factory=list)
-    mergeable: Mergeable|None = None
-    no_group: NoGroup|None = None
-    no_wait: NoWait|None = None
-    priority: Priority|None = None
-    private: list[Private] = field(default_factory=list)
-    shared: list[Shared] = field(default_factory=list)
-    transparent: Transparent|None = None
+    device: Device|None = None
+    map: Map|None = None
     use_device_ptr: list[UseDevicePtr] = field(default_factory=list)
-    use_device_addr: list[UseDeviceAddr] = field(default_factory=list)
-
 
 @dataclass
 class TargetEnterData(Construct):
     id: ClassVar[str] = "target_enter_data"
-    depend: list[Depend] = field(default_factory=list)
-    device: Device|None = None
     if_: If|None = None
-    map: list[Map] = field(default_factory=list)
+    device: Device|None = None
+    map: Map|None = None
+    depend: list[Depend] = field(default_factory=list)
     no_wait: NoWait|None = None
-    priority: Priority|None = None
-    replayable: list[Replayable] = field(default_factory=list)
-
 
 @dataclass
 class TargetExitData(Construct):
     id: ClassVar[str] = "target_exit_data"
-    depend: list[Depend] = field(default_factory=list)
-    device: Device|None = None
     if_: If|None = None
-    map: list[Map] = field(default_factory=list)
+    device: Device|None = None
+    map: Map|None = None
+    depend: list[Depend] = field(default_factory=list)
     no_wait: NoWait|None = None
-    priority: Priority|None = None
-    replayable: list[Replayable] = field(default_factory=list)
-
 
 @dataclass
 class Target(Construct):
     id: ClassVar[str] = "target"
-    allocate: list[AllocateClause] = field(default_factory=list)
-    default: Default|None = None
-    default_map: DefaultMap|None = None
-    depend: list[Depend] = field(default_factory=list)
-    device: Device|None = None
-    device_type: DeviceType|None = None
-    first_private: list[FirstPrivate] = field(default_factory=list)
-    has_device_addr: list[HasDeviceAddr] = field(default_factory=list)
     if_: If|None = None
-    in_reduction: list[InReduction] = field(default_factory=list)
-    is_device_ptr: list[IsDevicePtr] = field(default_factory=list)
-    map: list[Map] = field(default_factory=list)
-    no_wait: NoWait|None = None
+    device: Device|None = None
     private: list[Private] = field(default_factory=list)
-    priority: Priority|None = None
-    replayable: list[Replayable] = field(default_factory=list)
-    thread_limit: ThreadLimit|None = None
-    uses_allocators: list[UsesAllocators] = field(default_factory=list)
-
+    first_private: list[FirstPrivate] = field(default_factory=list)
+    is_device_ptr: list[IsDevicePtr] = field(default_factory=list)
+    default_map: DefaultMap|None = None
+    no_wait: NoWait|None = None
+    depend: list[Depend] = field(default_factory=list)
 
 @dataclass
 class TargetUpdate(Construct):
     id: ClassVar[str] = "target_update"
-    # TODO: From and To are required
-    depend: list[Depend] = field(default_factory=list)
-    device: Device|None = None
-    from_: list[From] = field(default_factory=list)
     if_: If|None = None
+    device: Device|None = None
     no_wait: NoWait|None = None
-    priority: Priority|None = None
-    replayable: list[Replayable] = field(default_factory=list)
+    depend: list[Depend] = field(default_factory=list)
     to: list[To] = field(default_factory=list)
-
-
-#### INTEROPERABITLITY CONSTRUCTS ####
+    from_: list[From] = field(default_factory=list)
 
 @dataclass
-class InteropConstruct(Construct):
-    id: ClassVar[str] = "interop_construct"
-    # TODO: Destroy, Init and Use are required
-    depend: list[Depend] = field(default_factory=list)
-    destroy: list[Destroy] = field(default_factory=list)
-    device: Device|None = None
-    init: list[Init] = field(default_factory=list)
-    no_wait: NoWait|None = None
-    use: list[Use] = field(default_factory=list)
+class DeclareTarget(Construct):
+    id: ClassVar[str] = "declare_target"
+    targets: list[PyName]|None = None
+
+    link: list[Link] = field(default_factory=list)
+    to: list[To] = field(default_factory=list)
+
+    @property
+    def str_targets(self) -> list[str]:
+        return [v.string for v in self.targets or []]
+
+@dataclass
+class Teams(Construct):
+    id: ClassVar[str] = "teams"
+    num_teams: NumTeams|None = None
+    thread_limit: ThreadLimit|None = None
+    default: Default|None = None
+    private: list[Private] = field(default_factory=list)
+    first_private: list[FirstPrivate] = field(default_factory=list)
+    shared: list[Shared] = field(default_factory=list)
+    reduction: list[Reduction] = field(default_factory=list)
+
+@dataclass
+class Distribute(Construct):
+    id: ClassVar[str] = "distribute"
+    private: list[Private] = field(default_factory=list)
+    first_private: list[FirstPrivate] = field(default_factory=list)
+    last_private: list[LastPrivate] = field(default_factory=list)
+    collapse: Collapse|None = None
+    dist_schedule: DistSchedule|None = None
 
 
-#### SYNCHRONIZATION CONSTRUCTS ####
+#### MASTER AND SYNCH CONSTRUCTS ####
+
+@dataclass
+class Master(Construct):
+    id: ClassVar[str] = "master"
 
 @dataclass
 class Critical(Construct):
@@ -722,86 +360,42 @@ class Critical(Construct):
     critical_name: PyName|None = None
     hint: Hint|None = None
 
-
 @dataclass
 class Barrier(Construct):
     id: ClassVar[str] = "barrier"
 
+@dataclass
+class Taskwait(Construct):
+    id: ClassVar[str] = "taskwait"
 
 @dataclass
 class Taskgroup(Construct):
     id: ClassVar[str] = "taskgroup"
-    allocate: list[AllocateClause] = field(default_factory=list)
-    task_reduction: list[TaskReduction] = field(default_factory=list)
-
-
-@dataclass
-class Taskwait(Construct):
-    id: ClassVar[str] = "taskwait"
-    depend: list[Depend] = field(default_factory=list)
-    no_wait: NoWait|None = None
-    replayable: list[Replayable] = field(default_factory=list)
-
 
 @dataclass
 class Atomic(Construct):
     id: ClassVar[str] = "atomic"
-
-    # TODO: memory-order and atomic groups are exclusive
-    mem_scope: MemScope|None = None
-    hint: Hint|None = None
-    # atomic clause group:
     read: Read|None = None
-    update: Update|None = None
     write: Write|None = None
-    # extended-atomic clause group:
+    update: Update|None = None
     capture: Capture|None = None
-    compare: Compare|None = None
-    fail: Fail|None = None
-    weak: Weak|None = None
-    # memory-order clause group:
-    acq_rel: AcqRel|None = None
-    acquire: Acquire|None = None
-    relaxed: Relaxed|None = None
-    release: Release|None = None
-    seq_cst: SeqCst|None = None
-
+    seq_cst: list[SeqCst] = field(default_factory=list)
 
 @dataclass
 class Flush(Construct):
     id: ClassVar[str] = "flush"
     targets: list[PyName]|None = None
 
-    mem_scope: MemScope|None = None
-    # memory-order clause group:
-    acq_rel: AcqRel|None = None
-    acquire: Acquire|None = None
-    relaxed: Relaxed|None = None
-    release: Release|None = None
-    seq_cst: SeqCst|None = None
-
     @property
     def str_targets(self) -> list[str]:
         return [v.string for v in self.targets or []]
 
-
-@dataclass
-class Depobj(Construct):
-    id: ClassVar[str] = "depobj"
-    object: PyName
-    # TODO: destroy, init and update are required
-    destroy: Destroy|None = None
-    init: Init|None = None
-    depobj_update: DepobjUpdate|None = None
-
-
 @dataclass
 class Ordered(Construct):
     id: ClassVar[str] = "ordered"
-    # TODO: DoAcross and SimdClause/Threads are exclusive
-    do_across: DoAcross|None = None
-    simd: SimdClause|None = None
     threads: Threads|None = None
+    simd: SimdClause|None = None
+    depend: list[Depend] = field(default_factory=list)
 
 
 #### CANCELLATION CONSTRUCTS ####
@@ -821,19 +415,15 @@ class CancelDirectiveName(Enum):
             "taskgroup": CancelDirectiveName.TASKGROUP,
         }[name.string.lower()]
 
-
 @dataclass(kw_only=True)
 class Cancel(Construct):
     id: ClassVar[str] = "cancel"
-    directive_name: DirectiveName|None = None
+    if_: If|None = None
     construct_type_name: Name
     construct_type: CancelDirectiveName = field(init=False)
 
-    if_: If|None = None
-
     def __post_init__(self) -> None:
         object.__setattr__(self, "construct_type", CancelDirectiveName.from_name(self.construct_type_name))
-
 
 @dataclass
 class CancellationPoint(Construct):
@@ -845,420 +435,196 @@ class CancellationPoint(Construct):
         object.__setattr__(self, "construct_type", CancelDirectiveName.from_name(self.construct_type_name))
 
 
+#### OTHER CONSTRUCTS ####
+
+@dataclass
+class ThreadPrivate(Construct):
+    id: ClassVar[str] = "threadprivate"
+    targets: list[PyName] = field(default_factory=list)
+
+    @property
+    def str_targets(self) -> list[str]:
+        return [v.string for v in self.targets]
+
+@dataclass
+class DeclareReduction(Construct):
+    id: ClassVar[str] = "declare_reduction"
+    op: ReductionOp
+    combiner: Combiner
+    ann_list: list[PyExpr]
+    initializer: Initializer|None = None
+
+
 #######################################################################################################################
 ####################################################### Clauses #######################################################
 #######################################################################################################################
 
-
-#### declare reduction ####
 @dataclass
-class Combiner(Clause):
-    id: ClassVar[str] = "combiner"
-    combiner_stmt: PyStmt
+class If(Clause):
+    id: ClassVar[str] = "if_"
+    expr: PyExpr
 
 @dataclass
-class Initializer(Clause):
-    id: ClassVar[str] = "initializer"
-    initializer_stmt: PyStmt
-
-
-#### declare induction ####
-@dataclass
-class Inductor(Clause):
-    id: ClassVar[str] = "inductor"
-    inductor_stmt: PyStmt
+class NoWait(Clause):
+    id: ClassVar[str] = "no_wait"
+    dont_synchronize: PyExpr|None = None
 
 @dataclass
-class Collector(Clause):
-    id: ClassVar[str] = "collector"
-    collector_expr: PyExpr
+class Collapse(Clause):
+    id: ClassVar[str] = "collapse"
+    num: PyInt
 
 
-#### scan ####
-@dataclass
-class Exclusive(DataScope):
-    id: ClassVar[str] = "exclusive"
+#### DATA SHARING CLAUSES ####
 
 @dataclass
-class Inclusive(DataScope):
-    id: ClassVar[str] = "inclusive"
+class Default(Clause):
+    id: ClassVar[str] = "default"
+    data_sharing_attr_name: Name
+    data_sharing_attr: DataSharingAttr = field(init=False)
 
-@dataclass
-class InitComplete(Clause):
-    id: ClassVar[str] = "init_complete"
-    create_init_phase: PyExpr|None = None
-
-#### groupprivate ####
-@dataclass
-class DeviceType(Clause):
-    id: ClassVar[str] = "device_type"
-    device_type_description_name: Name
-    device_type_description: Kind = field(init=False)
-
-    class Kind(Enum):
-        ANY = 0
-        HOST = 1
-        NOHOST = 2
+    class DataSharingAttr(Enum):
+        SHARED = 0
+        NONE = 1
 
     def __post_init__(self) -> None:
         object.__setattr__(
             self,
-            "device_type_description",
+            "data_sharing_attr",
             {
-                "any": self.Kind.ANY,
-                "host": self.Kind.HOST,
-                "nohost": self.Kind.NOHOST,
-            }[self.device_type_description_name.string.lower()],
-        )
-
-
-#### allocate ####
-@dataclass
-class Align(Clause):
-    id: ClassVar[str] = "align"
-    alignment: PyExpr
-
-@dataclass
-class Allocator(Clause):
-    id: ClassVar[str] = "allocator"
-    allocator: PyExpr
-
-
-#### metadirective ####
-@dataclass
-class When(Clause):
-    id: ClassVar[str] = "when"
-    directive: Directive
-    # modifiers:
-    context_selector: ContextSelector
-
-@dataclass
-class Otherwise(Clause):
-    id: ClassVar[str] = "otherwise"
-    directive: Directive|None = None
-
-
-#### declare_variant ####
-@dataclass
-class AdjustArgs(DataScope):
-    id: ClassVar[str] = "adjust_args"
-    # modifiers:
-    adjust_op_name: Name
-    adjust_op: AdjustOp = field(init=False)
-
-    class AdjustOp(Enum):
-        NOTHING = 0
-        NEED_DEVICE_PTR = 1
-        NEED_DEVICE_ADDR = 2
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "adjust_op",
-            {
-                "nothing": self.AdjustOp.NOTHING,
-                "need_device_ptr": self.AdjustOp.NEED_DEVICE_PTR,
-                "need_device_addr": self.AdjustOp.NEED_DEVICE_ADDR,
-            }[self.adjust_op_name.string.lower()],
+                "shared": self.DataSharingAttr.SHARED,
+                "none": self.DataSharingAttr.NONE,
+            }[self.data_sharing_attr_name.string.lower()],
         )
 
 @dataclass
-class AppendArgs(Clause):
-    id: ClassVar[str] = "append_args"
-    append_op: list[InteropModifier] = field(default_factory=list)
+class Shared(DataScope):
+    id: ClassVar[str] = "shared"
 
 @dataclass
-class Match(Clause):
-    id: ClassVar[str] = "match"
-    context_selector: ContextSelector
-
-
-#### dispatch ####
-@dataclass
-class InteropClause(DataScope):
-    id: ClassVar[str] = "interop"
+class Private(DataScope):
+    id: ClassVar[str] = "private"
 
 @dataclass
-class IsDevicePtr(DataScope):
-    id: ClassVar[str] = "is_device_ptr"
+class FirstPrivate(DataScope):
+    id: ClassVar[str] = "first_private"
 
 @dataclass
-class HasDeviceAddr(DataScope):
-    id: ClassVar[str] = "has_device_addr"
+class LastPrivate(DataScope):
+    id: ClassVar[str] = "last_private"
 
 @dataclass
-class NoContext(Clause):
-    id: ClassVar[str] = "no_context"
-    dont_update_context: PyExpr
-
-@dataclass
-class NoVariants(Clause):
-    id: ClassVar[str] = "no_variants"
-    dont_use_variant: PyExpr
-
-
-#### declare_simd ####
-@dataclass
-class Aligned(DataScope):
-    id: ClassVar[str] = "aligned"
-    # modifiers:
-    alignment_modifier: PyInt|None = None
+class Reduction(DataScope):
+    id: ClassVar[str] = "reduction"
+    op: ReductionOp
 
 @dataclass
 class Linear(DataScope):
     id: ClassVar[str] = "linear"
-    # modifiers:
-    step_simple_modifier: PyExpr|None = None
-    step_modifier: Step|None = None
-    linear_modifier_name: Name|None = None
-    linear_modifier: LinearModifier|None = field(init=False)
-
-    class LinearModifier(Enum):
-        REF = 0
-        UVAL = 1
-        VAL = 2
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "linear_modifier",
-            {
-                "ref": self.LinearModifier.REF,
-                "uval": self.LinearModifier.UVAL,
-                "val": self.LinearModifier.VAL,
-            }[self.linear_modifier_name.string.lower()]
-            if self.linear_modifier_name is not None
-            else None
-        )
-
-@dataclass
-class Simdlen(Clause):
-    id: ClassVar[str] = "simdlen"
-    length: PyExpr
-
-@dataclass
-class Uniform(DataScope):
-    id: ClassVar[str] = "uniform"
-
-@dataclass
-class InBranch(Clause):
-    id: ClassVar[str] = "in_branch"
-    in_branch: PyExpr|None = None
-
-@dataclass
-class NotInBranch(Clause):
-    id: ClassVar[str] = "not_in_branch"
-    not_in_branch: PyExpr|None = None
+    linear_step: PyExpr|None = None
+    # TODO: how to represent REF/UVAL/VAL here?
 
 
-#### declare_target ####
-@dataclass
-class Enter(DataScope):
-    id: ClassVar[str] = "enter"
-    # modifiers:
-    automap_name: Name|None = None
+#### DATA COPYING CLAUSES ####
 
-@dataclass
-class Indirect(Clause):
-    id: ClassVar[str] = "indirect"
-    invoked_by_fptr: PyExpr
-
-@dataclass
-class Link(DataScope):
-    id: ClassVar[str] = "link"
-
-@dataclass
-class Local(DataScope):
-    id: ClassVar[str] = "local"
-
-
-#### requires ####
-@dataclass
-class AtomicDefaultMemOrder(Clause):
-    id: ClassVar[str] = "atomic_default_mem_order"
-    memory_order_name: Name
-    memory_order: MemoryOrder = field(init=False)
-
-    class MemoryOrder(Enum):
-        ACQ_REL = 0
-        ACQUIRE = 1
-        RELAXED = 2
-        SEQ_CST = 3
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "kind",
-            {
-                "acq_rel": self.MemoryOrder.ACQ_REL,
-                "acquire": self.MemoryOrder.ACQUIRE,
-                "relaxed": self.MemoryOrder.RELAXED,
-                "seq_cst": self.MemoryOrder.SEQ_CST,
-            }[self.memory_order_name.string.lower()]
-        )
-
-@dataclass
-class DynamicAllocators(Clause):
-    id: ClassVar[str] = "dynamic_allocators"
-    required: PyExpr|None = None
-
-@dataclass
-class ReverseOffload(Clause):
-    id: ClassVar[str] = "reverse_offload"
-    required: PyExpr|None = None
-
-@dataclass
-class UnifiedAddress(Clause):
-    id: ClassVar[str] = "unified_address"
-    required: PyExpr|None = None
-
-@dataclass
-class UnifiedSharedMemory(Clause):
-    id: ClassVar[str] = "unified_shared_memory"
-    required: PyExpr|None = None
-
-@dataclass
-class SelfMaps(Clause):
-    id: ClassVar[str] = "self_maps"
-    required: PyExpr|None = None
-
-@dataclass
-class DeviceSafesync(Clause):
-    id: ClassVar[str] = "device_safesync"
-    required: PyExpr|None = None
-
-
-#### assume ####
-@dataclass
-class Absent(Clause):
-    id: ClassVar[str] = "absent"
-    directive_names: list[DirectiveName] = field(default_factory=list)
-
-@dataclass
-class Contains(Clause):
-    id: ClassVar[str] = "contains"
-    directive_names: list[DirectiveName] = field(default_factory=list)
-
-@dataclass
-class Holds(Clause):
-    id: ClassVar[str] = "holds"
-    hold_expr: PyExpr
-
-@dataclass
-class NoOpenmp(Clause):
-    id: ClassVar[str] = "no_openmp"
-    can_assume: PyExpr|None = None
-
-@dataclass
-class NoOpenmpConstructs(Clause):
-    id: ClassVar[str] = "no_openmp_constructs"
-    can_assume: PyExpr|None = None
-
-@dataclass
-class NoOpenmpRoutines(Clause):
-    id: ClassVar[str] = "no_openmp_routines"
-    can_assume: PyExpr|None = None
-
-@dataclass
-class NoParallelism(Clause):
-    id: ClassVar[str] = "no_parallelism"
-    can_assume: PyExpr|None = None
-
-
-#### error ####
-@dataclass(kw_only=True)
-class At(Clause):
-    id: ClassVar[str] = "at"
-    action_time_name: Name
-    action_time: ActionTime = field(init=False)
-
-    class ActionTime(Enum):
-        COMPILATION = 0
-        EXECUTION = 1
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "action_time",
-            {
-                "compilation": self.ActionTime.COMPILATION,
-                "execution": self.ActionTime.EXECUTION,
-            }[self.action_time_name.string.lower()]
-        )
-
-@dataclass
-class Message(Clause):
-    id: ClassVar[str] = "message"
-    msg_string: PyExpr
-
-@dataclass
-class Severity(Clause):
-    id: ClassVar[str] = "severity"
-    severity_level_name: Name
-    severity_level: SeverityLevel = field(init=False)
-
-    class SeverityLevel(Enum):
-        FATAL = 0
-        WARNING = 1
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "severity_level",
-            {
-                "fatal": self.SeverityLevel.FATAL,
-                "warning": self.SeverityLevel.WARNING,
-            }[self.severity_level_name.string.lower()]
-        )
-
-
-#### fuse ####
-@dataclass
-class LoopRange(Clause):
-    id: ClassVar[str] = "looprange"
-    first: PyExpr
-    count: PyExpr
-
-#### interchange ####
-@dataclass
-class Permutation(Clause):
-    id: ClassVar[str] = "permutation"
-    permutation_list: list[PyExpr] = field(default_factory=list)
-
-#### split ####
-@dataclass
-class Counts(Clause):
-    id: ClassVar[str] = "counts"
-    count_list: list[PyExpr] = field(default_factory=list)
-
-#### stripe ####
-@dataclass
-class Sizes(Clause):
-    id: ClassVar[str] = "sizes"
-    size_list: list[PyExpr] = field(default_factory=list)
-
-#### unroll ####
-@dataclass
-class Full(Clause):
-    id: ClassVar[str] = "full"
-    fully_unroll: PyExpr|None = None
-
-class Partial(Clause):
-    id: ClassVar[str] = "partial"
-    unroll_factor: PyExpr|None = None
-
-
-#### parallel ####
 @dataclass
 class CopyIn(DataScope):
     id: ClassVar[str] = "copyin"
 
 @dataclass
+class CopyPrivate(DataScope):
+    id: ClassVar[str] = "copyprivate"
+
+
+#### MASTER AND SYNCH CLAUSES ####
+
+class TaskDependenceKind(Enum):
+    IN = 0
+    OUT = 1
+    INOUT = 2
+    SOURCE = 3
+    SINK = 4
+
+    @staticmethod
+    def from_name(name: Name|None) -> TaskDependenceKind|None:
+        return (
+            {
+                "in": TaskDependenceKind.IN,
+                "out": TaskDependenceKind.OUT,
+                "inout": TaskDependenceKind.INOUT,
+                "source": TaskDependenceKind.SOURCE,
+                "sink": TaskDependenceKind.SINK,
+            }[name.string.lower()]
+            if name is not None
+            else None
+        )
+
+@dataclass
+class Depend(Clause):
+    id: ClassVar[str] = "depend"
+    locator_list: list[PyExpr] = field(default_factory=list)
+    task_dependence_name: Name|None = None
+    task_dependence: TaskDependenceKind|None = field(init=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "task_dependence",
+            TaskDependenceKind.from_name(self.task_dependence_name)
+        )
+
+
+#### DATA MAPPING CLAUSES ####
+
+@dataclass
+class Map(DataScope):
+    id: ClassVar[str] = "map"
+
+    # modifiers:
+    always_modifier_name: Name|None = None
+    map_type_name: Name|None = None
+    map_type: MapType|None = field(init=False)
+
+    class MapType(Enum):
+        TO = 0
+        FROM = 1
+        TOFROM = 2
+        ALLOC = 3
+        RELEASE = 4
+        DELETE = 5
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "map_type",
+            {
+                "to": self.MapType.TO,
+                "from": self.MapType.FROM,
+                "tofrom": self.MapType.TOFROM,
+                "alloc": self.MapType.ALLOC,
+                "release": self.MapType.RELEASE,
+                "delete": self.MapType.DELETE,
+            }[self.map_type_name.string.lower()]
+            if self.map_type_name is not None
+            else None
+        )
+
+@dataclass
+class DefaultMap(Clause):
+    id: ClassVar[str] = "use_device_addr"
+    tofrom_modifier_name: Name
+    scalar_modifier_name: Name|None = None
+
+
+#######################################################################################################################
+
+
+#### PARALLEL CONSTRUCT CLAUSES ####
+
+@dataclass
 class NumThreads(Clause):
     id: ClassVar[str] = "num_threads"
     nthreads: PyExpr
-    # modifiers:
-    strict_name: Name|None = None
 
 @dataclass
 class ProcBind(Clause):
@@ -1282,710 +648,95 @@ class ProcBind(Clause):
             }[self.affinity_policy_name.string.lower()],
         )
 
-@dataclass
-class SafeSync(Clause):
-    id: ClassVar[str] = "safesync"
-    width: PyExpr|None = None
 
-#### teams ####
-@dataclass
-class NumTeams(Clause):
-    id: ClassVar[str] = "num_teams"
-    upper_bound: PyExpr
-    lower_bound: PyExpr|None = None
-
-@dataclass
-class ThreadLimit(Clause):
-    id: ClassVar[str] = "thread_limit"
-    threadlim: PyExpr
-
-
-#### simd ####
-@dataclass
-class NonTemporal(DataScope):
-    id: ClassVar[str] = "non_temporal"
-
-@dataclass
-class Order(Clause):
-    id: ClassVar[str] = "non_temporal"
-    ordering: Name
-    # modifiers:
-    order_modifier_name: Name|None = None
-    order_modifier: OrderModifier|None = field(init=False)
-
-    class OrderModifier(Enum):
-        REPRODUCIBLE = 0
-        UNCONSTRAINED = 1
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "order_modifier",
-            {
-                "reproducible": self.OrderModifier.REPRODUCIBLE,
-                "unconstrained": self.OrderModifier.UNCONSTRAINED,
-            }[self.order_modifier_name.string.lower()]
-            if self.order_modifier_name is not None
-            else None
-        )
-
-@dataclass
-class SafeLen(Clause):
-    id: ClassVar[str] = "safelen"
-    length: PyExpr
-
-
-#### masked ####
-@dataclass
-class Filter(Clause):
-    id: ClassVar[str] = "filter"
-    thread_num: PyExpr
-
-
-#### single ####
-@dataclass
-class CopyPrivate(DataScope):
-    id: ClassVar[str] = "copyprivate"
-
-
-#### for ####
-@dataclass
-class OrderedClause(Clause):
-    id: ClassVar[str] = "ordered"
-    n: PyInt|None = None
+#### FOR CONSTRUCT CLAUSES ####
 
 @dataclass
 class Schedule(Clause):
     id: ClassVar[str] = "schedule"
     type: ScheduleType
     chunk: PyExpr|None = None
+
     # modifiers:
-    ordering_modifier_name: Name|None = None
-    ordering_modifier: OrderingModifier|None = field(init=False)
+    schedule_modifier_name: Name|None = None
+    schedule_modifier: ScheduleModifier|None = field(init=False)
     chunk_modifier_name: Name|None = None
 
-    class OrderingModifier(Enum):
+    class ScheduleModifier(Enum):
         MONOTONIC = 0
-        NON_MONOTONIC = 0
+        NON_MONOTONIC = 1
+        SIMD = 2
 
     def __post_init__(self) -> None:
         object.__setattr__(
             self,
             "ordering_modifier",
             {
-                "monotonic": self.OrderingModifier.MONOTONIC,
-                "nonmonotonic": self.OrderingModifier.NON_MONOTONIC,
-            }[self.ordering_modifier_name.string.lower()]
-            if self.ordering_modifier_name is not None
-            else None
-        )
-
-
-#### distribute ####
-@dataclass
-class DistSchedule(Clause):
-    id: ClassVar[str] = "dist_schedule"
-    static: Name # = static
-    chunk_size: PyExpr|None = None
-
-
-#### loop ####
-@dataclass
-class Bind(Clause):
-    id: ClassVar[str] = "bind"
-    binding_name: Name
-    binding: BindingKind = field(init=False)
-
-    class BindingKind(Enum):
-        PARALLEL = 0
-        TEAMS = 1
-        THREAD = 2
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "binding",
-            {
-                "parallel": self.BindingKind.PARALLEL,
-                "teams": self.BindingKind.TEAMS,
-                "thread": self.BindingKind.THREAD,
-            }[self.binding_name.string.lower()]
-        )
-
-
-#### taskloop ####
-@dataclass
-class GrainSize(Clause):
-    id: ClassVar[str] = "grain_size"
-    grain_size: PyExpr
-    # modifiers:
-    strict_name: Name|None = None
-
-@dataclass
-class NumTasks(Clause):
-    id: ClassVar[str] = "num_tasks"
-    num_tasks: PyExpr
-    # modifiers:
-    strict: Name|None = None
-
-
-#### taskgraph ####
-@dataclass
-class GraphId(Clause):
-    id: ClassVar[str] = "graph_id"
-    graph_id_value: PyExpr
-
-@dataclass
-class GraphReset(Clause):
-    id: ClassVar[str] = "graph_reset"
-    expr: PyExpr
-
-#### target_data ####
-@dataclass
-class UseDevicePtr(DataScope):
-    id: ClassVar[str] = "use_device_ptr"
-
-@dataclass
-class UseDeviceAddr(DataScope):
-    id: ClassVar[str] = "use_device_addr"
-
-
-#### target ####
-class VariableCategory(Enum):
-    ALL = 0
-    AGGREGATE = 1
-    ALLOCATABLE = 2
-    POINTER = 3
-    SCALAR = 4
-
-    @staticmethod
-    def from_name(name: Name|None) -> VariableCategory|None:
-        return (
-            {
-                "all": VariableCategory.ALL,
-                "aggregate": VariableCategory.AGGREGATE,
-                "allocatable": VariableCategory.ALLOCATABLE,
-                "pointer": VariableCategory.POINTER,
-                "scalar": VariableCategory.SCALAR,
-            }[name.string.lower()]
-            if name is not None
+                "monotonic": self.ScheduleModifier.MONOTONIC,
+                "nonmonotonic": self.ScheduleModifier.NON_MONOTONIC,
+                "simd": self.ScheduleModifier.SIMD,
+            }[self.schedule_modifier_name.string.lower()]
+            if self.schedule_modifier_name is not None
             else None
         )
 
 @dataclass
-class DefaultMap(Clause):
-    id: ClassVar[str] = "use_device_addr"
-    implicit_behavior_name: Name
-    implicit_behavior: ImplicitBehavior = field(init=False)
-    # modifiers:
-    variable_category_name: Name|None = None
-    variable_category: VariableCategory|None = None
+class OrderedClause(Clause):
+    id: ClassVar[str] = "ordered"
+    n: PyInt|None = None
 
-    class ImplicitBehavior(Enum):
-        DEFAULT = 0
-        FIRST_PRIVATE = 1
-        FROM = 2
-        NONE = 3
-        PRESENT = 4
-        PRIVATE = 5
-        SELF = 6
-        STORAGE = 7
-        TO = 8
-        TOFROM = 9
 
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "implicit_behavior",
-            {
-                "default ": self.ImplicitBehavior.DEFAULT,
-                "first_private ": self.ImplicitBehavior.FIRST_PRIVATE,
-                "from ": self.ImplicitBehavior.FROM,
-                "none ": self.ImplicitBehavior.NONE,
-                "present ": self.ImplicitBehavior.PRESENT,
-                "private ": self.ImplicitBehavior.PRIVATE,
-                "self ": self.ImplicitBehavior.SELF,
-                "storage ": self.ImplicitBehavior.STORAGE,
-                "to ": self.ImplicitBehavior.TO,
-                "tofrom ": self.ImplicitBehavior.TOFROM,
-            }[self.implicit_behavior_name.string.lower()],
-        )
-        object.__setattr__(self, "variable_category", VariableCategory.from_name(self.variable_category_name))
+#### SIMD CONSTRUCT CLAUSES ####
 
 @dataclass
-class UsesAllocators(Clause):
-    id: ClassVar[str] = "use_device_addr"
-    allocator: PyExpr
-    # modifiers:
-    memspace_modifier: MemSpace|None = None
-    traits_modifier: Traits|None = None
-
-
-#### target_update ####
-@dataclass
-class From(DataScope):
-    id: ClassVar[str] = "from_"
-    # modifiers:
-    present_name: Name|None = None
-    mapper_modifier: Mapper|None = None
-    iterator_modifier: Iterator|None = None
-
+class SafeLen(Clause):
+    id: ClassVar[str] = "safelen"
+    length: PyExpr
 
 @dataclass
-class To(DataScope):
-    id: ClassVar[str] = "to"
-    # modifiers:
-    present_name: Name|None = None
-    mapper_modifier: Mapper|None = None
-    iterator_modifier: Iterator|None = None
-
-
-#### interop ####
-@dataclass
-class Destroy(Clause):
-    id: ClassVar[str] = "destroy"
-    destroy_var: PyName
+class Simdlen(Clause):
+    id: ClassVar[str] = "simdlen"
+    length: PyExpr
 
 @dataclass
-class Init(Clause):
-    id: ClassVar[str] = "init"
-    init_var: PyName
-    # modifiers:
-    prefer_modifier: Prefer|None = None
-    depinfo_modifier: DepInfo|None = None
-    interop_type_modifier_name: list[Name] = field(default_factory=list)
-    interop_type_modifier: list[InteropType] = field(init=False)
+class Aligned(DataScope):
+    id: ClassVar[str] = "aligned"
+    alignment_modifier: PyInt|None = None
 
-    class InteropType(Enum):
-        TARGET = 0
-        TARGETSYNC = 1
 
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "interop_type_modifier",
-            [{
-                "target": self.InteropType.TARGET,
-                "targetsync": self.InteropType.TARGETSYNC,
-            }[e.string.lower()] for e in self.interop_type_modifier_name]
-        )
+#### DECLARE_SIMD CONSTRUCT CLAUSES ####
 
 @dataclass
-class Use(Clause):
-    id: ClassVar[str] = "use"
-    interop_var: PyName
-
-
-#### critical ####
-@dataclass
-class Hint(Clause):
-    id: ClassVar[str] = "hint"
-    expr: PyExpr
-
-
-#### taskgroup ####
-@dataclass
-class TaskReduction(DataScope):
-    id: ClassVar[str] = "task_reduction"
-    op: ReductionOp
-
-
-#### atomic ####
-@dataclass
-class MemScope(Clause):
-    id: ClassVar[str] = "mem_scope"
-    scope_name: Name
-    scope: ScopeType = field(init=False)
-
-    class ScopeType(Enum):
-        ALL = 0
-        CGROUP = 1
-        DEVICE = 2
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "scope",
-            {
-                "all": self.ScopeType.ALL,
-                "cgroup": self.ScopeType.CGROUP,
-                "device": self.ScopeType.DEVICE,
-            }[self.scope_name.string.lower()]
-        )
+class Uniform(DataScope):
+    id: ClassVar[str] = "uniform"
 
 @dataclass
-class Read(Clause):
-    id: ClassVar[str] = "read"
-    use_semantics: PyExpr|None = None
-@dataclass
-class Update(Clause):
-    id: ClassVar[str] = "update"
-    use_semantics: PyExpr|None = None
-@dataclass
-class Write(Clause):
-    id: ClassVar[str] = "write"
-    use_semantics: PyExpr|None = None
+class InBranch(Clause):
+    id: ClassVar[str] = "in_branch"
+    in_branch: PyExpr|None = None
 
 @dataclass
-class Capture(Clause):
-    id: ClassVar[str] = "capture"
-    use_semantics: PyExpr|None = None
-@dataclass
-class Compare(Clause):
-    id: ClassVar[str] = "compare"
-    use_semantics: PyExpr|None = None
-@dataclass
-class Fail(Clause):
-    id: ClassVar[str] = "fail"
-    mem_order_name: Name
-    mem_order: MemOrder = field(init=False)
-    class MemOrder(Enum):
-        ACQUIRE = 0
-        RELAXED = 1
-        SEQ_CST = 2
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "mem_order",
-            {
-                "acquire": self.MemOrder.ACQUIRE,
-                "relaxed": self.MemOrder.RELAXED,
-                "seq_cst": self.MemOrder.SEQ_CST,
-            }[self.mem_order_name.string.lower()]
-        )
-@dataclass
-class Weak(Clause):
-    id: ClassVar[str] = "weak"
-    use_semantics: PyExpr|None = None
-
-@dataclass
-class AcqRel(Clause):
-    id: ClassVar[str] = "acq_rel"
-    use_semantics: PyExpr|None = None
-@dataclass
-class Acquire(Clause):
-    id: ClassVar[str] = "acquire"
-    use_semantics: PyExpr|None = None
-@dataclass
-class Relaxed(Clause):
-    id: ClassVar[str] = "relaxed"
-    use_semantics: PyExpr|None = None
-@dataclass
-class Release(Clause):
-    id: ClassVar[str] = "release"
-    use_semantics: PyExpr|None = None
-@dataclass
-class SeqCst(Clause):
-    id: ClassVar[str] = "seq_cst"
-    use_semantics: PyExpr|None = None
+class NotInBranch(Clause):
+    id: ClassVar[str] = "not_in_branch"
+    not_in_branch: PyExpr|None = None
 
 
-#### depobj ####
-@dataclass
-class DepobjUpdate(Clause):
-    id: ClassVar[str] = "depobj_update"
-    update_var: PyName
-    # modifiers:
-    task_dependence_name: Name|None = None
-    task_dependence: TaskDependenceKind|None = field(init=False)
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "task_dependence",
-            TaskDependenceKind.from_name(self.task_dependence_name)
-        )
-
-
-#### ordered ####
-@dataclass
-class DoAcross(Clause):
-    id: ClassVar[str] = "do_across"
-    iterator_specifier: IteratorSpecifier
-    # modifiers:
-    dependence_type_name: Name
-    dependence_type: DependenceType = field(init=False)
-
-    class DependenceType(Enum):
-        SINK = 0
-        SOURCE = 1
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "dependence_type",
-            {
-                "sink": self.DependenceType.SINK,
-                "source": self.DependenceType.SOURCE,
-            }[self.dependence_type_name.string.lower()]
-        )
-
-
-@dataclass
-class SimdClause(Clause):
-    id: ClassVar[str] = "simd"
-    appy_to_simd: PyExpr|None = None
-
-
-@dataclass
-class Threads(Clause):
-    id: ClassVar[str] = "threads"
-    appy_to_threads: PyExpr|None = None
-
-
-########################
-#### common clauses ####
-########################
-
-@dataclass
-class Apply(Clause):
-    id: ClassVar[str] = "apply"
-    directives: list[Name] = field(default_factory=list)
-    # modifiers:
-    loop_modifier: LoopModifier|None = None
-
-
-class TaskDependenceKind(Enum):
-    DEPOBJ = 0
-    IN = 1
-    INOUT = 2
-    INOUTSET = 3
-    MUTEXINOUTSET = 4
-    OUT = 5
-
-    @staticmethod
-    def from_name(name: Name|None) -> TaskDependenceKind|None:
-        return (
-            {
-                "depobj": TaskDependenceKind.DEPOBJ,
-                "in": TaskDependenceKind.IN,
-                "inout": TaskDependenceKind.INOUT,
-                "inoutset": TaskDependenceKind.INOUTSET,
-                "mutexinoutset": TaskDependenceKind.MUTEXINOUTSET,
-                "out": TaskDependenceKind.OUT,
-            }[name.string.lower()]
-            if name is not None
-            else None
-        )
-
-
-@dataclass
-class Depend(Clause):
-    id: ClassVar[str] = "depend"
-    locator_list: list[PyExpr] = field(default_factory=list)
-    # modifiers:
-    task_dependence_name: Name|None = None
-    task_dependence: TaskDependenceKind|None = field(init=False)
-    iterator_modifier: Iterator|None = None
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "task_dependence",
-            TaskDependenceKind.from_name(self.task_dependence_name)
-        )
-
-
-@dataclass
-class Device(Clause):
-    id: ClassVar[str] = "device"
-    device_description: PyExpr
-
-    # modifiers:
-    device_modifier_name: Name|None = None
-    device_modifier: DeviceModifier|None = field(init=False)
-
-    class DeviceModifier(Enum):
-        ANCESTOR = 0
-        DEVICE_NUM = 1
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "device_modifier",
-            {
-                "ancestor": self.DeviceModifier.ANCESTOR,
-                "device_num": self.DeviceModifier.DEVICE_NUM,
-            }[self.device_modifier_name.string.lower()]
-            if self.device_modifier_name is not None
-            else None
-        )
-
-
-@dataclass
-class Default(Clause):
-    id: ClassVar[str] = "default"
-    data_sharing_attr_name: Name
-    data_sharing_attr: DataSharingAttr = field(init=False)
-    # modifiers:
-    variable_category_name: Name|None = None
-    variable_category: VariableCategory|None = None
-
-    class DataSharingAttr(Enum):
-        SHARED = 0
-        FIRST_PRIVATE = 1
-        PRIVATE = 2
-        NONE = 3
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "data_sharing_attr",
-            {
-                "shared": self.DataSharingAttr.SHARED,
-                "firstprivate": self.DataSharingAttr.FIRST_PRIVATE,
-                "private": self.DataSharingAttr.PRIVATE,
-                "none": self.DataSharingAttr.NONE,
-            }[self.data_sharing_attr_name.string.lower()],
-        )
-        object.__setattr__(
-            self,
-            "variable_category",
-            VariableCategory.from_name(self.variable_category_name)
-        )
-
-
-@dataclass
-class Private(DataScope):
-    id: ClassVar[str] = "private"
-
-
-@dataclass
-class If(Clause):
-    id: ClassVar[str] = "if_"
-    expr: PyExpr
-
-
-@dataclass
-class FirstPrivate(DataScope):
-    id: ClassVar[str] = "first_private"
-    # modifiers:
-    saved_name: Name|None = None
-
-
-@dataclass
-class Reduction(DataScope):
-    id: ClassVar[str] = "reduction"
-    op: ReductionOp
-    # modifiers:
-    reduction_modifier_name: Name|None = None
-    reduction_modifier: ReductionModifier|None = field(init=False)
-    original_modifier: Original|None = None
-
-    class ReductionModifier(Enum):
-        DEFAULT = 0
-        INSCAN = 1
-        TASK = 2
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "reduction_modifier",
-            {
-                "default": self.ReductionModifier.DEFAULT,
-                "inscan": self.ReductionModifier.INSCAN,
-                "task": self.ReductionModifier.TASK,
-            }[self.reduction_modifier_name.string.lower()]
-            if self.reduction_modifier_name is not None
-            else None
-        )
-
-
-@dataclass
-class Induction(DataScope):
-    id: ClassVar[str] = "induction"
-    op: InductionOp
-    # modifiers:
-    step_modifier: Step
-    induction_modifier_name: Name|None = None
-    induction_modifier: InductionModifier|None = field(init=False)
-
-    class InductionModifier(Enum):
-        RELAXED = 0
-        STRICT = 1
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "induction_modifier",
-            {
-                "relaxed": self.InductionModifier.RELAXED,
-                "strict": self.InductionModifier.STRICT,
-            }[self.induction_modifier_name.string.lower()]
-            if self.induction_modifier_name is not None
-            else None
-        )
-
-
-@dataclass
-class Shared(DataScope):
-    id: ClassVar[str] = "shared"
-
-
-@dataclass
-class Collapse(Clause):
-    id: ClassVar[str] = "collapse"
-    num: PyInt
-
-
-@dataclass
-class LastPrivate(DataScope):
-    id: ClassVar[str] = "last_private"
-    # modifiers:
-    conditional_name: Name|None = None
-
-
-@dataclass
-class AllocateClause(DataScope):
-    id: ClassVar[str] = "allocate"
-    # modifiers:
-    allocator_simple_modifier: PyExpr|None = None
-    allocator_modifier: AllocatorModifier|None = None
-    align_modifier: AlignModifier|None = None
-
-
-@dataclass
-class NoWait(Clause):
-    id: ClassVar[str] = "no_wait"
-    dont_synchronize: PyExpr|None = None
-
+#### TASK CONSTRUCT CLAUSES ####
 
 @dataclass
 class Final(Clause):
     id: ClassVar[str] = "final"
     finalize: PyExpr
 
-
-@dataclass
-class Mergeable(Clause):
-    id: ClassVar[str] = "mergeable"
-    can_merge: PyExpr|None = None
-
-
 @dataclass
 class Untied(Clause):
     id: ClassVar[str] = "untied"
     can_change_threads: PyExpr|None = None
 
-
 @dataclass
-class Affinity(DataScope):
-    id: ClassVar[str] = "affinity"
-    # modifiers:
-    iterator_modifier: Iterator|None = None
-
-
-@dataclass
-class Detach(Clause):
-    id: ClassVar[str] = "detach"
-    event_handle: PyName
-
-
-@dataclass
-class InReduction(DataScope):
-    id: ClassVar[str] = "in_reduction"
-    op: ReductionOp
-
+class Mergeable(Clause):
+    id: ClassVar[str] = "mergeable"
+    can_merge: PyExpr|None = None
 
 @dataclass
 class Priority(Clause):
@@ -1993,38 +744,17 @@ class Priority(Clause):
     value: PyExpr
 
 
-@dataclass
-class Replayable(Clause):
-    id: ClassVar[str] = "affinity"
-    expr: PyExpr
-
+#### TASKLOOP CONSTRUCT CLAUSES ####
 
 @dataclass
-class ThreadSet(Clause):
-    id: ClassVar[str] = "thread_set"
-    set_name: Name
-    set: ThreadSetType = field(init=False)
-
-    class ThreadSetType(Enum):
-        OMP_POOL = 0
-        OMP_TEAM = 1
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "set",
-            {
-                "omp_pool": self.ThreadSetType.OMP_POOL,
-                "omp_team": self.ThreadSetType.OMP_TEAM,
-            }[self.set_name.string.lower()]
-        )
-
+class GrainSize(Clause):
+    id: ClassVar[str] = "grain_size"
+    grain_size: PyExpr
 
 @dataclass
-class Transparent(Clause):
-    id: ClassVar[str] = "transparent"
-    impex_type: PyExpr|None = None
-
+class NumTasks(Clause):
+    id: ClassVar[str] = "num_tasks"
+    num_tasks: PyExpr
 
 @dataclass
 class NoGroup(Clause):
@@ -2032,60 +762,123 @@ class NoGroup(Clause):
     dont_synchronize: PyExpr|None = None
 
 
+#### TARGET_DATA CONSTRUCT CLAUSES ####
+
 @dataclass
-class Map(DataScope):
-    id: ClassVar[str] = "map"
-    # modifiers:
-    always_modifier_name: Name|None = None
-    close_modifier_name: Name|None = None
-    present_modifier_name: Name|None = None
-    self_modifier_name: Name|None = None
-    delete_modifier_name: Name|None = None
+class Device(Clause):
+    id: ClassVar[str] = "device"
+    device_description: PyExpr
 
-    ref_modifier_name: Name|None = None
-    ref_modifier: RefModifier|None = field(init=False)
+@dataclass
+class UseDevicePtr(DataScope):
+    id: ClassVar[str] = "use_device_ptr"
 
-    map_type_name: Name|None = None
-    map_type: MapType|None = field(init=False)
 
-    mapper_modifier: Mapper|None = None
-    iterator_modifier: Iterator|None = None
+#### TARGET CONSTRUCT CLAUSES ####
 
-    class RefModifier(Enum):
-        REF_PTEE = 0
-        REF_PTR = 1
-        REF_PTR_PTEE = 2
+@dataclass
+class IsDevicePtr(DataScope):
+    id: ClassVar[str] = "is_device_ptr"
 
-    class MapType(Enum):
-        FROM = 0
-        STORAGE = 1
-        TO = 2
-        TOFROM = 3
 
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "ref_modifier",
-            {
-                "ref_ptee": self.RefModifier.REF_PTEE,
-                "ref_ptr": self.RefModifier.REF_PTR,
-                "ref_ptr_ptee": self.RefModifier.REF_PTR_PTEE,
-            }[self.ref_modifier_name.string.lower()]
-            if self.ref_modifier_name is not None
-            else None
-        )
-        object.__setattr__(
-            self,
-            "map_type",
-            {
-                "from": self.MapType.FROM,
-                "storage": self.MapType.STORAGE,
-                "to": self.MapType.TO,
-                "tofrom": self.MapType.TOFROM,
-            }[self.map_type_name.string.lower()]
-            if self.map_type_name is not None
-            else None
-        )
+#### TARGET_UPDATE CONSTRUCT CLAUSES ####
+
+@dataclass
+class To(DataScope):
+    id: ClassVar[str] = "to"
+
+@dataclass
+class From(DataScope):
+    id: ClassVar[str] = "from_"
+
+
+#### DECLARE_TARGET CONSTRUCT CLAUSES ####
+
+@dataclass
+class Link(DataScope):
+    id: ClassVar[str] = "link"
+
+
+#### TEAMS CONSTRUCT CLAUSES ####
+
+@dataclass
+class NumTeams(Clause):
+    id: ClassVar[str] = "num_teams"
+    upper_bound: PyExpr
+
+@dataclass
+class ThreadLimit(Clause):
+    id: ClassVar[str] = "thread_limit"
+    threadlim: PyExpr
+
+
+#### DISTRIBUTE CONSTRUCT CLAUSES ####
+
+@dataclass
+class DistSchedule(Clause):
+    id: ClassVar[str] = "dist_schedule"
+    static: Name # = static
+    chunk_size: PyExpr|None = None
+
+
+#### CRITICAL CONSTRUCT CLAUSES ####
+
+@dataclass
+class Hint(Clause):
+    id: ClassVar[str] = "hint"
+    expr: PyExpr
+
+#### DISTRIBUTE CONSTRUCT CLAUSES ####
+
+@dataclass
+class Read(Clause):
+    id: ClassVar[str] = "read"
+    use_semantics: PyExpr|None = None
+
+@dataclass
+class Write(Clause):
+    id: ClassVar[str] = "write"
+    use_semantics: PyExpr|None = None
+
+@dataclass
+class Update(Clause):
+    id: ClassVar[str] = "update"
+    use_semantics: PyExpr|None = None
+
+@dataclass
+class Capture(Clause):
+    id: ClassVar[str] = "capture"
+    use_semantics: PyExpr|None = None
+
+@dataclass
+class SeqCst(Clause):
+    id: ClassVar[str] = "seq_cst"
+
+
+#### ORDERED CONSTRUCT CLAUSES ####
+
+@dataclass
+class Threads(Clause):
+    id: ClassVar[str] = "threads"
+    appy_to_threads: PyExpr|None = None
+
+@dataclass
+class SimdClause(Clause):
+    id: ClassVar[str] = "simd"
+    appy_to_simd: PyExpr|None = None
+
+
+#### DECLARE_REDUCTION CONSTRUCT CLAUSES ####
+
+@dataclass
+class Initializer(Clause):
+    id: ClassVar[str] = "initializer"
+    initializer_stmt: PyStmt
+
+@dataclass
+class Combiner(Clause):
+    id: ClassVar[str] = "combiner"
+    combiner_stmt: PyStmt
 
 
 #######################################################################################################################
@@ -2118,211 +911,15 @@ class ScheduleType(Modifier):
             }[self.kind_name.string.lower()],
         )
 
-
 @dataclass
 class ReductionOp(Modifier):
     id: ClassVar[str] = "op"
     value: str
 
-@dataclass
-class InductionOp(Modifier):
-    id: ClassVar[str] = "op"
-    value: str
-
-
-@dataclass
-class Original(Modifier):
-    id: ClassVar[str] = "original_modifier"
-    name: Name # = original
-    sharing_name: Name
-    sharing: Sharing = field(init=False)
-
-    class Sharing(Enum):
-        DEFAULT = 0
-        PRIVATE = 1
-        SHARED = 2
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "sharing",
-            {
-                "default": self.Sharing.DEFAULT,
-                "private": self.Sharing.PRIVATE,
-                "shared": self.Sharing.SHARED,
-            }[self.sharing_name.string.lower()]
-        )
-
-
-@dataclass
-class InteropModifier(Modifier):
-    id: ClassVar[str] = "iterop_modifier"
-    name: Name # = interop
-    kind_name: list[Name] = field(default_factory=list)
-    kind: list[Kind] = field(init=False)
-
-    class Kind(Enum):
-        TARGET = 0
-        TARGETSYNC = 1
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "kind",
-            [{
-                "target": self.Kind.TARGET,
-                "targetsync": self.Kind.TARGETSYNC,
-            }[e.string.lower()] for e in self.kind_name]
-        )
-
-
-@dataclass
-class Iterator(Modifier):
-    id: ClassVar[str] = "iterator_modifier"
-    name: Name # = iterator
-    specifiers: list[IteratorSpecifier] = field(default_factory=list)
-
-@dataclass
-class IteratorSpecifier(Modifier):
-    id: ClassVar[str] = "iterator_specifier"
-    name: PyName
-    begin: PyExpr
-    end: PyExpr
-    step: PyExpr|None = None
-
-
-@dataclass
-class Step(Modifier):
-    id: ClassVar[str] = "step_modifier"
-    name: Name
-    expr: PyExpr
-
-
-@dataclass
-class AllocatorModifier(Modifier):
-    id: ClassVar[str] = "allocator_modifier"
-    name: Name # = allocator
-    allocator: PyExpr
-
-
-@dataclass
-class AlignModifier(Modifier):
-    id: ClassVar[str] = "align_modifier"
-    name: Name # = align
-    alignment: PyExpr
-
-
-@dataclass
-class Mapper(Modifier):
-    id: ClassVar[str] = "mapper_modifier"
-    name: Name # = mapper
-    identifier: PyName
-
-@dataclass
-class MemSpace(Modifier):
-    id: ClassVar[str] = "memspace_modifier"
-    name: Name # = memspace
-    handle: PyExpr
-
-@dataclass
-class Traits(Modifier):
-    id: ClassVar[str] = "traits_modifier"
-    name: Name # = traits
-    traits: PyExpr
-
-
-@dataclass
-class DepInfo(Modifier):
-    id: ClassVar[str] = "depinfo_modifier"
-    name: Name
-    kind: Kind = field(init=False)
-    locator_list: list[PyName] = field(default_factory=list)
-
-    class Kind(Enum):
-        IN = 0
-        INOUT = 1
-        INOUTSET = 2
-        MUTEXINOUTSET = 3
-        OUT = 4
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "kind",
-            {
-                "in": self.Kind.IN,
-                "inout": self.Kind.INOUT,
-                "inoutset": self.Kind.INOUTSET,
-                "mutexinoutset": self.Kind.MUTEXINOUTSET,
-                "out": self.Kind.OUT,
-            }[self.name.string.lower()]
-        )
-
-
-@dataclass
-class LoopModifier(Modifier):
-    id: ClassVar[str] = "loop_modifier"
-    name: Name
-    kind: Kind = field(init=False)
-    indices: list[PyExpr] = field(default_factory=list)
-
-    class Kind(Enum):
-        FUSED = 0
-        GRID = 1
-        IDENTITY = 2
-        INTERCHANGED = 3
-        INTRATILE = 4
-        OFFSETS = 5
-        REVERSED = 6
-        SPLIT = 7
-        UNROLLED = 8
-
-    def __post_init__(self) -> None:
-        object.__setattr__(
-            self,
-            "kind",
-            {
-                "fused": self.Kind.FUSED,
-                "grid": self.Kind.GRID,
-                "identity": self.Kind.IDENTITY,
-                "interchanged": self.Kind.INTERCHANGED,
-                "intratile": self.Kind.INTRATILE,
-                "offsets": self.Kind.OFFSETS,
-                "reversed": self.Kind.REVERSED,
-                "split": self.Kind.SPLIT,
-                "unrolled": self.Kind.UNROLLED,
-            }[self.name.string.lower()]
-        )
-
-
-@dataclass
-class Prefer(Modifier):
-    id: ClassVar[str] = "prefer_modifier"
-    name: Name # = prefer_type
-    spec: list[list[FrSelector|AttrSelector] | PyName] = field(default_factory=list)
-
-@dataclass
-class FrSelector(Modifier):
-    name: Name
-    identifier: PyName
-
-@dataclass
-class AttrSelector(Modifier):
-    name: Name
-    expr_list: list[PyExpr]
-
-
-# TODO: this uses context_selector as a stmt_list, which is not exactly what the standard required
-@dataclass
-class ContextSelector(Modifier):
-    id: ClassVar[str] = "context_selector"
-    stmt_list: list[PyStmt] = field(default_factory=list)
-
 
 #######################################################################################################################
 ################################################## Python Modifiers ###################################################
 #######################################################################################################################
-
 
 @dataclass
 class PyExpr(Modifier):
