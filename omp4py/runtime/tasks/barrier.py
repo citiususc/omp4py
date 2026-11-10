@@ -38,9 +38,6 @@ def barrier() -> None:
     depending on the runtime conditions, and may also execute available
     tasks if the runtime scheduler provides work, improving overall
     utilization.
-
-    Returns:
-        None
     """
     barrier_ : Barrier = omp_ctx().task.barrier
 

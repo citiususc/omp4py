@@ -88,7 +88,8 @@ def process_object[T: Callable[..., typing.Any] | type](arg: T, opt: Options) ->
     result: dict[str, typing.Any] = {}
 
     path_hash: str = hashlib.sha256(bytes(Path(opt.filename).resolve())).hexdigest()[:12]
-    fullname: str = f"p{path_hash}_{arg.__module__}_{arg.__name__}"
+    name: str = getattr(arg, "name", "<None>")
+    fullname: str = f"p{path_hash}_{arg.__module__}_{name}"
     cache_dir = Path(opt.cache)
     cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -111,7 +112,7 @@ def process_object[T: Callable[..., typing.Any] | type](arg: T, opt: Options) ->
         if spec.loader:
             spec.loader.exec_module(ext_module)
 
-        return ext_module.__dict__[arg.__name__]
+        return ext_module.__dict__[name]
 
     pyfile = (cache_dir / fullname).with_suffix(".py")
     spec = typing.cast("ModuleSpec", spec_from_file_location(fullname, pyfile))
@@ -134,7 +135,7 @@ def process_object[T: Callable[..., typing.Any] | type](arg: T, opt: Options) ->
     exec(codecache, module_globals.__dict__, result)  # noqa: S102
     module_globals.__dict__["_omp"] = sys.modules["omp4py.runtime"]
 
-    return result[arg.__name__]
+    return result[name]
 
 
 def process_source(data: str, filename: str, opt: Options) -> str:

@@ -122,7 +122,6 @@ class OrderedShared:
         obj.count = count
         obj.own = -1
         obj.it = -1
-        obj.chunk = -1
         obj.event = AtomicObject.new()
         obj.event.set(Event.new())
         return obj
@@ -256,7 +255,7 @@ def for_init(bounds: ForBounds, modifier: pyint, schedule: pyint, chunk: pyint, 
             task.kind = for_next_guided
 
     if chunk < 0:
-        chunk = cython.cast(cython.longlong, math.ceil(bounds.its / ctx.icvs.team_size)) if schedule == _static else 1
+        chunk = cython.cast(pyint, math.ceil(bounds.its / ctx.icvs.team_size)) if schedule == _static else 1  # ty: ignore[no-matching-overload]
     if bounds.collapse == 1:
         bounds.count = bounds.rs[_r_start]
         if bounds.rs[_r_step] < 0:  # negative step
@@ -407,7 +406,7 @@ def fix_bounds(bounds: ForBounds) -> bool:
         if count >= stop:
             return False
         bounds.init = count
-        if bounds.count > stop:  # noqa: PLR1730
+        if bounds.count > stop:
             bounds.end = stop
         else:
             bounds.end = bounds.count
@@ -415,7 +414,7 @@ def fix_bounds(bounds: ForBounds) -> bool:
         if count <= stop:
             return False
         bounds.init = count
-        if bounds.count < stop:  # noqa: PLR1730
+        if bounds.count < stop:
             bounds.end = stop
         else:
             bounds.end = bounds.count
@@ -513,24 +512,24 @@ class SectionsTask(Task):
     """Task context used by a `sections` region.
 
     Attributes:
-        shared (SectionsShared): Shared section scheduler state.
+        sections_shared (SectionsShared): Shared section scheduler state.
     """
-    shared: SectionsShared
+    sections_shared: SectionsShared
 
     @staticmethod
-    def new(ctx: TaskContext, shared: SectionsShared) -> SectionsTask:
+    def new(ctx: TaskContext, sections_shared: SectionsShared) -> SectionsTask:
         """Create a sections task context.
 
         Args:
             ctx (TaskContext): Current task context.
-            shared (SectionsShared): Shared sections state.
+            sections_shared (SectionsShared): Shared sections state.
 
         Returns:
             SectionsTask: Initialized task.
         """
         obj: SectionsTask = SectionsTask.__new__(SectionsTask)
         obj._new_task(ctx.task.shared, ctx.icvs, ctx.task.barrier)
-        obj.shared = shared
+        obj.sections_shared = sections_shared
         return obj
 
 
@@ -558,7 +557,7 @@ def sections_next() -> pyint:
     Returns:
         pyint: Section identifier, or `0` when no sections remain.
     """
-    n: pyint = cython.cast(SectionsTask, omp_ctx().task).shared.count.fetch_sub(1)
+    n: pyint = cython.cast(SectionsTask, omp_ctx().task).sections_shared.count.fetch_sub(1)
     if n < 0:
         return 0
     return n
@@ -650,24 +649,24 @@ class SingleTask(Task):
     """Task context used by a `single` region.
 
     Attributes:
-        shared (SingleShared): Shared single-region state.
+        single_shared (SingleShared): Shared single-region state.
     """
-    shared: SingleShared
+    single_shared: SingleShared
 
     @staticmethod
-    def new(ctx: TaskContext, shared: SingleShared) -> SingleTask:
+    def new(ctx: TaskContext, single_shared: SingleShared) -> SingleTask:
         """Create a single task context.
 
         Args:
             ctx (TaskContext): Current task context.
-            shared (SingleShared): Shared single state.
+            single_shared (SingleShared): Shared single state.
 
         Returns:
             SingleTask: Initialized task.
         """
         obj: SingleTask = SingleTask.__new__(SingleTask)
         obj._new_task(ctx.task.shared, ctx.icvs, ctx.task.barrier)
-        obj.shared = shared
+        obj.single_shared = single_shared
         return obj
 
 
@@ -693,7 +692,7 @@ def single_init(copyprivate: bool) -> bool:
     )
 
     ctx.push(task)
-    return task.shared.count.fetch_sub(1) > 0
+    return task.single_shared.count.fetch_sub(1) > 0
 
 
 def single_end(nowait: bool) -> None:
@@ -718,14 +717,14 @@ def single_copy_get(nvars: pyint) -> SingleCopyPrivate:
     Returns:
         SingleCopyPrivate: Storage container.
     """
-    shared = cython.cast(SingleTask, omp_ctx().task).shared
+    shared = cython.cast(SingleTask, omp_ctx().task).single_shared
     shared.copyprivate = SingleCopyPrivate.new(nvars)
     return shared.copyprivate
 
 
 def single_copy_notify() -> None:
     """Notify waiting threads that `copyprivate` data is ready."""
-    shared = cython.cast(SingleTask, omp_ctx().task).shared
+    shared = cython.cast(SingleTask, omp_ctx().task).single_shared
     cython.cast(Event, shared.event).notify()
 
 
@@ -735,6 +734,6 @@ def single_copy_wait() -> SingleCopyPrivate:
     Returns:
         SingleCopyPrivate: Shared copied values.
     """
-    shared = cython.cast(SingleTask, omp_ctx().task).shared
+    shared = cython.cast(SingleTask, omp_ctx().task).single_shared
     cython.cast(Event, shared.event).wait()
     return cython.cast(SingleCopyPrivate, shared.copyprivate)

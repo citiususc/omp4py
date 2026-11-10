@@ -1,12 +1,16 @@
 line-length = 120
 indent-width = 4
-exclude = ["docs/conf.py", "cython.py", "*/parser/lark/*"]
+exclude = ["docs/conf.py", "cython.py", "*/parser/*_lark.py"]
+
+preview = true
 
 [lint]
-select = ["ALL"]
+explicit-preview-rules = true
+select = ["ALL", "DOC102", "DOC201", "DOC202"]
 
 ignore = [
     "ARG001",
+    "CPY001",
     "D418",
     "FBT001",
     "FBT002",

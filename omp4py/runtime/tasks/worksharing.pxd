@@ -93,10 +93,10 @@ cdef class SectionsShared:
 
 
 cdef class SectionsTask(Task):
-    cdef SectionsShared shared
+    cdef SectionsShared sections_shared
 
     @staticmethod
-    cdef SectionsTask new(TaskContext ctx, SectionsShared shared)
+    cdef SectionsTask new(TaskContext ctx, SectionsShared sections_shared)
 
 
 cpdef void sections_init(pyint sections)
@@ -116,10 +116,10 @@ cdef class SingleShared:
 
 
 cdef class SingleTask(Task):
-    cdef SingleShared shared
+    cdef SingleShared single_shared
 
     @staticmethod
-    cdef SingleTask new(TaskContext ctx, SingleShared shared)
+    cdef SingleTask new(TaskContext ctx, SingleShared single_shared)
 
 
 cpdef bint single_init(bint copyprivate)

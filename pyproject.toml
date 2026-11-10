@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=78", "Cython @ git+https://github.com/cython/cython@a94adc7"] #cython >=3.3
+requires = ["setuptools>=78", "Cython>=3.3.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -40,12 +40,12 @@ Repository = "https://github.com/citiususc/omp4py.git"
 Issues = "https://github.com/citiususc/omp4py/issues"
 
 [project.optional-dependencies]
-compile = ["setuptools>=78", "Cython>=3.2.4"]
+compile = ["setuptools>=78", "Cython>=3.3.1"]
 all = ['omp4py[compile]']
 
 [dependency-groups]
-dev = ["omp4py[all]", "pytest>=9.0.3", "pytest-cov>=7.1.0", "lark>=1.3.1"]
-checks = [{ include-group = "dev" }, "ruff>=0.15.16", "ty>=0.0.47"]
+dev = ["omp4py[all]", "pytest>=9.0.3", "pytest-cov>=7.1.0", "poethepoet >=0.49.0", "lark[interegular]>=1.3.1"]
+checks = [{ include-group = "dev" }, "ruff>=0.17.1", "ty>=0.0.89"]
 docs = ["sphinx>=9.1.0", "shibuya>=2026.5.19", "myst-parser>=4.0", "sphinxcontrib-mermaid>=2.0.2"]
 
 [tool.pytest.ini_options]
@@ -74,7 +74,23 @@ include = ["omp4py*"]
 [tool.setuptools.package-data]
 "*" = ["*.py", "*.pyx", "*.pxd"]
 
+# Tasks
+[tool.poe.tasks]
+_lark_string = "python -m lark.tools.standalone string.lark --out string_lark.py --lexer basic"
+_lark_openmp = "python -m lark.tools.standalone openmp.lark --out openmp_lark.py --propagate_positions --maybe_placeholders"
 
+[tool.poe.tasks.lark]
+sequence = ["_lark_string", "_lark_openmp"]
+cwd = "omp4py/core/parser"
+help = "Generates Lark parsers"
+
+[tool.poe.tasks.ruff]
+cmd = "ruff check omp4py"
+help = "Run Ruff for code linting"
+
+[tool.poe.tasks.ty]
+cmd = "ty check"
+help = "Run Ty for static type checking"
 
 # From here on, everything is for cibuildwheel configuration
 [tool.cibuildwheel]

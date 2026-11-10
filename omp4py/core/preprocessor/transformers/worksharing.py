@@ -30,8 +30,6 @@ from omp4py.core.parser.tree import (
     CopyPrivate,
     For,
     Name,
-    ParallelFor,
-    ParallelSections,
     Private,
     PyName,
     ScheduleType,
@@ -48,41 +46,20 @@ from omp4py.core.preprocessor.transformers.scopes import (
     modify_scope,
 )
 from omp4py.core.preprocessor.transformers.symtable import SymbolTable, omp_name, runtime_ast
-from omp4py.core.preprocessor.transformers.transformer import Context, construct, syntax_error_ctx
-from omp4py.core.preprocessor.transformers.utils import fix_body_locations, unpack_if, walk
+from omp4py.core.preprocessor.transformers.transformer import (
+    Context,
+    StructuredBlock,
+    construct,
+    syntax_error_ctx,
+    with_block,
+)
+from omp4py.core.preprocessor.transformers.utils import fix_body_locations, walk
 
 __all__ = []
 
 
 @construct.register
-def _(ctr: ParallelFor, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
-    """Transform a combined `parallel for` construct.
-
-    This construct is decomposed into a nested transformation where the
-    `parallel` region is applied first, followed by the `for` worksharing
-    construct inside the parallel region.
-
-    A temporary scope is introduced to correctly handle variable scoping
-    rules inside the nested constructs.
-
-    Args:
-        ctr (ParallelFor): Parsed OpenMP combined construct.
-        body (list[ast.stmt]): Original AST body.
-        ctx (Context): Transformation context.
-
-    Returns:
-        list[ast.stmt]: Transformed AST statements.
-    """
-    unpack: ast.If = unpack_if(body)
-    body = construct(ctr.parallel, [unpack], ctx)
-    old_scope, ctx.scope = ctx.scope, ctx.scope.new_child(ctx.scope.node)
-    unpack.body = construct(ctr.for_, unpack.body, ctx)
-    ctx.scope = old_scope
-    return body
-
-
-@construct.register
-def _(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:  # noqa: C901 PLR0912
+def _(ctr: For, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt]:  # noqa: C901 PLR0912
     """Transform an OpenMP `for` worksharing construct.
 
     This function rewrites a Python `for` loop into a runtime-driven loop
@@ -98,15 +75,16 @@ def _(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:  # noqa: 
 
     Args:
         ctr (For): Parsed `for` construct.
-        body (list[ast.stmt]): Loop body.
+        block (StructuredBlock | None): Structured block of the for region.
         ctx (Context): Transformation context.
 
     Returns:
         list[ast.stmt]: Transformed AST statements implementing the loop.
     """
+    block = with_block(ctr, block, ctx)
     collapse_num = ctr.collapse.num.value if ctr.collapse is not None else 1
     ordered_num = 0 if not ctr.ordered else (ctr.ordered.n.value if ctr.ordered.n else 1)
-    for_list: list[ast.For] = for_checks(ctr, body, ctx)
+    for_list: list[ast.For] = for_checks(ctr, block.body, ctx)
     first_private = ctr.first_private
     private = ctr.private
 
@@ -131,21 +109,21 @@ def _(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:  # noqa: 
         ast.Assign([ast.Tuple(bounds_index, ast.Store())], ast.Tuple(bounds_value)),
     )
 
-    schedule_name: str = "static"
+    schedule_name: str = ScheduleType.Choice.STATIC
     for_next: str = "for_next"
     if ctr.schedule:
-        kind = ctr.schedule.type.kind
-        if ctr.schedule.type.kind == ScheduleType.Kind.AUTO:
-            kind = ScheduleType.Kind.STATIC
-        schedule_name = ctr.schedule.type.nkind.string.lower()
+        kind = ctr.schedule.type.choice
+        if ctr.schedule.type.choice == ScheduleType.Choice.AUTO:
+            kind = ScheduleType.Choice.STATIC
+        schedule_name = ctr.schedule.type.choice.lower()
         match kind:
-            case ScheduleType.Kind.STATIC | ScheduleType.Kind.DYNAMIC | ScheduleType.Kind.GUIDED:
+            case ScheduleType.Choice.STATIC | ScheduleType.Choice.DYNAMIC | ScheduleType.Choice.GUIDED:
                 for_next = f"{for_next}_{schedule_name}"
     else:
         for_next = f"{for_next}_static"
 
     for_init: ast.stmt = ctr.span.to_ast(ast.Expr(for_initc := ast.Call(runtime_ast("for_init"))))
-    for_next: ast.stmt = ctr.span.to_ast(ast.While(for_nextc := ast.Call(runtime_ast(for_next)), body))
+    for_next: ast.stmt = ctr.span.to_ast(ast.While(for_nextc := ast.Call(runtime_ast(for_next)), [block]))
     for_end: ast.stmt = ctr.span.to_ast(ast.Expr(for_endc := ast.Call(runtime_ast("for_end"))))
     body = [bounds_create, bounds_assign, for_init, for_next, for_end]
 
@@ -153,17 +131,19 @@ def _(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:  # noqa: 
     for_initc.args.append(ast.Name(bounds_name))
     for_initc.args.append(ast.Constant(-1))
     for_initc.args.append(ast.Constant(ord(schedule_name[0])))
-    for_initc.args.append(ctr.schedule.chunk.value if ctr.schedule and ctr.schedule.chunk else ast.Constant(-1))
+    for_initc.args.append(
+        ctr.schedule.chunk_size.value if ctr.schedule and ctr.schedule.chunk_size else ast.Constant(-1),
+    )
     for_initc.args.append(ast.Constant(ordered_num))
 
     for_nextc.args.append(ast.Name(bounds_name))
 
     if ctr.no_wait is None:
         for_endc.args.append(ast.Constant("parallel" in ctr.name.string.lower()))
-    elif ctr.no_wait.expr is None:
+    elif ctr.no_wait.not_synchronize is None:
         for_endc.args.append(ast.Constant(True))
     else:
-        for_endc.args.append(ctr.no_wait.expr.value)
+        for_endc.args.append(ctr.no_wait.not_synchronize.value)
 
     if ctr.last_private:
         check_scopes(ctx, *ctr.last_private)
@@ -360,38 +340,14 @@ def for_checks(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.For]:
 
 
 @construct.register
-def _(ctr: ParallelSections, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
-    """Transform a combined `parallel sections` construct.
-
-    Similar to `parallel for`, this construct is decomposed into a
-    `parallel` region containing a `sections` construct, with proper
-    scope handling.
-
-    Args:
-        ctr (ParallelSections): Parsed construct.
-        body (list[ast.stmt]): Original body.
-        ctx (Context): Transformation context.
-
-    Returns:
-        list[ast.stmt]: Transformed AST statements.
-    """
-    unpack: ast.If = unpack_if(body)
-    body = construct(ctr.parallel, [unpack], ctx)
-    old_scope, ctx.scope = ctx.scope, ctx.scope.new_child(ctx.scope.node)
-    unpack.body = construct(ctr.sections, unpack.body, ctx)
-    ctx.scope = old_scope
-    return body
-
-
-@construct.register
-def _(ctr: Section, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
+def _(ctr: Section, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt]:
     """Handle invalid standalone `section` usage.
 
     The `section` construct is only valid inside a `sections` block.
 
     Args:
         ctr (Section): Parsed construct.
-        body (list[ast.stmt]): Body.
+        block (StructuredBlock | None): Structured block of the section region.
         ctx (Context): Transformation context.
 
     Raises:
@@ -401,7 +357,7 @@ def _(ctr: Section, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
     raise syntax_error_ctx(msg, ctr.span, ctx)
 
 
-def section_checks(ctr: Sections, body: list[ast.stmt], ctx: Context) -> list[ast.With]:
+def section_checks(ctr: Sections, block: StructuredBlock, ctx: Context) -> list[ast.With]:
     """Validate and normalize `sections` construct body.
 
     Ensures that all elements inside a `sections` construct are valid
@@ -410,7 +366,7 @@ def section_checks(ctr: Sections, body: list[ast.stmt], ctx: Context) -> list[as
 
     Args:
         ctr (Sections): Parsed construct.
-        body (list[ast.stmt]): Body to analyze.
+        block (StructuredBlock | None): Structured block of the sections region.
         ctx (Context): Transformation context.
 
     Returns:
@@ -419,10 +375,17 @@ def section_checks(ctr: Sections, body: list[ast.stmt], ctx: Context) -> list[as
     Raises:
         SyntaxError: If invalid structure is found.
     """
+    if isinstance(block, ast.With):
+        match constructs:= ctx.active_constructs.get(block, None):
+            case [Section(), *_]:
+                constructs.pop(0)
+                return [block]
+
     sections_list: list[ast.With] = []
-    for i, child in enumerate(body):
+    for i, child in enumerate(block.body):
         section: ast.With
-        if isinstance(child, ast.With) and (d := ctx.directives.get(child)) and isinstance(d.construct, Section):
+        if isinstance(child, ast.With) and (cs := ctx.active_constructs.get(child, [])) and isinstance(cs[0], Section):
+            cs.pop(0)
             section = child
         elif i == 0:
             section = ast.With([ast.withitem(ast.Constant(True))], [child])
@@ -434,7 +397,7 @@ def section_checks(ctr: Sections, body: list[ast.stmt], ctx: Context) -> list[as
 
 
 @construct.register
-def _(ctr: Sections, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
+def _(ctr: Sections, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt]:  # ruff: ignore[complex-structure]
     """Transform an OpenMP `sections` construct.
 
     This construct distributes independent sections of code among threads.
@@ -443,13 +406,14 @@ def _(ctr: Sections, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
 
     Args:
         ctr (Sections): Parsed construct.
-        body (list[ast.stmt]): Sections body.
+        block (StructuredBlock | None): Structured block of the sections region.
         ctx (Context): Transformation context.
 
     Returns:
         list[ast.stmt]: Transformed AST statements.
     """
-    sections_list = section_checks(ctr, body, ctx)
+    block = with_block(ctr, block, ctx)
+    sections_list = section_checks(ctr, block, ctx)
     first_private = ctr.first_private
     private = ctr.private
 
@@ -469,7 +433,7 @@ def _(ctr: Sections, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
             ast.copy_location(
                 ast.If(
                     ast.Compare(ast.Name(sec_id), [ast.Eq()], [ast.Constant(len(sections_list) - i)]),
-                    sections_list[i].body,
+                    [sections_list[i]],
                 ),
                 sections_list[i],
             ),
@@ -477,10 +441,10 @@ def _(ctr: Sections, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
 
     if ctr.no_wait is None:
         sec_endc.args.append(ast.Constant("parallel" in ctr.name.string.lower()))
-    elif ctr.no_wait.expr is None:
+    elif ctr.no_wait.not_synchronize is None:
         sec_endc.args.append(ast.Constant(True))
     else:
-        sec_endc.args.append(ctr.no_wait.expr.value)
+        sec_endc.args.append(ctr.no_wait.not_synchronize.value)
 
     if ctr.last_private:
         check_scopes(ctx, *ctr.last_private)
@@ -505,7 +469,7 @@ def _(ctr: Sections, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
 
 
 @construct.register
-def _(ctr: Single, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
+def _(ctr: Single, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt]:
     """Transform an OpenMP `single` construct.
 
     This construct ensures that only one thread executes the enclosed
@@ -514,12 +478,13 @@ def _(ctr: Single, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
 
     Args:
         ctr (Single): Parsed construct.
-        body (list[ast.stmt]): Body of the single region.
+        block (StructuredBlock | None): Structured block of the single region.
         ctx (Context): Transformation context.
 
     Returns:
         list[ast.stmt]: Transformed AST statements.
     """
+    body: list[ast.stmt] = [with_block(ctr, block, ctx)]
     modify_scope(ctr, ctx, body, ctr.private, ctr.first_private, [])
     single_ast = ctr.span.to_ast(
         ast.If(ast.Call(runtime_ast("single_init"), [ast.Constant(bool(ctr.copyprivate))]), body),
@@ -532,12 +497,12 @@ def _(ctr: Single, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
 
     if ctr.no_wait is None:
         single_endc.args.append(ast.Constant(False))
-    elif ctr.no_wait.expr is None:
+    elif ctr.no_wait.not_synchronize is None:
         single_endc.args.append(ast.Constant(True))
     else:
-        single_endc.args.append(ctr.no_wait.expr.value)
+        single_endc.args.append(ctr.no_wait.not_synchronize.value)
 
-    body: list[ast.stmt] = [single_ast]
+    body= [single_ast]
     if ctr.copyprivate:
         check_scopes(ctx, *ctr.copyprivate, *ctr.private, *ctr.first_private, allow_threadprivate=True)
         copy_if = copyprivate(ctr.copyprivate, ctx)
@@ -597,12 +562,14 @@ def copyprivate(dataclauses: list[CopyPrivate], ctx: Context) -> ast.If:
             if count > 0 and count % 8 == 0:
                 set_stmts.append(
                     ast.Assign(
-                        [ast.Name(copyprivate_var, ast.Store())], ast.Attribute(ast.Name(copyprivate_var), "next"),
+                        [ast.Name(copyprivate_var, ast.Store())],
+                        ast.Attribute(ast.Name(copyprivate_var), "next"),
                     ),
                 )
                 update_stmts.append(
                     ast.Assign(
-                        [ast.Name(copyprivate_var, ast.Store())], ast.Attribute(ast.Name(copyprivate_var), "next"),
+                        [ast.Name(copyprivate_var, ast.Store())],
+                        ast.Attribute(ast.Name(copyprivate_var), "next"),
                     ),
                 )
             if s := ctx.symtable.get(var.string, True, True):

@@ -4,4 +4,6 @@ include = [
 ]
 exclude = [
     "omp4py/core/imports/cython.py",
+    "omp4py/core/parser/openmp_lark.py",
+    "omp4py/core/parser/string_lark.py",
 ]

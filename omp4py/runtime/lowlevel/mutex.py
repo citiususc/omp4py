@@ -57,7 +57,11 @@ class Mutex:
         self.lock()
 
     def __exit__(self, *_) -> bool:  # noqa: ANN002
-        """Exit the mutex context."""
+        """Exit the mutex context.
+
+        Returns:
+            bool: Returns `False` to propagate any exception.
+        """
         self.unlock()
         return False
 
@@ -101,7 +105,11 @@ class RMutex:
         self.lock()
 
     def __exit__(self, *_) -> bool:  # noqa: ANN002
-        """Exit the mutex context."""
+        """Exit the mutex context.
+
+        Returns:
+            bool: Returns `False` to propagate any exception.
+        """
         self.unlock()
         return False
 

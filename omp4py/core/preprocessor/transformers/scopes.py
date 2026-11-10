@@ -91,7 +91,7 @@ def check_scopes(ctx: Context, *scopes: DataScope, allow_threadprivate: bool = F
     return used
 
 
-def create_scope(  # noqa: PLR0913
+def create_scope(  # ruff: ignore[too-many-arguments, too-many-positional-arguments]
     ctr: Construct,
     ctx: Context,
     f_ast: ast.FunctionDef,
@@ -123,7 +123,7 @@ def create_scope(  # noqa: PLR0913
     return _variable_scope(ctr, ctx, f_ast, default, shared_ds, private_ds, first_private_ds, reduction_ds)
 
 
-def modify_scope(  # noqa: PLR0913
+def modify_scope(  # ruff: ignore[too-many-arguments, too-many-positional-arguments]
     ctr: Construct,
     ctx: Context,
     body: list[ast.stmt],
@@ -152,7 +152,7 @@ def modify_scope(  # noqa: PLR0913
     return _variable_scope(ctr, ctx, f_ast, None, [], private_ds, first_private_ds, reduction_ds)
 
 
-def _variable_scope(  # noqa: C901 PLR0912 PLR0913
+def _variable_scope(  # ruff: ignore[complex-structure, too-many-arguments, too-many-branches, too-many-positional-arguments]
     ctr: Construct,
     ctx: Context,
     f_ast: ast.FunctionDef,
@@ -204,12 +204,12 @@ def _variable_scope(  # noqa: C901 PLR0912 PLR0913
             reduction_op[var] = scope.op
 
     if default is not None:
-        match default.type:
-            case default.Type.PRIVATE:
+        match default.data.choice:
+            case default.data.Choice.PRIVATE:
                 private.extend(ctx.symtable.identifiers())
-            case default.Type.FIRST_PRIVATE:
+            case default.data.Choice.FIRST_PRIVATE:
                 first_private.extend(ctx.symtable.identifiers())
-            case default.Type.NONE:
+            case default.data.Choice.NONE:
                 required = True
 
     set_private = {*private, *first_private, *reduction}
@@ -254,7 +254,7 @@ def _variable_scope(  # noqa: C901 PLR0912 PLR0913
                     continue
                 f_inits.append(resolve_names(stmt[1], omp_out=s.scope_name, omp_in=s.old_name))
             elif name in reduction_op:
-                stmt = get_reduction(ctx, reduction_op[name].value, ann)
+                stmt = get_reduction(ctx, reduction_op[name].op.string, ann)
                 if stmt is None:  # never for __new__
                     msg = f"user defined reduction not found for '{name}'"
                     raise syntax_error_ctx(msg, reduction_op[name].span, ctx)

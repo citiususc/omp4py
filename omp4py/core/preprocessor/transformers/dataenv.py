@@ -22,12 +22,12 @@ import copy
 
 from omp4py.core.parser.tree import Span, ThreadPrivate
 from omp4py.core.preprocessor.transformers.symtable import runtime_ast
-from omp4py.core.preprocessor.transformers.transformer import Context, construct, syntax_error_ctx
+from omp4py.core.preprocessor.transformers.transformer import Context, StructuredBlock, construct, syntax_error_ctx
 
 __all__ = []
 
 @construct.register
-def _(ctr: ThreadPrivate, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]: # noqa: C901
+def _(ctr: ThreadPrivate, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt]: # noqa: C901
     """Transform the OpenMP-like `threadprivate` construct into a runtime-aware AST representation.
 
     This transformation implements thread-local storage semantics for global
@@ -63,13 +63,12 @@ def _(ctr: ThreadPrivate, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
 
     Args:
         ctr (ThreadPrivate): Parsed threadprivate directive containing targets.
-        body (list[ast.stmt]): Body of the construct (not modified directly).
+        block (StructuredBlock | None): Structured block of the region if was defined using with
         ctx (Context): Current transformation context containing symbol table,
             scope information, and module-level storage.
 
     Returns:
-        list[ast.stmt]: A list of AST statements consisting of initialization
-        code followed by the original body of the construct.
+        list[ast.stmt]: Transformed AST statements.
     """
     tp_vars: list[ast.stmt] = []
     new_names: dict[str, str] = {}
@@ -142,4 +141,4 @@ def _(ctr: ThreadPrivate, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
     scope_node = ctx.scope.node
     ctx.finalizers.append(lambda:Replace().visit(scope_node))
 
-    return tp_vars + body
+    return tp_vars + ([block] if block is not None else [])

@@ -31,9 +31,20 @@ if typing.TYPE_CHECKING:
 
     from omp4py.core.options import Options
 
-__all__ = ["DEVICES", "PARSERS", "Context", "OmpTransformer", "construct", "syntax_error_ctx"]
+__all__ = [
+    "DEVICES",
+    "PARSERS",
+    "Context",
+    "OmpTransformer",
+    "StructuredBlock",
+    "construct",
+    "syntax_error_ctx",
+    "with_block",
+]
 
-DEVICES: dict[str, Callable[[Construct, list[ast.stmt], Context], list[ast.stmt]]] = {}
+type StructuredBlock = ast.With | ast.If | ast.Try
+
+DEVICES: dict[str, Callable[[Construct, StructuredBlock | None, Context], list[ast.stmt]]] = {}
 
 PARSERS: dict[str, Callable[[str, Span, str], Directive]] = {}
 
@@ -56,19 +67,28 @@ def syntax_error_ctx(message: str, span: Span, ctx: Context) -> SyntaxError:
 
 
 @singledispatch
-def construct(ctr: Construct, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
+def construct(ctr: Construct, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt]:
     """Dispatch transformation for a parsed construct.
 
     This function acts as the central dispatch mechanism for all OpenMP-like
     constructs. Each construct type must register an implementation that
-    transforms the associated AST body.
+    transforms the associated structured block, if any, or generates new
+    statements.
+
+    When a construct has an associated structured block, that block must
+    always be included in the returned statements, even if only its body
+    is modified. Implementations may insert additional statements before
+    or after the block in the returned list, without adding them to the
+    block's body. This ensures that subsequent constructs in the same
+    directive can continue transforming the block.
 
     If no implementation is registered for the given construct, a syntax
     error is raised.
 
     Args:
         ctr (Construct): Parsed construct representation.
-        body (list[ast.stmt]): AST statements associated with the construct.
+        block (StructuredBlock | None): Structured block associated with the
+            construct, if any.
         ctx (Context): Active transformation context.
 
     Returns:
@@ -76,12 +96,12 @@ def construct(ctr: Construct, body: list[ast.stmt], ctx: Context) -> list[ast.st
 
     Raises:
         SyntaxError: If the construct is not implemented.
-    """
+    """  # ruff: ignore[docstring-extraneous-returns]
     msg: str = f"'{ctr.name}' not implemented"
     raise syntax_error_ctx(msg, ctr.span, ctx)
 
 
-def transform(ctr: Construct, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
+def transform(ctr: Construct, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt]:
     """Transform a construct using the configured target device.
 
     This function dispatches the transformation process to the appropriate
@@ -96,7 +116,8 @@ def transform(ctr: Construct, body: list[ast.stmt], ctx: Context) -> list[ast.st
 
     Args:
         ctr (Construct): Parsed construct representation.
-        body (list[ast.stmt]): AST statements associated with the construct.
+        block (StructuredBlock | None): Structured block associated with the
+            construct, if any.
         ctx (Context): Active transformation context.
 
     Returns:
@@ -109,7 +130,7 @@ def transform(ctr: Construct, body: list[ast.stmt], ctx: Context) -> list[ast.st
     """
     device_name = ctx.opt.device
     if device_name == "omp":
-        return construct(ctr, body, ctx)
+        return construct(ctr, block, ctx)
     if device_name not in DEVICES:
         msg = (
             f"Unknown transformation device '{device_name}'. "
@@ -117,7 +138,7 @@ def transform(ctr: Construct, body: list[ast.stmt], ctx: Context) -> list[ast.st
             f"Available devices: {sorted(DEVICES)}."
         )
         raise syntax_error_ctx(msg, ctr.span, ctx)
-    return DEVICES[device_name](ctr, body, ctx)
+    return DEVICES[device_name](ctr, block, ctx)
 
 
 def find_decorator(ctx: Context, node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> None:
@@ -282,21 +303,18 @@ class OmpParser(ast.NodeVisitor):
 
                 directive_node = grand
             case _:
-                msg = f"{name} () can only be used as a statement or in a with block"
+                msg = f"{name} () can only be used as a statement or in a 'with' block"
                 raise syntax_error_ctx(msg, Span.from_ast(node), self.ctx)
 
-        directive_code = extract_directive(expr, self.ctx.full_source, self.ctx.opt.filename)
+        omp_code = extract_directive(expr, self.ctx.full_source, self.ctx.opt.filename)
 
         if name == self.ctx.opt.alias:
-            directive = parse_directive(directive_code, Span.from_ast(expr), self.ctx.opt.filename)
+            directive = parse_directive(omp_code, Span.from_ast(expr), self.ctx.full_source, self.ctx.opt.filename)
         else:
             if name not in PARSERS:
-                msg = (
-                    f"Unknown directive parser '{name}'. "
-                    f"Available parsers: {sorted(self.ctx.opt.parsers)}."
-                )
+                msg = f"Unknown directive parser '{name}'. Available parsers: {sorted(self.ctx.opt.parsers)}."
                 raise syntax_error_ctx(msg, Span.from_ast(node), self.ctx)
-            directive = PARSERS[name](directive_code, Span.from_ast(expr), self.ctx.opt.filename)
+            directive = PARSERS[name](omp_code, Span.from_ast(expr), self.ctx.opt.filename)
 
         self.ctx.directives[directive_node] = directive
 
@@ -344,6 +362,7 @@ class OmpTransformer(ast.NodeTransformer):
         if len(self.ctx.node_stack) > 0:
             self.ctx.node_stack.pop()
             OmpParser(self.ctx).visit(self.ctx.module)
+            self.ctx.active_constructs.update({node: d.constructs for node, d in self.ctx.directives.items()})
             self.visit(self.ctx.module)
             [f() for f in self.ctx.finalizers]
         return self.ctx.module
@@ -362,11 +381,25 @@ class OmpTransformer(ast.NodeTransformer):
         """
         self.ctx.symtable.update(node)
         self.ctx.node_stack.append(node)
-        new_node: ast.AST = super().visit(node)
+        if isinstance(
+            node,
+            (
+                ast.FunctionDef,
+                ast.AsyncFunctionDef,
+                ast.ClassDef,
+                ast.ListComp,
+                ast.SetComp,
+                ast.DictComp,
+                ast.GeneratorExp,
+            ),
+        ):
+            new_node = self.visit_new_scope(node)
+        else:
+            new_node: ast.AST = super().visit(node)
         self.ctx.node_stack.pop()
         return new_node
 
-    def visit_new_scope[T: ast.AST](self, node: T) -> T:
+    def visit_new_scope(self, node: ast.AST) -> ast.AST:
         """Visit a node within a new scope.
 
         This method creates a new scope for the node, performs traversal,
@@ -379,9 +412,9 @@ class OmpTransformer(ast.NodeTransformer):
             ast.AST: Transformed node.
         """
         old_scope, self.ctx.scope = self.ctx.scope, self.ctx.scope.new_child(node)
-        self.generic_visit(node)
+        new_node: ast.AST = super().visit(node)
         self.ctx.scope = old_scope
-        return node
+        return new_node
 
     def visit_If(self, node: ast.If) -> ast.If | list[ast.stmt]:
         """Process an if statement with possible unpack optimization.
@@ -401,34 +434,6 @@ class OmpTransformer(ast.NodeTransformer):
             return node.body
         return node
 
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
-        """Process a function definition within a new scope."""
-        return self.visit_new_scope(node)
-
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AsyncFunctionDef:
-        """Process an async function definition within a new scope."""
-        return self.visit_new_scope(node)
-
-    def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
-        """Process a class definition within a new scope."""
-        return self.visit_new_scope(node)
-
-    def visit_ListComp(self, node: ast.ListComp) -> ast.ListComp:
-        """Process a list comprehension within a new scope."""
-        return self.visit_new_scope(node)
-
-    def visit_SetComp(self, node: ast.SetComp) -> ast.SetComp:
-        """Process a set comprehension within a new scope."""
-        return self.visit_new_scope(node)
-
-    def visit_DictComp(self, node: ast.DictComp) -> ast.DictComp:
-        """Process a dictionary comprehension within a new scope."""
-        return self.visit_new_scope(node)
-
-    def visit_GeneratorExp(self, node: ast.GeneratorExp) -> ast.GeneratorExp:
-        """Process a generator expression within a new scope."""
-        return self.visit_new_scope(node)
-
     def visit_With(self, node: ast.With) -> ast.With | list[ast.stmt]:
         """Process a with statement containing a directive.
 
@@ -441,10 +446,21 @@ class OmpTransformer(ast.NodeTransformer):
         Returns:
             ast.With | list[ast.stmt]: Transformed node or replacement body.
         """
-        if directive := self.ctx.directives.get(node):
-            node.body = transform(directive.construct, node.body, self.ctx)
-            self.generic_visit(node)
-            return node.body
+        if (constructs := self.ctx.active_constructs.get(node, None)) is not None:
+            if not constructs:
+                self.ctx.active_constructs.pop(node)
+                self.generic_visit(node)
+                return node.body
+            match node.body:
+                case [ast.With() as child] if child in self.ctx.active_constructs:
+                    self.ctx.active_constructs[child][0:0] = self.ctx.active_constructs.pop(node)
+                    return self.visit_With(child)
+
+            tmp = ast.Try(transform(constructs.pop(0), node, self.ctx))
+            node_finalizers, self.ctx.node_finalizers = self.ctx.node_finalizers, []
+            self.generic_visit(tmp)
+            [f() for f in node_finalizers]
+            return tmp.body
         self.generic_visit(node)
         return node
 
@@ -460,9 +476,31 @@ class OmpTransformer(ast.NodeTransformer):
         Returns:
             ast.Expr | list[ast.stmt]: Transformed node or replacement body.
         """
-        if directive := self.ctx.directives.get(node):
-            tmp = ast.Try(transform(directive.construct, [], self.ctx))
+        if constructs := self.ctx.active_constructs.pop(node, []):
+            tmp = ast.Try()
+            for c in constructs:
+                tmp.body.extend(transform(c, None, self.ctx))
+            node_finalizers, self.ctx.node_finalizers = self.ctx.node_finalizers, []
             self.generic_visit(tmp)
+            [f() for f in node_finalizers]
             return tmp.body
         self.generic_visit(node)
         return node
+
+
+def with_block(ctr: Construct, block: StructuredBlock | None, ctx: Context) -> StructuredBlock:
+    """Ensure that the directive is defined using a 'with' block.
+
+    Args:
+        ctr (Construct): The block construct.
+        block (StructuredBlock | None): The structured block associated with the
+            construct, if present.
+        ctx (Context): The active transformation context.
+
+    Returns:
+        StructuredBlock: The validated structured block.
+    """
+    if block is None:
+        msg = "A structured block is required; the directive must be defined using a 'with' block."
+        raise syntax_error_ctx(msg, ctr.span, ctx)
+    return block

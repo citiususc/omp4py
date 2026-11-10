@@ -148,7 +148,7 @@ class OmpType:
                 defining default preprocessing options and metadata.
                 These values are stored internally and reused across calls.
         """
-        self.__args = kwargs  # ty:ignore[invalid-assignment]
+        self.__args = kwargs
 
     @overload
     def __call__(self, value: str, /) -> AbstractContextManager:
@@ -404,15 +404,15 @@ class OmpType:
                     case _:
                         self.__args[key] = arg  # ty:ignore[invalid-key]
         else:
-            self.__args.update(kwargs)  # ty:ignore[invalid-argument-type]
+            self.__args.update(kwargs)
 
         if py is not None:
             from omp4py.core.preprocessor import process_file  # noqa: PLC0415 Lazy import, only when needed
 
-            return process_file(py, Options(is_module=True, **self.__args))  # ty:ignore[unknown-argument, invalid-argument-type]
+            return process_file(py, Options(is_module=True, **self.__args))  # ty:ignore[unknown-argument]
 
         if pkg is not None:
-            set_omp_package(pkg, Options(**self.__args)) # ty:ignore[unknown-argument, invalid-argument-type]
+            set_omp_package(pkg, Options(**self.__args)) # ty:ignore[unknown-argument]
             return
 
         if value is not None:
@@ -420,7 +420,7 @@ class OmpType:
                 return contextmanager(lambda: (yield))()
             from omp4py.core.preprocessor import process_object  # noqa: PLC0415 Lazy import, only when needed
 
-            return process_object(value, Options(**self.__args)) # ty:ignore[unknown-argument, invalid-argument-type]
+            return process_object(value, Options(**self.__args)) # ty:ignore[unknown-argument]
 
         return OmpType(**self.__args)
 

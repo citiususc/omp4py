@@ -74,7 +74,7 @@ class CythonTypes(Modifier, name="omp_cython_types", default=True):
         """
         return super().should_run(options) and options.compile and options.compiler.lower() == "cython"
 
-    def visit_Module(self, node: ast.Module) -> ast.Module:
+    def visit_Module(self, node: ast.Module) -> ast.Module:  # ruff: ignore[invalid-function-name]
         """Insert the required Cython import into the module.
 
         A generated import equivalent to:
@@ -118,7 +118,7 @@ class CythonTypes(Modifier, name="omp_cython_types", default=True):
             ast.expr:
                 Transformed expression node.
         """
-        if len(node.args) == 2:
+        if len(node.args) == 2:  # ruff: ignore[magic-value-comparison]
             match node.func:
                 case ast.Attribute(ast.Name("_omp"), "tp_cast"):
                     match node.args[0]:
@@ -127,7 +127,7 @@ class CythonTypes(Modifier, name="omp_cython_types", default=True):
 
         return typing.cast("ast.expr", self.generic_visit(node))
 
-    def visit_Attribute(self, node: ast.Attribute) -> ast.Attribute:
+    def visit_Attribute(self, node: ast.Attribute) -> ast.Attribute: # ruff: ignore[invalid-function-name]
         """Rewrite generic typing helpers into native Cython APIs.
 
         The following replacements are applied:
@@ -184,7 +184,7 @@ class PurePythonTypes(Modifier, name="omp_pure_types", default=True):
         """
         return super().should_run(options) and not options.compile
 
-    def visit_Call(self, node: ast.Call) -> ast.expr:
+    def visit_Call(self, node: ast.Call) -> ast.expr: # ruff: ignore[invalid-function-name]
         """Simplify generic typing helper calls in pure-Python mode.
 
         The following transformations are applied:

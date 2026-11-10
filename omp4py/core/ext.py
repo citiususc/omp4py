@@ -23,7 +23,7 @@ from __future__ import annotations
 import typing
 
 from omp4py.core.modifiers.engine import Modifier, modifier
-from omp4py.core.preprocessor.transformers.transformer import DEVICES, PARSERS, syntax_error_ctx
+from omp4py.core.preprocessor.transformers.transformer import DEVICES, PARSERS, StructuredBlock, syntax_error_ctx
 from omp4py.core.preprocessor.transformers.transformer import construct as omp_construct
 
 if typing.TYPE_CHECKING:
@@ -36,7 +36,7 @@ if typing.TYPE_CHECKING:
 __all__ = ["Modifier", "add_device", "add_modifier", "add_parser", "omp_construct", "syntax_error_ctx"]
 
 type Parser = Callable[[str, Span, str], Directive]
-type Device = Callable[[Construct, list[ast.stmt], Context], list[ast.stmt]]
+type Device = Callable[[Construct, StructuredBlock | None, Context], list[ast.stmt]]
 
 def add_parser(name: str) -> Callable[[Parser], Parser]:
     """Register a custom directive parser.

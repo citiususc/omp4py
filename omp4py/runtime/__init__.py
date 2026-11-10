@@ -17,5 +17,5 @@ that generated code can rely on a consistent API surface, regardless of
 internal implementation changes.
 """
 
+from omp4py.runtime.lowlevel.numeric import pyfloat, pyint, pyint_array  # noqa: F403
 from omp4py.runtime.tasks import *  # noqa: F403
-from omp4py.runtime.lowlevel.numeric import pyint, pyint_array, pyfloat, pyint_array # noqa: F403

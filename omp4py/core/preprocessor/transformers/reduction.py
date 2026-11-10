@@ -30,6 +30,7 @@ import typing
 from omp4py.core.parser.tree import DeclareReduction  # noqa: TC001 required
 from omp4py.core.preprocessor.transformers.operators import new_reduction
 from omp4py.core.preprocessor.transformers.transformer import Context, construct, syntax_error_ctx
+from omp4py.core.preprocessor.transformers.utils import unpack_if
 
 __all__ = []
 
@@ -56,12 +57,12 @@ def _(ctr: DeclareReduction, body: list[ast.stmt], ctx: Context) -> list[ast.stm
     Raises:
         SyntaxError: If the reduction is redeclared for a given type.
     """
-    init: ast.stmt | None = ctr.initializer.stmt.value if ctr.initializer else None
-    comb: ast.stmt = ctr.combiner.stmt.value
+    init= unpack_if(ctr.initializer.code.value) if ctr.initializer else None
+    comb = unpack_if(ctr.combiner.code.value)
 
     for ann in ctr.ann_list:
-        if not new_reduction(ctx, ctr.id.value, ann.value, comb, init):
-            msg = f"redeclaration of '{ctr.id.value}' 'omp declare reduction' for type '{ast.unparse(ann.value)}'"
+        if not new_reduction(ctx, ctr.op.string, ann.value, comb, init):
+            msg = f"redeclaration of '{ctr.op.string}' 'omp declare reduction' for type '{ast.unparse(ann.value)}'"
             raise syntax_error_ctx(msg, ann.span, ctx)
 
     return body

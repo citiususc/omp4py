@@ -21,19 +21,24 @@ applied during the transformation phase of the preprocessor.
 from __future__ import annotations
 
 import ast
-import typing
 
 from omp4py.core.parser.tree import Parallel  # noqa: TC001 required
 from omp4py.core.preprocessor.transformers.scopes import check_scopes, create_scope
 from omp4py.core.preprocessor.transformers.symtable import omp_name, runtime_ast
-from omp4py.core.preprocessor.transformers.transformer import Context, construct, syntax_error_ctx
+from omp4py.core.preprocessor.transformers.transformer import (
+    Context,
+    StructuredBlock,
+    construct,
+    syntax_error_ctx,
+    with_block,
+)
 from omp4py.core.preprocessor.transformers.utils import fix_body_locations
 
 __all__ = []
 
 
 @construct.register
-def _(ctr: Parallel, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:  # noqa: C901
+def _(ctr: Parallel, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt]:  # noqa: C901
     """Transform an OpenMP `parallel` construct.
 
     This transformation encapsulates the parallel region body into a
@@ -52,15 +57,16 @@ def _(ctr: Parallel, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:  # n
 
     Args:
         ctr (Parallel): Parsed `parallel` construct.
-        body (list[ast.stmt]): Body of the parallel region.
+        block (StructuredBlock | None): Structured block of the parallel region.
         ctx (Context): Transformation context.
 
     Returns:
         list[ast.stmt]: Transformed AST statements including the generated
         function and runtime invocation.
     """
+    block = with_block(ctr, block, ctx)
     f_name: str = omp_name(ctx, "parallel")
-    f_ast: ast.FunctionDef = ctr.span.to_ast(ast.FunctionDef(f_name, ast.arguments(), body=body))
+    f_ast: ast.FunctionDef = ctr.span.to_ast(ast.FunctionDef(f_name, ast.arguments(), body=[block]))
 
     create_scope(ctr, ctx, f_ast, ctr.default, ctr.shared, ctr.private, ctr.first_private, ctr.reduction)
 
@@ -73,7 +79,7 @@ def _(ctr: Parallel, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:  # n
         if_ast = ctr.if_.span.to_ast(ast.Call(ast.Name("bool"), [ctr.if_.expr.value]))
 
     if ctr.num_threads:
-        expr: ast.expr = ctr.num_threads.expr.value
+        expr: ast.expr = ctr.num_threads.nthreads.value
         match expr:
             case ast.Constant(value=value) if isinstance(value, int):
                 num_threads_ast = ast.Tuple([expr])
@@ -93,7 +99,7 @@ def _(ctr: Parallel, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:  # n
                 )
 
     if ctr.proc_bind:
-        proc_bind_ast = ctr.proc_bind.span.to_ast(ast.Constant(ord(ctr.proc_bind.ntype.string.lower()[0])))
+        proc_bind_ast = ctr.proc_bind.span.to_ast(ast.Constant(ord(ctr.proc_bind.affinity_policy.choice.lower()[0])))
 
     if ctr.copyin:
         check_scopes(ctx, *ctr.copyin, allow_threadprivate=True)
