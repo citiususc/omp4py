@@ -11,9 +11,9 @@ cdef class ParallelTask(Task):
     cdef ParallelTask new(object init, object f, SharedContext shared, Data icvs, Barrier barrier)
 
 
-cdef void set_nthreads(TaskContext ctx, Data icvs, bint active, tuple num_threads)
+cdef void set_nthreads(TaskContext ctx, Data icvs, bint active, tuple[pyint, ...] num_threads)
 
-cpdef void parallel(object f , bint enable, tuple num_threads, pyint proc_bind, tuple copyin)
+cpdef void parallel(object f , bint enable, tuple[pyint, ...] num_threads, pyint proc_bind, tuple[str, ...] copyin)
 
 cpdef void _parallel_thread_init(TaskContext ctx)
 

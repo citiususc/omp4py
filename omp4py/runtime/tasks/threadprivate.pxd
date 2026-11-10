@@ -18,6 +18,6 @@ cpdef inline TPrivRef threadprivates(pyint i):
 
 cdef void update_privates(list[TPrivRef] tpvars)
 
-cdef pyint_array map_privates(tuple names)
+cdef pyint_array map_privates(tuple[str, ...] names)
 
 cdef object copy_private(object obj)
