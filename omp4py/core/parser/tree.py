@@ -217,6 +217,16 @@ class OmpNode:
         """
         return "".join(f"_{c}" if c.isupper() and i > 0 else c for i, c in enumerate(cls.__name__)).lower()
 
+    def __init_subclass__(cls, **kwargs) -> None:  # ruff: ignore[missing-type-kwargs]
+        """Configure subclasses to use identity-based equality and hashing.
+
+        Args:
+            **kwargs (Any): Additional keyword arguments passed to the superclass.
+        """
+        super().__init_subclass__(**kwargs)
+        cls.__eq__ = object.__eq__
+        cls.__hash__ = object.__hash__  # ty: ignore[invalid-assignment]
+
 
 @dataclass
 class Name(OmpNode):
@@ -257,9 +267,11 @@ class Construct(OmpNode):
 
     Attributes:
         name (Name): Name identifying the construct.
+        compound_len(int): Remaining length of the compound construct.
     """
 
     name: Name
+    compound_len: int = field(init=False, default=0)
 
 
 @dataclass
@@ -304,21 +316,22 @@ class Modifier(OmpNode):
 
 @dataclass
 class DirectiveName(Modifier):
-    """Represent the name of an OpenMP directive.
+    """Represent an OpenMP directive name.
 
     Attributes:
-        value (Name): Directive name as represented in the source code.
+        directives (list[Name]): Directive name components as they appear
+            in the source code.
     """
 
-    value: Name
+    directives: list[Name]
 
     def __str__(self) -> str:
-        """Return the directive name.
+        """Return the directive name as a space-separated string.
 
         Returns:
-            str: The directive name as a string.
+            str: The complete directive name.
         """
-        return self.value.string
+        return " ".join(value.string for value in self.directives)
 
 
 #######################################################################################################################
@@ -391,6 +404,7 @@ class PyStmt(OmpNode):
 
     value: stmt
 
+
 @dataclass
 class PyCode(OmpNode):
     """Represent a Python code in the AST.
@@ -400,7 +414,6 @@ class PyCode(OmpNode):
     """
 
     value: list[stmt]
-
 
 
 #######################################################################################################################
@@ -659,13 +672,13 @@ class Single(Construct):
     Attributes:
         private (list[Private]): Private clauses.
         first_private (list[FirstPrivate]): Firstprivate clauses.
-        copyprivate (list[CopyPrivate]): Copyprivate clauses.
+        copy_private (list[CopyPrivate]): Copyprivate clauses.
         no_wait (NoWait | None): Nowait clause.
     """
 
     private: list[Private] = field(default_factory=list)
     first_private: list[FirstPrivate] = field(default_factory=list)
-    copyprivate: list[CopyPrivate] = field(default_factory=list)
+    copy_private: list[CopyPrivate] = field(default_factory=list)
     no_wait: NoWait | None = None
 
 
@@ -749,7 +762,7 @@ class Linear(DataScope):
 
     linear_modifier: LinearModifier | None = None
 
-    # TODO: how to represent REF/UVAL/VAL here?
+
 @dataclass
 class LinearModifier(Modifier):
     """Represent an OpenMP linear modifier.
@@ -771,6 +784,7 @@ class LinearModifier(Modifier):
     def __post_init__(self, raw_choice: str) -> None:
         """Initialize the linear modifier from its string value."""
         self.choice = self.Choice(raw_choice.lower())
+
 
 @dataclass
 class Aligned(DataScope):
@@ -1518,6 +1532,7 @@ class ThreadPrivate(Construct):
     Attributes:
         targets (list[PyName]): Names of the threadprivate variables.
     """
+
     targets: list[PyName]
 
     @property

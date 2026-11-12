@@ -159,18 +159,18 @@ def parser_error(parser: pl.Lark, ex: pl.UnexpectedInput, base_span: Span, sourc
             msg = f"'{token}' is not defined. Did you mean: '{close[0]}'"
             return syntax_error(msg, span, source, filename)
 
+    if accepts and ("DIST_SCHEDULE" in accepts or ("SEQ_CST" in accepts)):
+        msg = "expected clause"
+        if token and isinstance(ex, pl.UnexpectedToken):
+            msg += f", found '{token.strip()}'"
+        return syntax_error(msg, span, source, filename)
+
     if accepts and "TARGET_ENTER_DATA" in accepts:
         msg = "directive required"
         if token and isinstance(ex, pl.UnexpectedToken):
             msg += f", found '{token.strip()}'"
         else:
             msg += " before end of line"
-        return syntax_error(msg, span, source, filename)
-
-    if accepts and ("DIST_SCHEDULE" in accepts or ("SEQ_CST" in accepts)):
-        msg = "expected clause"
-        if token and isinstance(ex, pl.UnexpectedToken):
-            msg += f", found '{token.strip()}'"
         return syntax_error(msg, span, source, filename)
 
     if isinstance(ex, pl.UnexpectedCharacters) or (token is not None and token.type.startswith("PYTHON_")):

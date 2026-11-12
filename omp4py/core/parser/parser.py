@@ -16,13 +16,15 @@ The main entry points are:
 from __future__ import annotations
 
 import ast
-import itertools
 import textwrap
 import typing
+from collections import defaultdict
 from collections.abc import Iterator
 from io import StringIO
 
 from omp4py.core.parser import openmp_lark, string_lark, tree
+from omp4py.core.parser.clause_assignment import assign_clauses
+from omp4py.core.parser.compound import DIRECTIVES
 from omp4py.core.parser.error import parser_error, syntax_error
 from omp4py.core.parser.openmp_lark import (
     ContextualLexer,
@@ -120,6 +122,7 @@ class StringTransformer(string_lark.Transformer):
     and column positions correspond to the original literal's contents.
     This allows subsequent directive parsing to produce accurate locations.
     """
+
     @staticmethod
     def start(*strings: string_lark.Token) -> str:
         """Reconstruct string contents from parsed literal tokens.
@@ -190,6 +193,7 @@ class OpenmpContextualLexer(Lexer):
     Attributes:
         lexer (ContextualLexer): The underlying contextual lexer.
     """
+
     lexer: ContextualLexer
 
     def __init__(self, lexer: Lexer) -> None:
@@ -267,7 +271,7 @@ class OpenmpContextualLexer(Lexer):
         return False
 
 
-openmp_parser.parser.lexer = OpenmpContextualLexer(typing.cast("Lexer",openmp_parser.parser.lexer))
+openmp_parser.parser.lexer = OpenmpContextualLexer(typing.cast("Lexer", openmp_parser.parser.lexer))
 
 
 @v_args(inline=True, meta=True)
@@ -285,6 +289,7 @@ class OpenmpTransformer(openmp_lark.Transformer):
         full_source (str): Complete source code being processed.
         filename (str): Source filename used for error reporting.
     """
+
     code: str
     span: tree.Span
     full_source: str
@@ -305,6 +310,20 @@ class OpenmpTransformer(openmp_lark.Transformer):
         self.full_source = full_source
         self.filename = filename
 
+    def token2meta(self, token: Token)-> Meta:
+        """Convert Lark token to a lark parse metadata.
+
+        Args:
+            token (Token): Lark token for a parsed node.
+
+        Returns:
+            tree.Meta: Corresponding lark parse metadata.
+        """
+        node = openmp_lark.Tree("", [])
+        openmp_lark.PropagatePositions(lambda _: node)([token])
+        return node.meta
+
+
     def meta2span(self, meta: Meta) -> tree.Span:
         """Convert Lark parse metadata to an original-source span.
 
@@ -313,7 +332,7 @@ class OpenmpTransformer(openmp_lark.Transformer):
         first line.
 
         Args:
-            meta (Meta): Lark metadata for a parsed construct.
+            meta (Meta): Lark metadata for a parsed node.
 
         Returns:
             tree.Span: Corresponding span in the original Python source.
@@ -341,7 +360,7 @@ class OpenmpTransformer(openmp_lark.Transformer):
     #################### Templates ####################
     ###################################################
 
-    def literal(self, meta: Meta, *_: typing.Any) -> Name:  # ruff: ignore[any-type]
+    def literal(self, meta: Meta, *_: typing.Any) -> Name:
         """Create a name from its source text.
 
         Args:
@@ -417,7 +436,7 @@ class OpenmpTransformer(openmp_lark.Transformer):
             SyntaxError: If no clause is provided or too many clauses are present.
         """
         atomic = self.set_all_clauses(tree.Atomic(self.meta2span(meta), name), clauses)
-        if (atomic.seq_cst  is None and len(clauses) == 1) or (atomic.seq_cst and len(clauses) == 2):  # ruff: ignore[magic-value-comparison]
+        if (atomic.seq_cst is None and len(clauses) == 1) or (atomic.seq_cst and len(clauses) == 2):  # ruff: ignore[magic-value-comparison]
             return tree.Directive(atomic.span, self.code, [atomic])
         if len(clauses) == 0 or (atomic.seq_cst is not None and len(clauses) == 1):
             msg = "atomic require at least one clause"
@@ -491,45 +510,111 @@ class OpenmpTransformer(openmp_lark.Transformer):
     ###################################################
     ################### Composition ###################
     ###################################################
-    def compound_directive(self, meta: Meta, name: Name, clauses: list[Clause]) -> tree.Directive:
-        """Report that compound directive construction is not implemented.
+    def check_compose_directive(self, directive: tree.Directive) -> tree.Directive:
+        count = 0
+        match directive.constructs:
+            case [*_, tree.For() | tree.Distribute() | tree.Taskloop(), tree.Simd()]:
+                count = 2
+            case [*_, tree.Distribute(), tree.Parallel(), tree.For()]:
+                count = 3
+            case [*_, tree.Distribute(), tree.Parallel(), tree.For(), tree.Simd()]:
+                count = 4
+
+        for i in range(count):
+            directive.constructs[-i - 1].compound_len = i
+
+        return directive
+
+    def compound_directive(self, meta: Meta, names: list[Name], clauses: list[Clause]) -> tree.Directive:
+        """Build a compound directive and assign its clauses to its components.
+
+        Creates the individual directives from the provided names, then groups
+        the clauses according to their associated directive name. Clauses
+        without an explicit directive name are associated with the full
+        compound directive name.
+
+        For each clause group, assigns clauses directly when the group matches
+        a component name. Otherwise, determines which components are eligible
+        to receive the clauses and uses ``assign_clauses`` to distribute them.
+        Raises a syntax error if any clause cannot be assigned.
+
+        Finally, constructs the compound directive and validates its
+        composition with ``check_compose_directive``.
 
         Args:
-            meta (Meta): Parse metadata for the directive.
-            name (Name): Compound directive name.
-            clauses (list[Clause]): Clauses associated with the directive.
+            meta (Meta): Parse metadata for the compound directive.
+            names (list[Name]): Names of the directives forming the composition.
+            clauses (list[Clause]): Clauses associated with the compound
+                directive and its individual components.
+
+        Returns:
+            tree.Directive: Constructed and validated compound directive.
 
         Raises:
-            SyntaxError: Compound directives are not currently implemented.
+            SyntaxError: If a clause is not valid for its associated directive
+                or if the resulting compound directive violates composition
+                rules.
         """
-        # TODO: implement with section 19 of OpenMp 6.0 specs
-        msg = "Compound directives not implemented"
-        raise self.syntax_error(msg, name.span)
+        constructs = {str(name).lower(): self.basic_directive(meta, name, []).constructs[0] for name in names}
+        full_comp_name = " ".join(name.string for name in names).lower()
+        named_clauses: dict[str, list[Clause]] = defaultdict(list)
+        for c in clauses:
+            named_clauses[str(c.directive_name).lower() if c.directive_name else full_comp_name].append(c)
 
-    def comp_constructs(self, meta: Meta, *names_and_seps: Name | Token) -> tree.Name:
+        for group_name, group_clauses in named_clauses.items():
+            if group_name in constructs:
+                self.set_all_clauses(constructs[group_name], group_clauses)
+                continue
+            allowed_constructs = {name: cons for name, cons in constructs.items() if name in group_name}
+            assignment = assign_clauses(allowed_constructs, group_clauses)
+            [self.set_all_clauses(constructs[name],acls) for name, acls in assignment.items()]
+
+            if orphan:= set(group_clauses).difference(*[ set(acls) for acls in assignment.values()]):
+                first = next(iter(orphan))
+                msg = f"'{first.cid()}' is not valid for '{group_name}'"
+                raise self.syntax_error(msg, first.span)
+
+
+        return self.check_compose_directive(tree.Directive(self.meta2span(meta), self.code, list(constructs.values())))
+
+    def comp_constructs(self, meta: Meta, *names: Name) -> list[Name]:
         """Validate and combine the names of a composed directive.
 
-        Extracts name nodes from the parsed names and separators. When separators
-        are present, validates that consecutive names are adjacent in the source.
+        Joins the provided directive names and checks whether the resulting
+        combination is included in ``DIRECTIVES``. If the combination is
+        invalid, progressively removes trailing names to identify the valid
+        prefix and reports the first name that cannot be composed with it.
 
         Args:
             meta (Meta): Parse metadata for the composed directive.
-            *names_and_seps (Name | Token): Parsed names and separator tokens.
+            *names (Name): Parsed names forming the directive composition.
 
         Returns:
-            tree.Name: Name node representing the composed directive.
+            list[Name]: The validated directive names, preserving their
+                original order.
 
         Raises:
-            SyntaxError: If the directive composition has invalid source spacing.
+            SyntaxError: If the directive combination is not valid. The error
+                identifies the first directive name that cannot be appended
+                to the preceding valid composition.
         """
-        names = [x for x in names_and_seps if isinstance(x, Name)]
+        full_comp_name = " ".join(name.string for name in names)
 
-        if len(names_and_seps) != len(names):
-            for a, b in itertools.pairwise(names):
-                if not (a.span.end_lineno == b.span.lineno and a.span.end_offset + 1 == b.span.offset):
-                    msg = "expected a valid OpenMP directive"
-                    raise self.syntax_error(msg, self.meta2span(meta))
-        return self.literal(meta)
+        if full_comp_name.upper() not in DIRECTIVES:
+            directives = sorted(DIRECTIVES)
+            valid_name = full_comp_name.upper()
+            last = len(names) - 1
+            while valid_name:
+                if [directive for directive in directives if valid_name in directives]:
+                    break
+                valid_name, *rest = valid_name.rsplit(" ", 1)
+                if not rest:
+                    break
+                last -= 1
+            valid_name = " ".join(name.string for name in names[: last + 1])
+            msg = f"'{names[last + 1]}' is not valid for '{valid_name}'"
+            raise self.syntax_error(msg, names[last + 1].span)
+        return list(names)
 
     ###################################################
     ##################### Clauses #####################
@@ -562,7 +647,7 @@ class OpenmpTransformer(openmp_lark.Transformer):
                 if not final:
                     remainder.append(cl)
                     continue
-                msg = f"'{cl.cid()}' is not valid for '{cl.cid()}'"
+                msg = f"'{cl.cid()}' is not valid for '{node.cid()}'"
                 raise self.syntax_error(msg, cl.span)
             match v := getattr(node, cl.id()):
                 case None:
@@ -884,8 +969,9 @@ class OpenmpTransformer(openmp_lark.Transformer):
         msg = f"modifier '{tp.id()}' required"
         raise self.syntax_error(msg, self.meta2span(meta))
 
-    def directive_name_mod(self, meta: Meta, name: Name) -> tree.DirectiveName:
-        return tree.DirectiveName(self.meta2span(meta), name)
+    def directive_mod(self, meta: Meta, *tokens: Token) -> tree.DirectiveName:
+        names = [self.literal(self.token2meta(token)) for token in tokens]
+        return tree.DirectiveName(self.meta2span(meta), names)
 
     def dec_rec_mod_old(self, meta: Meta, code: tree.PyCode) -> tree.Combiner:
         return tree.Combiner(self.meta2span(meta), self.literal(meta), code)

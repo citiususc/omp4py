@@ -44,7 +44,7 @@ can_construct     : lit{"parallel"i} | lit{"sections"i} | lit{"for"i} | lit{"tas
 ##################################################################################
 ################################### Composition ##################################
 ##################################################################################
-!comp_constructs : comp_construct (["_"] comp_construct)+
+comp_constructs : comp_construct (comp_construct)+
 
 ?comp_construct: lit{"target"i}     | lit{"for"i}     | lit{"task"i}     | lit{"simd"i}     | lit{"parallel"i}
                | lit{"single"i}     | lit{"teams"i}   | lit{"taskloop"i} | lit{"sections"i} | lit{"masked"i}
@@ -90,7 +90,7 @@ clause : lit{"aligned"i}       "(" [_HM] list{py_name}    [":"  aligned_mods]   
        | lit{"num_tasks"i}     "(" [_HM list{mod_default} ":"]  py_expr            ")" 
        | lit{"num_teams"i}     "(" [_HM list{mod_default} ":"]  py_expr            ")"
        | lit{"num_threads"i}   "(" [_HM list{mod_default} ":"]  py_expr            ")"
-       | lit{"orderer"i}       "(" [_HM list{mod_default} ":"]  py_expr            ")"
+       | lit{"ordered"i}       "(" [_HM list{mod_default} ":"]  py_expr            ")"
        | lit{"priority"i}      "(" [_HM list{mod_default} ":"]  py_expr            ")" 
        | lit{"private"i}       "(" [_HM list{mod_default} ":"]  list{py_name}      ")"
        | lit{"proc_bind"i}     "(" [_HM list{mod_default} ":"]  (lit{"master"i} | lit{"close"i} | lit{"spread"i}) ")"
@@ -116,11 +116,11 @@ atomic_clause: \
 ##################################################################################
 #################################### Modifiers ###################################
 ##################################################################################
-mod_default : directive_mod
+?mod_default : directive_mod
 
 dec_rec_mod_old: ":" py_code
 
-directive_mod: NAME
+directive_mod: NAME+
 
 reduction_mods   : [directive_mod ","]  reduction_mod_op -> as_list
 reduction_mod_op : reduction_op

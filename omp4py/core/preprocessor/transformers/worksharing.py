@@ -23,6 +23,7 @@ applied during the transformation phase of the preprocessor.
 """
 
 from __future__ import annotations
+from omp4py.core.parser import Parallel
 
 import ast
 
@@ -139,7 +140,7 @@ def _(ctr: For, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt]: 
     for_nextc.args.append(ast.Name(bounds_name))
 
     if ctr.no_wait is None:
-        for_endc.args.append(ast.Constant("parallel" in ctr.name.string.lower()))
+        for_endc.args.append(ast.Constant(any(isinstance(c, Parallel) for c in ctx.used_constructs[block])))
     elif ctr.no_wait.not_synchronize is None:
         for_endc.args.append(ast.Constant(True))
     else:
@@ -305,16 +306,16 @@ def for_checks(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.For]:
     """
     for_list: list[ast.For] = []
 
+    if len(body) > 1:
+        msg = "unindent expected, but statement found"
+        raise syntax_error_ctx(msg, Span.from_ast(body[1]), ctx)
+
     if len(body) == 0 or not isinstance(stmt := body[0], ast.For):
         msg = "for statement expected"
         span: Span = ctr.name.span if len(body) == 0 else Span.from_ast(body[0])
         raise syntax_error_ctx(msg, span, ctx)
     for_range_check(stmt, ctx)
     for_list.append(stmt)
-
-    if len(body) > 1:
-        msg = "unindent expected, but statement found"
-        raise syntax_error_ctx(msg, Span.from_ast(body[1]), ctx)
 
     if ctr.collapse is not None:
         if ctr.collapse.num.value < 1:
@@ -440,7 +441,7 @@ def _(ctr: Sections, block: StructuredBlock | None, ctx: Context) -> list[ast.st
         )
 
     if ctr.no_wait is None:
-        sec_endc.args.append(ast.Constant("parallel" in ctr.name.string.lower()))
+        sec_endc.args.append(ast.Constant(any(isinstance(c, Parallel) for c in ctx.used_constructs[block])))
     elif ctr.no_wait.not_synchronize is None:
         sec_endc.args.append(ast.Constant(True))
     else:
@@ -484,28 +485,29 @@ def _(ctr: Single, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt
     Returns:
         list[ast.stmt]: Transformed AST statements.
     """
-    body: list[ast.stmt] = [with_block(ctr, block, ctx)]
+    block = with_block(ctr, block, ctx)
+    body: list[ast.stmt] = [block]
     modify_scope(ctr, ctx, body, ctr.private, ctr.first_private, [])
     single_ast = ctr.span.to_ast(
-        ast.If(ast.Call(runtime_ast("single_init"), [ast.Constant(bool(ctr.copyprivate))]), body),
+        ast.If(ast.Call(runtime_ast("single_init"), [ast.Constant(bool(ctr.copy_private))]), body),
     )
     single_end: ast.stmt = ctr.span.to_ast(ast.Expr(single_endc := ast.Call(runtime_ast("single_end"))))
 
-    if ctr.no_wait and ctr.copyprivate:
+    if ctr.no_wait and ctr.copy_private:
         msg = "'nowait' clause must not be used together with 'copyprivate'"
-        raise syntax_error_ctx(msg, ctr.copyprivate[0].span, ctx)
+        raise syntax_error_ctx(msg, ctr.copy_private[0].span, ctx)
 
     if ctr.no_wait is None:
-        single_endc.args.append(ast.Constant(False))
+        single_endc.args.append(ast.Constant(any(isinstance(c, Parallel) for c in ctx.used_constructs[block])))
     elif ctr.no_wait.not_synchronize is None:
         single_endc.args.append(ast.Constant(True))
     else:
         single_endc.args.append(ctr.no_wait.not_synchronize.value)
 
     body= [single_ast]
-    if ctr.copyprivate:
-        check_scopes(ctx, *ctr.copyprivate, *ctr.private, *ctr.first_private, allow_threadprivate=True)
-        copy_if = copyprivate(ctr.copyprivate, ctx)
+    if ctr.copy_private:
+        check_scopes(ctx, *ctr.copy_private, *ctr.private, *ctr.first_private, allow_threadprivate=True)
+        copy_if = copyprivate(ctr.copy_private, ctx)
         single_ast.body.extend(copy_if.body)
         single_ast.orelse.extend(copy_if.orelse)
 

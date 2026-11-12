@@ -1,0 +1,176 @@
+############################################################################
+# OpenMP 6.0 - Conforming Compound Directive Names                         #
+#                                                                          #
+# This grammar is a literal transcription of Appendix D                    #
+# ("Conforming Compound Directive Names") from the OpenMP 6.0              #
+# specification (November 2024), with only the following mechanical        #
+# transformations applied:                                                 #
+#                                                                          #
+#   - All '-' characters in production names have been replaced by '_'.    #
+#   - All ':' characters in production names have been replaced by ':\'.   #
+#   - Leaf directive names have been written as quoted string literals.    #
+#   - The rule 'partitioned_worksharing_dir_name' has been assigned        #
+#     priority 1 to resolve a LALR reduce/reduce conflict with             #
+#     'thread_selecting_dir_name', without removing any productions.       #
+#                                                                          #
+# No simplification, recursion removal, ambiguity resolution, semantic     #
+# filtering, or grammar normalization has been performed.                  #
+############################################################################
+start : compound_dir_name                                                  #
+############################################################################
+
+
+compound_dir_name:\
+    composite_loop_dir_name
+  | parallelism_generating_combined_dir_name
+  | thread_selecting_combined_dir_name
+
+composite_loop_dir_name:\
+    distribute_composite_dir_name
+  | taskloop_composite_dir_name
+  | worksharing_loop_composite_dir_name
+
+parallelism_generating_combined_dir_name:\
+    parallel_combined_dir_name
+  | target_combined_dir_name
+  | target_data_combined_dir_name
+  | task_combined_dir_name
+  | teams_combined_dir_name
+
+thread_selecting_combined_dir_name:\
+    masked_combined_dir_name
+  | single_combined_dir_name
+
+distribute_composite_dir_name:\
+    "distribute" parallel_worksharing_loop_dir_name
+  | "distribute" simd_dir_name
+
+taskloop_composite_dir_name:\
+    "taskloop" simd_dir_name
+
+worksharing_loop_composite_dir_name:\
+    "for" simd_dir_name
+  | "do" simd_dir_name
+
+parallel_combined_dir_name:\
+    "parallel" partitioned_worksharing_dir_name
+  | "parallel" simd_dir_name
+  | "parallel" target_task_generating_dir_name
+  | "parallel" task_dir_name
+  | "parallel" taskloop_dir_name
+  | "parallel" thread_selecting_dir_name
+
+target_combined_dir_name:\
+    "target" loop_dir_name
+  | "target" parallel_dir_name
+  | "target" simd_dir_name
+  | "target" task_dir_name
+  | "target" taskloop_dir_name
+  | "target" teams_dir_name
+
+target_data_combined_dir_name:\
+    "target_data" loop_dir_name
+  | "target_data" parallel_dir_name
+  | "target_data" simd_dir_name
+
+task_combined_dir_name:\
+    "task" loop_dir_name
+  | "task" parallel_dir_name
+  | "task" simd_dir_name
+
+teams_combined_dir_name:\
+    "teams" parallel_dir_name
+  | "teams" partitioned_nonworksharing_workdist_dir_name
+  | "teams" simd_dir_name
+  | "teams" target_task_generating_dir_name
+  | "teams" task_dir_name
+  | "teams" taskloop_dir_name
+
+masked_combined_dir_name:\
+    "masked" loop_dir_name
+  | "masked" parallel_dir_name
+  | "masked" simd_dir_name
+  | "masked" target_task_generating_dir_name
+  | "masked" task_dir_name
+  | "masked" taskloop_dir_name
+
+single_combined_dir_name:\
+    "single" loop_dir_name
+  | "single" parallel_dir_name
+  | "single" simd_dir_name
+  | "single" target_task_generating_dir_name
+  | "single" task_dir_name
+  | "single" taskloop_dir_name
+
+parallel_worksharing_loop_dir_name:\
+    "parallel" worksharing_loop_dir_name
+
+simd_dir_name:\
+    "simd"
+
+partitioned_worksharing_dir_name.1:\
+    loop_dir_name
+  | single_dir_name
+  | worksharing_loop_dir_name
+  | "sections"
+  | "workshare"
+
+target_task_generating_dir_name:\
+    target_data_dir_name
+  | target_dir_name
+  | "target_enter_data"
+  | "target_exit_data"
+  | "target_update"
+
+task_dir_name:\
+    task_combined_dir_name
+  | "task"
+
+taskloop_dir_name:\
+    taskloop_composite_dir_name
+  | "taskloop"
+
+thread_selecting_dir_name:\
+    masked_dir_name
+  | single_dir_name
+
+loop_dir_name:\
+    "loop"
+
+parallel_dir_name:\
+    parallel_combined_dir_name
+  | "parallel"
+
+teams_dir_name:\
+    teams_combined_dir_name
+  | "teams"
+
+partitioned_nonworksharing_workdist_dir_name:\
+    distribute_dir_name
+  | loop_dir_name
+  | "workdistribute"
+
+worksharing_loop_dir_name:\
+    worksharing_loop_composite_dir_name
+  | "for"
+  | "do"
+
+single_dir_name:\
+    single_combined_dir_name
+  | "single"
+
+target_data_dir_name:\
+    target_data_combined_dir_name
+  | "target_data"
+
+target_dir_name:\
+    target_combined_dir_name
+  | "target"
+
+masked_dir_name:\
+    masked_combined_dir_name
+  | "masked"
+
+distribute_dir_name:\
+    distribute_composite_dir_name
+  | "distribute"

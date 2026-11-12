@@ -363,6 +363,7 @@ class OmpTransformer(ast.NodeTransformer):
             self.ctx.node_stack.pop()
             OmpParser(self.ctx).visit(self.ctx.module)
             self.ctx.active_constructs.update({node: d.constructs for node, d in self.ctx.directives.items()})
+            self.ctx.used_constructs.update({node: [] for node in self.ctx.directives})
             self.visit(self.ctx.module)
             [f() for f in self.ctx.finalizers]
         return self.ctx.module
@@ -455,8 +456,9 @@ class OmpTransformer(ast.NodeTransformer):
                 case [ast.With() as child] if child in self.ctx.active_constructs:
                     self.ctx.active_constructs[child][0:0] = self.ctx.active_constructs.pop(node)
                     return self.visit_With(child)
-
-            tmp = ast.Try(transform(constructs.pop(0), node, self.ctx))
+            c = constructs.pop(0)
+            tmp = ast.Try(transform(c, node, self.ctx))
+            self.ctx.used_constructs[node].append(c)
             node_finalizers, self.ctx.node_finalizers = self.ctx.node_finalizers, []
             self.generic_visit(tmp)
             [f() for f in node_finalizers]
@@ -476,10 +478,13 @@ class OmpTransformer(ast.NodeTransformer):
         Returns:
             ast.Expr | list[ast.stmt]: Transformed node or replacement body.
         """
-        if constructs := self.ctx.active_constructs.pop(node, []):
+        if constructs := self.ctx.active_constructs.get(node, []):
             tmp = ast.Try()
-            for c in constructs:
+            used = self.ctx.used_constructs[node]
+            while c:= constructs.pop(0):
                 tmp.body.extend(transform(c, None, self.ctx))
+                used.append(c)
+            self.ctx.active_constructs.pop(node)
             node_finalizers, self.ctx.node_finalizers = self.ctx.node_finalizers, []
             self.generic_visit(tmp)
             [f() for f in node_finalizers]

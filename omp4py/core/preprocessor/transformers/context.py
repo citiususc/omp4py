@@ -116,8 +116,8 @@ class Context:
         finalizers (list[Callable[[], None]]): Deferred actions executed after end of module AST traversal.
         node_finalizers (list[Callable[[], None]]): Deferred actions executed after end of node AST traversal.
         directives (dict[ast.With | ast.Expr, Directive]): Mapping of AST nodes with Open-MP parsed directives.
-        active_constructs: dict[ast.With | ast.Expr, list[Construct]]: Mapping of AST nodes with active OpenMP
-           constructs.
+        active_constructs: dict[ast.AST, list[Construct]]: Mapping of AST nodes with active OpenMP constructs.
+        used_constructs: dict[ast.AST, list[Construct]]: Mapping of AST nodes with used OpenMP constructs.
     """
 
     full_source: str
@@ -130,7 +130,8 @@ class Context:
     finalizers: list[Callable[[], None]] = field(init=False, default_factory=list)
     node_finalizers: list[Callable[[], None]] = field(init=False, default_factory=list)
     directives: dict[ast.With | ast.Expr, Directive] = field(init=False, default_factory=dict)
-    active_constructs: dict[ast.With | ast.Expr, list[Construct]] = field(init=False, default_factory=dict)
+    active_constructs: dict[ast.AST, list[Construct]] = field(init=False, default_factory=dict)
+    used_constructs: dict[ast.AST, list[Construct]] = field(init=False, default_factory=dict)
 
     def __post_init__(self) -> None:
         """Initialize derived context state after construction.
