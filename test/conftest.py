@@ -14,6 +14,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def pytest_configure(config: pytest.Config) -> None:
+    os.environ["OMP4PY_IGNORE_CACHE"] = "1"
     os.environ["OMP4PY_PURE"] = str(config.getoption("pure"))
     config.addinivalue_line("markers", "no_isolate")
 

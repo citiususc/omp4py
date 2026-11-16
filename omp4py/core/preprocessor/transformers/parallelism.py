@@ -101,9 +101,9 @@ def _(ctr: Parallel, block: StructuredBlock | None, ctx: Context) -> list[ast.st
     if ctr.proc_bind:
         proc_bind_ast = ctr.proc_bind.span.to_ast(ast.Constant(ord(ctr.proc_bind.affinity_policy.choice.lower()[0])))
 
-    if ctr.copyin:
-        check_scopes(ctx, *ctr.copyin, allow_threadprivate=True)
-        for dataclause in ctr.copyin:
+    if ctr.copy_in:
+        check_scopes(ctx, *ctr.copy_in, allow_threadprivate=True)
+        for dataclause in ctr.copy_in:
             dataclause.span.to_ast(proc_bind_ast)
             for var in dataclause.targets:
                 if var.string not in ctx.module_storage.threadprivate:

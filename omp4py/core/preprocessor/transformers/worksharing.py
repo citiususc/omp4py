@@ -115,8 +115,11 @@ def _(ctr: For, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt]: 
     if ctr.schedule:
         kind = ctr.schedule.type.choice
         if ctr.schedule.type.choice == ScheduleType.Choice.AUTO:
+            if ctr.schedule.chunk_size:
+                msg = "schedule 'auto' does not take a 'chunk_size' parameter"
+                raise syntax_error_ctx(msg, ctr.schedule.chunk_size.span, ctx)
             kind = ScheduleType.Choice.STATIC
-        schedule_name = ctr.schedule.type.choice.lower()
+        schedule_name = kind.lower()
         match kind:
             case ScheduleType.Choice.STATIC | ScheduleType.Choice.DYNAMIC | ScheduleType.Choice.GUIDED:
                 for_next = f"{for_next}_{schedule_name}"

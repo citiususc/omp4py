@@ -253,6 +253,8 @@ def for_init(bounds: ForBounds, modifier: pyint, schedule: pyint, chunk: pyint, 
             task.kind = for_next_dynamic
         elif schedule == _guided:
             task.kind = for_next_guided
+        else:
+            task.kind = for_next_static
 
     if chunk < 0:
         chunk = cython.cast(pyint, math.ceil(bounds.its / ctx.icvs.team_size)) if schedule == _static else 1  # ty: ignore[no-matching-overload]
@@ -428,6 +430,7 @@ if cython.compiled:
     globals()["for_next_static"] = lambda bounds: for_next_static(bounds)  # noqa: PLW0108
     globals()["for_next_dynamic"] = lambda bounds: for_next_dynamic(bounds)  # noqa: PLW0108
     globals()["for_next_guided"] = lambda bounds: for_next_guided(bounds)  # noqa: PLW0108
+    globals()["for_next_runtime"] = lambda bounds: for_next_runtime(bounds)  # noqa: PLW0108
 
 
 def ordered_start() -> None:

@@ -23,7 +23,7 @@ from collections.abc import Iterator
 from io import StringIO
 
 from omp4py.core.parser import openmp_lark, string_lark, tree
-from omp4py.core.parser.clause_assignment import assign_clauses
+from omp4py.core.parser.clause_assignment import ClauseAssignment
 from omp4py.core.parser.compound import DIRECTIVES
 from omp4py.core.parser.error import parser_error, syntax_error
 from omp4py.core.parser.openmp_lark import (
@@ -310,7 +310,7 @@ class OpenmpTransformer(openmp_lark.Transformer):
         self.full_source = full_source
         self.filename = filename
 
-    def token2meta(self, token: Token)-> Meta:
+    def token2meta(self, token: Token) -> Meta:
         """Convert Lark token to a lark parse metadata.
 
         Args:
@@ -322,7 +322,6 @@ class OpenmpTransformer(openmp_lark.Transformer):
         node = openmp_lark.Tree("", [])
         openmp_lark.PropagatePositions(lambda _: node)([token])
         return node.meta
-
 
     def meta2span(self, meta: Meta) -> tree.Span:
         """Convert Lark parse metadata to an original-source span.
@@ -555,25 +554,32 @@ class OpenmpTransformer(openmp_lark.Transformer):
                 or if the resulting compound directive violates composition
                 rules.
         """
+        full_comp_name = " ".join(name.string for name in names)
         constructs = {str(name).lower(): self.basic_directive(meta, name, []).constructs[0] for name in names}
-        full_comp_name = " ".join(name.string for name in names).lower()
-        named_clauses: dict[str, list[Clause]] = defaultdict(list)
-        for c in clauses:
-            named_clauses[str(c.directive_name).lower() if c.directive_name else full_comp_name].append(c)
+        assignable_clauses: dict[str, list[Clause]] = defaultdict(list)
+        for clause in clauses:
+            cid = clause.id()
+            visible_constructs: list[str]
+            if clause.directive_name is None:
+                visible_constructs = list(constructs.keys())
+            else:
+                if str(clause.directive_name).lower() in full_comp_name.lower():
+                    msg = f"'{clause.directive_name}' is not valid for '{full_comp_name}'"
+                    raise self.syntax_error(msg, clause.directive_name.span)
 
-        for group_name, group_clauses in named_clauses.items():
-            if group_name in constructs:
-                self.set_all_clauses(constructs[group_name], group_clauses)
-                continue
-            allowed_constructs = {name: cons for name, cons in constructs.items() if name in group_name}
-            assignment = assign_clauses(allowed_constructs, group_clauses)
-            [self.set_all_clauses(constructs[name],acls) for name, acls in assignment.items()]
+                visible_constructs = [v.string.lower() for v in clause.directive_name.directives]
+            orphan = True
+            for name in visible_constructs:
+                assignable_clauses[name].append(clause)
+                if hasattr(constructs[name], cid):
+                    orphan = False
+            if orphan:
+                group = str(clause.directive_name) if clause.directive_name else " ".join(name.string for name in names)
+                msg = f"'{clause.cid()}' is not valid for '{group}'"
+                raise self.syntax_error(msg, clause.span)
 
-            if orphan:= set(group_clauses).difference(*[ set(acls) for acls in assignment.values()]):
-                first = next(iter(orphan))
-                msg = f"'{first.cid()}' is not valid for '{group_name}'"
-                raise self.syntax_error(msg, first.span)
-
+        assignment = ClauseAssignment(constructs, assignable_clauses).assign(clauses)
+        [self.set_all_clauses(constructs[name], cs) for name, cs in assignment.items()]
 
         return self.check_compose_directive(tree.Directive(self.meta2span(meta), self.code, list(constructs.values())))
 
@@ -673,13 +679,14 @@ class OpenmpTransformer(openmp_lark.Transformer):
         self.set_clauses(node, clauses)
         return node
 
-    def get_clause[T: Clause](self, meta: Meta, tp: type[T], clauses: list[Clause]) -> T:
+    def get_clause[T: Clause](self, meta: Meta, tp: type[T], clauses: list[Clause], preserve: bool = False) -> T:
         """Retrieve the first clause of a specified type.
 
         Args:
             meta (Meta): Parse metadata used to locate a missing-clause error.
             tp (type[T]): Clause type to search for.
             clauses (list[Clause]): Clauses to search.
+            preserve (bool): If False, removes the clause from the list.
 
         Returns:
             T: The first clause matching `tp`.
@@ -716,7 +723,7 @@ class OpenmpTransformer(openmp_lark.Transformer):
     def num_threads_cl(self, meta: Meta, name: Name, mods: Modifiers, expr: tree.PyExpr) -> tree.NumThreads:
         return self.set_mods(tree.NumThreads(self.meta2span(meta), name, expr), mods)
 
-    def default_cl(self, meta: Meta, name: Name, mods: Modifiers, data: Name) -> tree.Default:
+    def default_cl(self, meta: Meta, name: Name, data: Name, mods: Modifiers) -> tree.Default:
         return self.set_mods(tree.Default(self.meta2span(meta), name, tree.DefaultData(data.span, data.string)), mods)
 
     def private_cl(self, meta: Meta, name: Name, mods: Modifiers, targets: list[PyName]) -> tree.Private:
@@ -777,7 +784,7 @@ class OpenmpTransformer(openmp_lark.Transformer):
             raise self.syntax_error(msg, expr.span)
         return self.set_mods(tree.Collapse(self.meta2span(meta), name, n), mods)
 
-    def orderer_cl(
+    def ordered_cl(
         self,
         meta: Meta,
         name: Name,
@@ -933,7 +940,7 @@ class OpenmpTransformer(openmp_lark.Transformer):
         if mods is not None:
             for mod in mods:
                 if not hasattr(node, mod.id()):
-                    msg = f"'{mod.cid()}' is not a valid modifier for '{mod.cid()}'"
+                    msg = f"'{mod.cid()}' is not a valid modifier for '{node.cid()}'"
                     raise self.syntax_error(msg, mod.span)
                 match v := getattr(node, mod.id()):
                     case None:
@@ -946,7 +953,7 @@ class OpenmpTransformer(openmp_lark.Transformer):
                             raise self.syntax_error(msg, mod.span)
         return node
 
-    def get_mod[T: Modifier](self, meta: Meta, tp: type[T], mods: Modifiers) -> T:
+    def get_mod[T: Modifier](self, meta: Meta, tp: type[T], mods: Modifiers, preserve: bool = False) -> T:
         """Retrieve the first modifier of a specified type.
 
         Searches the supplied modifiers for an instance of `tp`.
@@ -955,6 +962,7 @@ class OpenmpTransformer(openmp_lark.Transformer):
             meta (Meta): Parse metadata used to locate a missing-modifier error.
             tp (type[T]): Modifier type to search for.
             mods (Modifiers): Modifiers to search, or `None` if there are none.
+            preserve (bool): If False, removes the modifier from the list.
 
         Returns:
             T: The first modifier matching `tp`.
@@ -965,6 +973,8 @@ class OpenmpTransformer(openmp_lark.Transformer):
         if mods is not None:
             for mod in mods:
                 if isinstance(mod, tp):
+                    if not preserve:
+                        mods.remove(mod)
                     return mod
         msg = f"modifier '{tp.id()}' required"
         raise self.syntax_error(msg, self.meta2span(meta))
@@ -1035,18 +1045,18 @@ class OpenmpTransformer(openmp_lark.Transformer):
         """
         return tree.PyName(self.meta2span(meta), str(t))
 
-    def py_name_sec(self, _: Meta, name: tree.PyName, sections: list[tree.PySection]) -> tree.PyName:
+    def py_name_sec(self, _: Meta, name: tree.PyName, *sections: tree.PySection) -> tree.PyName:
         """Attach section specifications to a Python-name node.
 
         Args:
             _ (Meta): Parse metadata, unused by this helper.
             name (tree.PyName): Name node to update.
-            sections (list[tree.PySection]): Sections associated with the name.
+            *sections (tree.PySection): Sections associated with the name.
 
         Returns:
             tree.PyName: The updated name node.
         """
-        name.sections = sections
+        name.sections = list(sections)
         return name
 
     def py_section(self, meta: Meta, *args: Token | PyExpr) -> tree.PySection:

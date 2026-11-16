@@ -481,8 +481,8 @@ class OmpTransformer(ast.NodeTransformer):
         if constructs := self.ctx.active_constructs.get(node, []):
             tmp = ast.Try()
             used = self.ctx.used_constructs[node]
-            while c:= constructs.pop(0):
-                tmp.body.extend(transform(c, None, self.ctx))
+            while constructs:
+                tmp.body.extend(transform(c:= constructs.pop(0), None, self.ctx))
                 used.append(c)
             self.ctx.active_constructs.pop(node)
             node_finalizers, self.ctx.node_finalizers = self.ctx.node_finalizers, []

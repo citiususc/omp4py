@@ -50,19 +50,19 @@ def threadprivate(name: str, value: object) -> pyint:
 
     Args:
         name: Name of the variable.
-        value: Initial value to assign (if not `None`).
+        value: Initial value to assign (if not exists).
 
     Returns:
         pyint: Internal identifier assigned to the variable.
     """
-    i = _threadprivate_ids.get(name)
-    if i is None:
+    i: pyint  = _threadprivate_ids.get(name, -1)
+    if i < 0:
         global _threadprivate_ids_last  # noqa: PLW0603
         _threadprivate_ids_mutex.lock()
         _threadprivate_ids[name] = i = _threadprivate_ids_last = len(_threadprivate_ids)
         _threadprivate_ids_mutex.unlock()
-    if value is not None:
-        update_privates(omp_ctx().tpvars)
+    last: pyint = update_privates(omp_ctx().tpvars)
+    if last <= i:
         threadprivates(i).v = value
 
     return i
@@ -87,7 +87,7 @@ def threadprivates(i: pyint) -> TPrivRef:
 # END_CYTHON_IGNORE
 
 
-def update_privates(tpvars: list[TPrivRef]) -> None:
+def update_privates(tpvars: list[TPrivRef]) -> pyint:
     """Ensure thread-private storage is large enough for all variables.
 
     Extends the per-thread storage list with new empty `TPrivRef`
@@ -95,10 +95,14 @@ def update_privates(tpvars: list[TPrivRef]) -> None:
 
     Args:
         tpvars: Thread-private storage list for the current thread.
+
+    Returns:
+        pyint: Previous size.
     """
+    psize: pyint = len(tpvars)
     for _ in range(_threadprivate_ids_last - len(tpvars) + 1):
         tpvars.append(TPrivRef.new())  # noqa: PERF401
-
+    return psize
 
 def map_privates(names: tuple[str, ...]) -> pyint_array:
     """Map variable names to internal threadprivate identifiers.

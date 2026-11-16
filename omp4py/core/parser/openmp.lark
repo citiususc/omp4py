@@ -26,8 +26,9 @@ start: basic_construct                              clauses  -> basic_directive
      | lit_dec_reduction      "(" _HM reduction_op ":" list{py_expr_lite} [dec_rec_mod_old] ")" clauses -> dec_reduction_dir
 
 
-?basic_construct: lit{"taskyield"i}  |  lit{"critical"i} | lit{"barrier"i} | lit{"taskwait"i} | lit{"flush"i}
-                | lit{"taskgroup"i}  | lit{"ordered"i}   | lit{"declare_simd"i}  | lit{"declare_target"i}
+?basic_construct: lit{"taskyield"i}  | lit{"critical"i} | lit{"barrier"i} | lit{"taskwait"i} | lit{"flush"i}
+                | lit{"taskgroup"i}  | lit{"ordered"i}  | lit{"declare_simd"i}  | lit{"declare_target"i}
+                | lit{"master"i}     | lit{"section"i}
                 | lit{"target"i}  lit{"data"i}                -> literal
                 | lit{"target"i}  lit{"update"i}              -> literal
                 | lit{"target"i}  lit{"enter"i} lit{"data"i}  -> literal
@@ -49,7 +50,7 @@ comp_constructs : comp_construct (comp_construct)+
 ?comp_construct: lit{"target"i}     | lit{"for"i}     | lit{"task"i}     | lit{"simd"i}     | lit{"parallel"i}
                | lit{"single"i}     | lit{"teams"i}   | lit{"taskloop"i} | lit{"sections"i} | lit{"masked"i}
                | lit{"target_update"i}                | lit{"target_data"i}                 | lit{"distribute"i}
-               | lit{"target_enter_data"i}            | lit{"target_exit_data"i}            | lit{"master"i}
+               | lit{"target_enter_data"i}            | lit{"target_exit_data"i}            
 
 ##################################################################################
 ##################################### Clauses ####################################
@@ -90,7 +91,7 @@ clause : lit{"aligned"i}       "(" [_HM] list{py_name}    [":"  aligned_mods]   
        | lit{"num_tasks"i}     "(" [_HM list{mod_default} ":"]  py_expr            ")" 
        | lit{"num_teams"i}     "(" [_HM list{mod_default} ":"]  py_expr            ")"
        | lit{"num_threads"i}   "(" [_HM list{mod_default} ":"]  py_expr            ")"
-       | lit{"ordered"i}       "(" [_HM list{mod_default} ":"]  py_expr            ")"
+       | lit{"ordered"i}      ["(" [_HM list{mod_default} ":"]  py_expr            ")"]
        | lit{"priority"i}      "(" [_HM list{mod_default} ":"]  py_expr            ")" 
        | lit{"private"i}       "(" [_HM list{mod_default} ":"]  list{py_name}      ")"
        | lit{"proc_bind"i}     "(" [_HM list{mod_default} ":"]  (lit{"master"i} | lit{"close"i} | lit{"spread"i}) ")"
@@ -122,7 +123,7 @@ dec_rec_mod_old: ":" py_code
 
 directive_mod: NAME+
 
-reduction_mods   : [directive_mod ","]  reduction_mod_op -> as_list
+reduction_mods   : (directive_mod ",")?  reduction_mod_op -> as_list
 reduction_mod_op : reduction_op
 ?reduction_op    : py_name      | py_lit{"+"i}   | py_lit{"*"i}  | py_lit{"&"i}   | py_lit{"|"i}
                  | py_lit{"^"i} | py_lit{"and"i} | py_lit{"or"i} | py_lit{"max"i} | py_lit{"min"i}

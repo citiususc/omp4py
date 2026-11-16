@@ -16,7 +16,7 @@ cpdef inline TPrivRef threadprivates(pyint i):
         update_privates(tpvars)
     return <object> PyList_GET_ITEM(tpvars, i) # Fast version of tpvars[i]
 
-cdef void update_privates(list[TPrivRef] tpvars)
+cdef pyint update_privates(list[TPrivRef] tpvars)
 
 cdef pyint_array map_privates(tuple[str, ...] names)
 

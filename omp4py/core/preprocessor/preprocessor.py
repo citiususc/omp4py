@@ -87,8 +87,11 @@ def process_object[T: Callable[..., typing.Any] | type](arg: T, opt: Options) ->
     module_globals: ModuleType = sys.modules[arg.__module__]
     result: dict[str, typing.Any] = {}
 
-    path_hash: str = hashlib.sha256(bytes(Path(opt.filename).resolve())).hexdigest()[:12]
-    name: str = getattr(arg, "name", "<None>")
+    path_hash: str = hashlib.sha256(data.encode()).hexdigest()[:12]
+    name: str = getattr(arg, "__name__", "<None>")
+    if name.startswith("<"): # <None> y <lambda>
+        msg = "invalid function"
+        raise ValueError(msg)
     fullname: str = f"p{path_hash}_{arg.__module__}_{name}"
     cache_dir = Path(opt.cache)
     cache_dir.mkdir(parents=True, exist_ok=True)

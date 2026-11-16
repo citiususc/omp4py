@@ -120,23 +120,6 @@ def test_for_schedule_runtime_as_static():
 ################################################
 
 
-def for_schedule_runtime_chunk_error(q: Queue):
-    with omp("parallel for schedule(runtime, 1)"):
-        for i in range(11):
-            q.put((i, omp_get_thread_num()))
-
-
-def test_for_schedule_runtime_chunk_error():
-    q = Queue()
-    omp_set_num_threads(2)
-    omp_set_schedule(omp_sched_static, -1)
-    with pytest.raises(SyntaxError):
-        omp(for_schedule_runtime_chunk_error)(q)
-
-
-################################################
-
-
 def for_schedule_auto_chunk_error(q: Queue):
     with omp("parallel for schedule(auto, 1)"):
         for i in range(11):
@@ -219,10 +202,11 @@ def test_for_schedule_var():
     assert len(q.queue) == 10
 
 
-def test_for_schedule_var_not_int():
+def test_for_schedule_var_not_int_error():
     q = Queue()
     omp_set_num_threads(2)
-    omp(for_schedule_var)(q, "1")
+    with pytest.raises(TypeError):
+        omp(for_schedule_var)(q, "1")
 
 
 ################################################

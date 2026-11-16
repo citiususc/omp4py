@@ -444,7 +444,7 @@ class Parallel(Construct):
     private: list[Private] = field(default_factory=list)
     first_private: list[FirstPrivate] = field(default_factory=list)
     shared: list[Shared] = field(default_factory=list)
-    copyin: list[CopyIn] = field(default_factory=list)
+    copy_in: list[CopyIn] = field(default_factory=list)
     reduction: list[Reduction] = field(default_factory=list)
     proc_bind: ProcBind | None = None
 
@@ -636,6 +636,15 @@ class OrderedClause(Clause):
     """
 
     n: PyInt | None = None
+
+    @classmethod
+    def id(cls) -> str:
+        """Return the clause identifier.
+
+        Returns:
+            str: The identifier ``ordered``.
+        """
+        return "ordered"
 
 
 #### Sections ####
