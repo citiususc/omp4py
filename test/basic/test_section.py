@@ -1,4 +1,5 @@
 import pytest
+import time
 
 from omp4py import *
 from queue import Queue
@@ -136,24 +137,6 @@ def test_section_reduction():
 
 ################################################
 
-def section_var_dup_error():
-    x = 1
-    with omp("parallel sections shared(x) reduction(+:x)"):
-        with omp("section"):
-            x = 3
-        with omp("section"):
-            x = 2
-    return x
-
-
-def test_section_var_dup_error():
-    omp_set_num_threads(2)
-    with pytest.raises(SyntaxError):
-        omp(section_var_dup_error)()
-
-
-################################################
-
 
 def section_nowait(q: Queue):
     with omp("parallel"):
@@ -170,5 +153,18 @@ def test_section_nowait():
     omp_set_num_threads(2)
     omp(section_nowait)(q)
     assert list(q.queue) == [1, 0, 1]
+
+
+################################################
+
+
+def sections_nowait_error():
+    with omp("parallel sections nowait"):
+            pass
+
+def test_sections_nowait_error():
+    with pytest.raises(SyntaxError):
+        omp(sections_nowait_error)()
+
 
 ################################################

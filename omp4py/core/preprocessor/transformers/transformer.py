@@ -24,7 +24,7 @@ from functools import singledispatch
 
 from omp4py.core.parser import Construct, Directive, Span, extract_directive, parse_directive, syntax_error
 from omp4py.core.preprocessor.transformers.context import Context
-from omp4py.core.preprocessor.transformers.utils import is_unpack_if
+from omp4py.core.preprocessor.transformers.utils import ControlFlow, check_omp_if
 
 if typing.TYPE_CHECKING:
     from collections.abc import Callable
@@ -37,6 +37,7 @@ __all__ = [
     "Context",
     "OmpTransformer",
     "StructuredBlock",
+    "check_control_flow",
     "construct",
     "syntax_error_ctx",
     "with_block",
@@ -64,6 +65,28 @@ def syntax_error_ctx(message: str, span: Span, ctx: Context) -> SyntaxError:
         SyntaxError: Constructed syntax error.
     """
     return syntax_error(message, span, ctx.full_source, ctx.opt.filename)
+
+
+def check_control_flow (smt: ast.stmt, ctx: Context) -> None:
+    """Validate control flow within an OpenMP structured block statement.
+
+    Traverses the statement to detect illegal control-flow jumps
+    (such as `break`, `continue`, `return`, or `yield`) that cross OpenMP
+    structured block boundaries. Raises a syntax error if any invalid
+    branch is found.
+
+    Args:
+        smt (ast.stmt): The statement node to check.
+        ctx (Context): The active transformation context.
+
+    Raises:
+        SyntaxError: If an invalid branch to or from an OpenMP structured block is detected.
+    """
+    cf = ControlFlow()
+    cf.visit(smt)
+    if cf.found:
+        msg = "invalid branch to/from OpenMP structured block"
+        raise syntax_error_ctx(msg, Span.from_ast(cf.found), ctx)
 
 
 @singledispatch
@@ -418,21 +441,29 @@ class OmpTransformer(ast.NodeTransformer):
         return new_node
 
     def visit_If(self, node: ast.If) -> ast.If | list[ast.stmt]:
-        """Process an if statement with possible unpack optimization.
+        """Process an `if` statement with potential OpenMP directive functions.
 
-        If the node matches a special unpacking pattern, its body is
-        returned directly. This mechanism is also used to temporarily
-        group a set of statements into a single block.
+        If the node matches the unpack function, its body is returned directly.
+        If the node matches the scope function, it creates a scope with argument
+        variables marked as private.
+        Otherwise, it treats the node as a standard `if` statement.
 
         Args:
-            node (ast.If): If statement node.
+            node (ast.If): The `if` statement node to process.
 
         Returns:
-            ast.If | list[ast.stmt]: Transformed node or its body.
+            ast.If | list[ast.stmt]: The transformed node or its body statements.
         """
-        if is_unpack_if(node):
-            self.generic_visit(node)
+        if (args:= check_omp_if(node)) is not None:
+            if args[0] == "unpack":
+                self.generic_visit(node)
+            elif args[0] == "scope":
+                privates = args[1].split()
+                old_scope, self.ctx.scope = self.ctx.scope, self.ctx.scope.new_child(node, privates)
+                self.generic_visit(node)
+                self.ctx.scope = old_scope
             return node.body
+        self.generic_visit(node)
         return node
 
     def visit_With(self, node: ast.With) -> ast.With | list[ast.stmt]:
@@ -493,7 +524,7 @@ class OmpTransformer(ast.NodeTransformer):
         return node
 
 
-def with_block(ctr: Construct, block: StructuredBlock | None, ctx: Context) -> StructuredBlock:
+def with_block(ctr: Construct, block: StructuredBlock | None, ctx: Context, check_flow: bool = True) -> StructuredBlock:
     """Ensure that the directive is defined using a 'with' block.
 
     Args:
@@ -501,6 +532,7 @@ def with_block(ctr: Construct, block: StructuredBlock | None, ctx: Context) -> S
         block (StructuredBlock | None): The structured block associated with the
             construct, if present.
         ctx (Context): The active transformation context.
+        check_flow (bool): Validate control flow within the block.
 
     Returns:
         StructuredBlock: The validated structured block.
@@ -508,4 +540,6 @@ def with_block(ctr: Construct, block: StructuredBlock | None, ctx: Context) -> S
     if block is None:
         msg = "A structured block is required; the directive must be defined using a 'with' block."
         raise syntax_error_ctx(msg, ctr.span, ctx)
+    if check_flow:
+        check_control_flow(block, ctx)
     return block

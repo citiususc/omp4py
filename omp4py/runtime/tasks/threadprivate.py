@@ -59,7 +59,8 @@ def threadprivate(name: str, value: object) -> pyint:
     if i < 0:
         global _threadprivate_ids_last  # noqa: PLW0603
         _threadprivate_ids_mutex.lock()
-        _threadprivate_ids[name] = i = _threadprivate_ids_last = len(_threadprivate_ids)
+        _threadprivate_ids[name] = i = _threadprivate_ids_last
+        _threadprivate_ids_last += 1
         _threadprivate_ids_mutex.unlock()
     last: pyint = update_privates(omp_ctx().tpvars)
     if last <= i:

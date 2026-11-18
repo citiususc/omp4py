@@ -48,10 +48,12 @@ class ModuleStorage:
             identifiers to their initialization and combination statements.
         threadprivate (dict[str, SymbolEntry]): Mapping of thread-private
             variable names to their corresponding symbol entries.
+        named_mutex (dict[str, str]): Named mutex in the current module.
     """
 
     reductions: dict[str, tuple[ast.stmt, ast.stmt]] = field(default_factory=dict)
     threadprivate: dict[str, SymbolEntry] = field(default_factory=dict)
+    named_mutex: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -77,20 +79,28 @@ class Scope:
     symtable: SymbolTable
     omp_names: dict[str, int] = field(default_factory=dict)
 
-    def new_child(self, node: ast.AST) -> Scope:
-        """Create a child scope for a nested AST node.
+    def new_child(self, node: ast.AST, privates: list[str] | None = None) -> Scope:
+        """Create a child scope for a nested AST node with optional variable privatization.
 
-        The child scope inherits the symbol table hierarchy and copies
-        the current runtime name mapping to preserve deterministic name
-        generation.
+        The child scope inherits the symbol table hierarchy, copies the current
+        runtime name mapping to preserve deterministic name generation, and marks
+        specified variables as private within the scope.
 
         Args:
             node (ast.AST): AST node defining the new scope.
+            privates (list[str] | None, optional): List of variable names to be
+                marked as private in the new scope. Defaults to None.
 
         Returns:
             Scope: Newly created child scope.
         """
-        return Scope(node, self.symtable.new_child(), self.omp_names.copy())
+        table = self.symtable.new_child() if privates is None else self.symtable.rename(set(privates))
+        if privates:
+            for v in privates:
+                if s := table.get(v):
+                    s.private = True
+        return Scope(node, table, self.omp_names.copy())
+
 
 
 @dataclass

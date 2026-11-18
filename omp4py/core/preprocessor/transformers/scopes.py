@@ -24,6 +24,7 @@ import typing
 from omp4py.core.preprocessor.transformers.operators import get_reduction, resolve_names
 from omp4py.core.preprocessor.transformers.symtable import runtime_ast
 from omp4py.core.preprocessor.transformers.transformer import Context, syntax_error_ctx
+from omp4py.core.preprocessor.transformers.utils import scope_if
 
 if typing.TYPE_CHECKING:
     from omp4py.core.parser.tree import (
@@ -38,19 +39,7 @@ if typing.TYPE_CHECKING:
     )
     from omp4py.core.preprocessor.transformers.symtable import SymbolEntry, SymbolTable
 
-__all__ = ["check_scopes", "create_scope", "dec_annotation", "dec_cast", "get_scopes", "modify_scope", "scope_names"]
-
-
-def get_scopes(*scopes: DataScope) -> set[str]:
-    """Extract variable names from a collection of data scopes.
-
-    Args:
-        *scopes (DataScope): Data scope clauses.
-
-    Returns:
-        set[str]: Set of variable names referenced in the scopes.
-    """
-    return {name.string for scope in scopes for name in scope.targets}
+__all__ = ["check_scopes", "create_scope", "dec_annotation", "dec_cast", "scope_names"]
 
 
 def check_scopes(ctx: Context, *scopes: DataScope, allow_threadprivate: bool = False) -> set[str]:
@@ -91,15 +80,16 @@ def check_scopes(ctx: Context, *scopes: DataScope, allow_threadprivate: bool = F
     return used
 
 
-def create_scope(  # ruff: ignore[too-many-arguments, too-many-positional-arguments]
+def create_scope(  # ruff: ignore[complex-structure, too-many-arguments, too-many-branches, too-many-positional-arguments]
     ctr: Construct,
     ctx: Context,
-    f_ast: ast.FunctionDef,
-    default: Default | None,
-    shared_ds: list[Shared],
-    private_ds: list[Private],
-    first_private_ds: list[FirstPrivate],
-    reduction_ds: list[Reduction],
+    body: list[ast.stmt],
+    default: Default | None = None,
+    shared_ds: list[Shared] | None = None,
+    private_ds: list[Private] | None = None,
+    first_private_ds: list[FirstPrivate] | None = None,
+    reduction_ds: list[Reduction] | None = None,
+    new_python_scope: bool = False,
 ) -> SymbolTable:
     """Create a new variable scope for a construct.
 
@@ -107,64 +97,7 @@ def create_scope(  # ruff: ignore[too-many-arguments, too-many-positional-argume
     clauses and applies the corresponding transformations to the function
     body.
 
-    Args:
-        ctr (Construct): Construct being processed.
-        ctx (Context): Active transformation context.
-        f_ast (ast.FunctionDef): Function node representing the new scope.
-        default (Default | None): Default data-sharing clause.
-        shared_ds (list[Shared]): Shared variable clauses.
-        private_ds (list[Private]): Private variable clauses.
-        first_private_ds (list[FirstPrivate]): Firstprivate clauses.
-        reduction_ds (list[Reduction]): Reduction clauses.
-
-    Returns:
-        SymbolTable: Symbol table associated with the new scope.
-    """
-    return _variable_scope(ctr, ctx, f_ast, default, shared_ds, private_ds, first_private_ds, reduction_ds)
-
-
-def modify_scope(  # ruff: ignore[too-many-arguments, too-many-positional-arguments]
-    ctr: Construct,
-    ctx: Context,
-    body: list[ast.stmt],
-    private_ds: list[Private],
-    first_private_ds: list[FirstPrivate],
-    reduction_ds: list[Reduction],
-) -> SymbolTable:
-    """Modify an existing scope with additional data-sharing clauses.
-
-    Unlike `create_scope`, this function operates on an existing body,
-    applying private, firstprivate, and reduction semantics without
-    introducing a full new function scope.
-
-    Args:
-        ctr (Construct): Construct being processed.
-        ctx (Context): Active transformation context.
-        body (list[ast.stmt]): AST body to transform.
-        private_ds (list[Private]): Private clauses.
-        first_private_ds (list[FirstPrivate]): Firstprivate clauses.
-        reduction_ds (list[Reduction]): Reduction clauses.
-
-    Returns:
-        SymbolTable: Updated symbol table for the modified scope.
-    """
-    f_ast = ast.FunctionDef("", ast.arguments(), body)
-    return _variable_scope(ctr, ctx, f_ast, None, [], private_ds, first_private_ds, reduction_ds)
-
-
-def _variable_scope(  # ruff: ignore[complex-structure, too-many-arguments, too-many-branches, too-many-positional-arguments]
-    ctr: Construct,
-    ctx: Context,
-    f_ast: ast.FunctionDef,
-    default: Default | None,
-    shared_ds: list[Shared],
-    private_ds: list[Private],
-    first_private_ds: list[FirstPrivate],
-    reduction_ds: list[Reduction],
-) -> SymbolTable:
-    """Core implementation for scope creation and transformation.
-
-    This internal function applies OpenMP-like data-sharing semantics by:
+    This function applies OpenMP-like data-sharing semantics by:
     - Validating scope clauses
     - Determining variable classification (shared, private, etc.)
     - Renaming variables to avoid conflicts
@@ -177,12 +110,13 @@ def _variable_scope(  # ruff: ignore[complex-structure, too-many-arguments, too-
     Args:
         ctr (Construct): Construct being processed.
         ctx (Context): Active transformation context.
-        f_ast (ast.FunctionDef): Function node representing the scope.
+        body (list[ast.stmt]): AST body representing the scope.
         default (Default | None): Default data-sharing clause.
-        shared_ds (list[Shared]): Shared clauses.
-        private_ds (list[Private]): Private clauses.
-        first_private_ds (list[FirstPrivate]): Firstprivate clauses.
-        reduction_ds (list[Reduction]): Reduction clauses.
+        shared_ds (list[Shared] | None): Shared clauses.
+        private_ds (list[Private] | None): Private clauses.
+        first_private_ds (list[FirstPrivate] | None): Firstprivate clauses.
+        reduction_ds (list[Reduction] | None): Reduction clauses.
+        new_python_scope (bool): Data scope must create a new python scope.
 
     Returns:
         SymbolTable: Symbol table associated with the transformed scope.
@@ -190,8 +124,12 @@ def _variable_scope(  # ruff: ignore[complex-structure, too-many-arguments, too-
     Raises:
         SyntaxError: If scope rules are violated or reductions are invalid.
     """
-    new_scope = f_ast.name != ""
-    check_scopes(ctx, *shared_ds, *private_ds, *first_private_ds, *reduction_ds)
+    shared_ds = shared_ds or []
+    private_ds = private_ds or []
+    first_private_ds = first_private_ds or []
+    reduction_ds = reduction_ds or []
+
+    check_scopes(ctx, *(shared_ds or []), *private_ds, *first_private_ds, *reduction_ds )
     required = False
     shared = scope_names(*shared_ds)
     private = scope_names(*private_ds)
@@ -213,7 +151,8 @@ def _variable_scope(  # ruff: ignore[complex-structure, too-many-arguments, too-
                 required = True
 
     set_private = {*private, *first_private, *reduction}
-    f_symbols: SymbolTable = ctx.symtable.rename(set_private, f_ast)
+    scope_ast = scope_if(body, sorted(set_private))
+    f_symbols: SymbolTable = ctx.symtable.rename(set_private, scope_ast)
 
     if required:
         defined = ctx.symtable.identifiers()
@@ -224,10 +163,10 @@ def _variable_scope(  # ruff: ignore[complex-structure, too-many-arguments, too-
                 raise syntax_error_ctx(msg, ctr.span, ctx)
 
     f_inits: list[ast.stmt] = []
-    if new_scope:
+    if new_python_scope:
         freevars: list[SymbolEntry] = [
             symbol
-            for symbol in ctx.symtable.check_namespace(f_ast).symbols()
+            for symbol in ctx.symtable.check_namespace(scope_ast).symbols()
             if symbol.real_name not in ctx.module_storage.threadprivate
             and (
                 symbol.real_name in reduction_op
@@ -254,14 +193,22 @@ def _variable_scope(  # ruff: ignore[complex-structure, too-many-arguments, too-
                     continue
                 f_inits.append(resolve_names(stmt[1], omp_out=s.scope_name, omp_in=s.old_name))
             elif name in reduction_op:
+                if s.private:
+                    msg = f"variable '{s.real_name}' is private in outer context"
+                    for data in [*private_ds, *reduction_ds]:
+                        for var in data.targets:
+                            if var.string == s.real_name:
+                                raise syntax_error_ctx(msg, var.span, ctx)
+
                 stmt = get_reduction(ctx, reduction_op[name].op.string, ann)
                 if stmt is None:  # never for __new__
                     msg = f"user defined reduction not found for '{name}'"
                     raise syntax_error_ctx(msg, reduction_op[name].span, ctx)
                 f_inits.append(resolve_names(stmt[0], omp_priv=s.scope_name, omp_orig=s.old_name))
-                f_ast.body.append(resolve_names(stmt[1], omp_out=s.old_name, omp_in=s.scope_name))
+                scope_ast.body.append(resolve_names(stmt[1], omp_out=s.old_name, omp_in=s.scope_name))
 
-    f_ast.body[:] = f_inits + f_ast.body
+    scope_ast.body = f_inits + scope_ast.body
+    body[:] = [scope_ast]
     return f_symbols
 
 

@@ -10,7 +10,15 @@ regions. All tasking and parallel execution logic of the OpenMP model
 is implemented within this package.
 """
 
-from omp4py.runtime.tasks.barrier import barrier  # noqa: F401
+from omp4py.runtime.tasks.mastersync import (
+    barrier,
+    critical_lock,
+    critical_named,
+    critical_named_lock,
+    critical_named_unlock,
+    critical_unlock,
+    masked,
+)  # noqa: F401
 from omp4py.runtime.tasks.parallelism import parallel  # noqa: F401
 from omp4py.runtime.tasks.privatization import copy_var, new_var  # noqa: F401
 from omp4py.runtime.tasks.task import TPrivRef  # noqa: F401
@@ -22,6 +30,7 @@ from omp4py.runtime.tasks.worksharing import (  # noqa: F401
     for_bounds,
     for_end,
     for_init,
+    for_last,
     for_next_dynamic,
     for_next_guided,
     for_next_runtime,

@@ -135,10 +135,10 @@ def process_object[T: Callable[..., typing.Any] | type](arg: T, opt: Options) ->
     if codecache is None:
         codecache = result_code or Path(pyfile).read_text()
 
-    exec(codecache, module_globals.__dict__, result)  # noqa: S102
     module_globals.__dict__["_omp"] = sys.modules["omp4py.runtime"]
+    exec(codecache, module_globals.__dict__)  # noqa: S102
 
-    return result[name]
+    return module_globals.__dict__[name]
 
 
 def process_source(data: str, filename: str, opt: Options) -> str:
@@ -217,7 +217,7 @@ def process(module: ast.Module, full_source: str, opt: Options) -> ast.Module:
 
     modifier_engine.stage(module)
     new_module = transformer.transform()
-    modifier_engine.stage(module, "omp_transformer")
+    modifier_engine.stage(new_module, "omp_transformer")
 
     if opt.dump:
         with open(opt.dump, "w") as f:

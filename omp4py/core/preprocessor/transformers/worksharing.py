@@ -23,7 +23,6 @@ applied during the transformation phase of the preprocessor.
 """
 
 from __future__ import annotations
-from omp4py.core.parser import Parallel
 
 import ast
 
@@ -31,6 +30,9 @@ from omp4py.core.parser.tree import (
     CopyPrivate,
     For,
     Name,
+    NoWait,
+    Ordered,
+    Parallel,
     Private,
     PyName,
     ScheduleType,
@@ -40,12 +42,7 @@ from omp4py.core.parser.tree import (
     Span,
 )
 from omp4py.core.preprocessor.transformers.operators import get_reduction, resolve_names
-from omp4py.core.preprocessor.transformers.scopes import (
-    check_scopes,
-    dec_cast,
-    get_scopes,
-    modify_scope,
-)
+from omp4py.core.preprocessor.transformers.scopes import check_scopes, create_scope, dec_cast, scope_names
 from omp4py.core.preprocessor.transformers.symtable import SymbolTable, omp_name, runtime_ast
 from omp4py.core.preprocessor.transformers.transformer import (
     Context,
@@ -82,6 +79,7 @@ def _(ctr: For, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt]: 
     Returns:
         list[ast.stmt]: Transformed AST statements implementing the loop.
     """
+    check_nowait(ctr, block, ctx)
     block = with_block(ctr, block, ctx)
     collapse_num = ctr.collapse.num.value if ctr.collapse is not None else 1
     ordered_num = 0 if not ctr.ordered else (ctr.ordered.n.value if ctr.ordered.n else 1)
@@ -120,14 +118,13 @@ def _(ctr: For, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt]: 
                 raise syntax_error_ctx(msg, ctr.schedule.chunk_size.span, ctx)
             kind = ScheduleType.Choice.STATIC
         schedule_name = kind.lower()
-        match kind:
-            case ScheduleType.Choice.STATIC | ScheduleType.Choice.DYNAMIC | ScheduleType.Choice.GUIDED:
-                for_next = f"{for_next}_{schedule_name}"
+        for_next = f"{for_next}_{schedule_name}"
     else:
         for_next = f"{for_next}_static"
 
     for_init: ast.stmt = ctr.span.to_ast(ast.Expr(for_initc := ast.Call(runtime_ast("for_init"))))
-    for_next: ast.stmt = ctr.span.to_ast(ast.While(for_nextc := ast.Call(runtime_ast(for_next)), [block]))
+    for_next: ast.stmt = ctr.span.to_ast(for_while := ast.While(for_nextc := ast.Call(runtime_ast(for_next)), [block]))
+    for_last: ast.If = ctr.span.to_ast(ast.If(ast.Call(runtime_ast("for_last"), [ast.Name(bounds_name)])))
     for_end: ast.stmt = ctr.span.to_ast(ast.Expr(for_endc := ast.Call(runtime_ast("for_end"))))
     body = [bounds_create, bounds_assign, for_init, for_next, for_end]
 
@@ -151,11 +148,12 @@ def _(ctr: For, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt]: 
 
     if ctr.last_private:
         check_scopes(ctx, *ctr.last_private)
-        all_private_names: set[str] = get_scopes(*ctr.private, *ctr.first_private)
+        all_private_names: set[str] = set(scope_names(*ctr.private, *ctr.first_private))
         for scope in ctr.last_private:
             targets: list[PyName] = [name for name in scope.targets if name.string not in all_private_names]
             if targets:
                 private.append(Private(scope.span, scope.name, targets))
+        (for_list[0].orelse if collapse_num > 1 else for_while.orelse).append(for_last)
 
     for for_ in for_list:
         match for_.target:
@@ -164,11 +162,19 @@ def _(ctr: For, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt]: 
                     span = Span.from_ast(for_.target)
                     private.append(Private(span, Name(span, name), [PyName(span, name)]))
 
-    f_table: SymbolTable = modify_scope(ctr, ctx, body, private, first_private, ctr.reduction)
+    f_table: SymbolTable = create_scope(
+        ctr,
+        ctx,
+        body,
+        private_ds=private,
+        first_private_ds=first_private,
+        reduction_ds=ctr.reduction,
+    )
+
     for scope in ctr.last_private:
         for var in scope.str_targets:
             if (s := f_table.get(var)) and s.assigned:
-                for_list[0].orelse.append(
+                for_last.body.append(
                     scope.span.to_ast(ast.Assign([ast.Name(s.old_name, ast.Store())], ast.Name(s.scope_name))),
                 )
 
@@ -344,6 +350,31 @@ def for_checks(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.For]:
 
 
 @construct.register
+def _(ctr: Ordered, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt]:
+    """Transform an OpenMP `ordered` construct.
+
+    Enforces a sequential execution order within a parallel loop by
+    inserting a runtime call that delimit ordered region.
+
+    Args:
+        ctr (Ordered): Parsed `ordered` construct.
+        block (StructuredBlock | None): Structured block of the ordered region if was defined using with.
+        ctx (Context): Transformation context.
+
+    Returns:
+        list[ast.stmt]: Transformed AST statements.
+    """
+    block = with_block(ctr, block, ctx)
+    init: ast.stmt = ctr.span.to_ast(ast.Expr(ast.Call(runtime_ast("ordered_start"))))
+    end: ast.stmt = ctr.span.to_ast(ast.Expr(ast.Call(runtime_ast("ordered_next"))))
+
+    ast.fix_missing_locations(init)
+    ast.fix_missing_locations(end)
+
+    return [init, block, end]
+
+
+@construct.register
 def _(ctr: Section, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt]:
     """Handle invalid standalone `section` usage.
 
@@ -357,7 +388,7 @@ def _(ctr: Section, block: StructuredBlock | None, ctx: Context) -> list[ast.stm
     Raises:
         SyntaxError: Always raised since standalone `section` is invalid.
     """
-    msg = "'omp section' may only be used in 'omp sections' construct"
+    msg = f"'{ctr.name}' may only be used in 'sections' construct"
     raise syntax_error_ctx(msg, ctr.span, ctx)
 
 
@@ -380,9 +411,9 @@ def section_checks(ctr: Sections, block: StructuredBlock, ctx: Context) -> list[
         SyntaxError: If invalid structure is found.
     """
     if isinstance(block, ast.With):
-        match constructs:= ctx.active_constructs.get(block, None):
+        match constructs := ctx.active_constructs.get(block, None):
             case [Section(), *_]:
-                constructs.pop(0)
+                ctx.used_constructs[block].append(constructs.pop(0))
                 return [block]
 
     sections_list: list[ast.With] = []
@@ -416,6 +447,7 @@ def _(ctr: Sections, block: StructuredBlock | None, ctx: Context) -> list[ast.st
     Returns:
         list[ast.stmt]: Transformed AST statements.
     """
+    check_nowait(ctr, block, ctx)
     block = with_block(ctr, block, ctx)
     sections_list = section_checks(ctr, block, ctx)
     first_private = ctr.first_private
@@ -437,7 +469,7 @@ def _(ctr: Sections, block: StructuredBlock | None, ctx: Context) -> list[ast.st
             ast.copy_location(
                 ast.If(
                     ast.Compare(ast.Name(sec_id), [ast.Eq()], [ast.Constant(len(sections_list) - i)]),
-                    [sections_list[i]],
+                    [sections_list[i]] if sections_list[i] in ctx.directives else sections_list[i].body,
                 ),
                 sections_list[i],
             ),
@@ -452,13 +484,20 @@ def _(ctr: Sections, block: StructuredBlock | None, ctx: Context) -> list[ast.st
 
     if ctr.last_private:
         check_scopes(ctx, *ctr.last_private)
-        all_private_names: set[str] = get_scopes(*ctr.private, *ctr.first_private)
+        all_private_names: set[str] = set(scope_names(*ctr.private, *ctr.first_private))
         for scope in ctr.last_private:
             targets: list[PyName] = [name for name in scope.targets if name.string not in all_private_names]
             if targets:
                 private.append(Private(scope.span, scope.name, targets))
 
-    f_table: SymbolTable = modify_scope(ctr, ctx, body, private, first_private, ctr.reduction)
+    f_table: SymbolTable = create_scope(
+        ctr,
+        ctx,
+        body,
+        private_ds=private,
+        first_private_ds=first_private,
+        reduction_ds=ctr.reduction,
+    )
     for scope in ctr.last_private:
         for var in scope.str_targets:
             if (s := f_table.get(var)) and s.assigned:
@@ -488,9 +527,10 @@ def _(ctr: Single, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt
     Returns:
         list[ast.stmt]: Transformed AST statements.
     """
+    check_nowait(ctr, block, ctx)
     block = with_block(ctr, block, ctx)
     body: list[ast.stmt] = [block]
-    modify_scope(ctr, ctx, body, ctr.private, ctr.first_private, [])
+    create_scope(ctr, ctx, body, private_ds=ctr.private, first_private_ds=ctr.first_private)
     single_ast = ctr.span.to_ast(
         ast.If(ast.Call(runtime_ast("single_init"), [ast.Constant(bool(ctr.copy_private))]), body),
     )
@@ -507,7 +547,7 @@ def _(ctr: Single, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt
     else:
         single_endc.args.append(ctr.no_wait.not_synchronize.value)
 
-    body= [single_ast]
+    body = [single_ast]
     if ctr.copy_private:
         check_scopes(ctx, *ctr.copy_private, *ctr.private, *ctr.first_private, allow_threadprivate=True)
         copy_if = copyprivate(ctr.copy_private, ctx)
@@ -599,3 +639,26 @@ def copyprivate(dataclauses: list[CopyPrivate], ctx: Context) -> ast.If:
     set_stmts.append(notify_ast)
     copy_get.args.append(ast.Constant(count))
     return span.to_ast(ast.If(ast.Name("single"), set_stmts, update_stmts))
+
+
+def check_nowait(ctr: For | Sections | Single, block: StructuredBlock | None, ctx: Context) -> None:
+    """Validate that the `nowait` clause is not used when a parallel construct is present.
+
+    Checks if a `nowait` clause is specified on a work-sharing construct (such as `for`,
+    `sections`, or `single`) that is directly enclosed by a parallel construct block,
+    raising a syntax error if an invalid combination is detected.
+
+    Args:
+        ctr (For | Sections | Single): The work-sharing construct being evaluated.
+        block (StructuredBlock | None): The structured block enclosing the construct, if any.
+        ctx (Context): The active transformation context.
+
+    Raises:
+        SyntaxError: If the `nowait` clause is used incompatibly with an enclosing parallel construct.
+    """
+    directives = ctx.directives
+    if ctr.no_wait and isinstance(block, ast.With):
+        parallels = [c for c in directives[block].constructs if isinstance(c, Parallel)]
+        if parallels:
+            msg = f"'{ctr.no_wait.name}' is not valid for '{parallels[0].name} {ctr.name}"
+            raise syntax_error_ctx(msg, ctr.no_wait.span, ctx)

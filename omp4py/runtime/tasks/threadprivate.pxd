@@ -5,6 +5,7 @@ from omp4py.runtime.tasks.task cimport TPrivRef
 from cpython.list cimport PyList_GET_ITEM
 
 cdef pyint _threadprivate_ids_last
+cdef dict[str, pyint] _threadprivate_ids
 cdef Mutex _threadprivate_ids_mutex
 
 

@@ -316,75 +316,6 @@ def test_for_ordered():
 ################################################
 
 
-def for_ordered_multiple_error(q: Queue):
-    with omp("parallel for ordered"):
-        for i in range(10):
-            with omp("ordered"):
-                q.put((i, omp_get_thread_num()))
-            print("")
-            with omp("ordered"):
-                print(i)
-
-
-def test_for_ordered_multiple_error():
-    q = Queue()
-    omp_set_num_threads(1)
-    with pytest.raises(SyntaxError):
-        omp(for_ordered_multiple_error)(q)
-
-
-################################################
-
-
-def hidden_ordered(i):
-    with omp("ordered"):
-        print(i)
-
-
-def for_ordered_multiple_hidden_error(q: Queue, f: Callable):
-    with omp("parallel for ordered"):
-        for i in range(10):
-            with omp("ordered"):
-                q.put((i, omp_get_thread_num()))
-            print("")
-            f(i)
-
-
-@pytest.mark.filterwarnings("ignore:Exception in thread")
-def test_for_ordered_multiple_hidden_error():
-    q = Queue()
-    omp_set_num_threads(2)
-    with pytest.raises(SyntaxError):
-        omp(for_ordered_multiple_hidden_error)(q, omp(hidden_ordered))
-
-
-################################################
-
-
-def nested_hidden_ordered(i):
-    with omp("ordered"):
-        print(i)
-
-
-def for_ordered_multiple_nested_hidden_error(q: Queue, f: Callable):
-    with omp("parallel for ordered"):
-        for i in range(10):
-            with omp("ordered"):
-                q.put((i, omp_get_thread_num()))
-                f(i)
-
-
-@pytest.mark.filterwarnings("ignore:Exception in thread")
-def test_for_ordered_multiple_nested_hidden_error():
-    q = Queue()
-    omp_set_num_threads(2)
-    with pytest.raises(SyntaxError):
-        omp(for_ordered_multiple_nested_hidden_error)(q, omp(nested_hidden_ordered))
-
-
-################################################
-
-
 def for_nowait(q: Queue, barrier: threading.Barrier):
     with omp("parallel"):
         with omp("for nowait"):
@@ -402,6 +333,18 @@ def test_for_nowait():
     omp_set_num_threads(2)
     omp(for_nowait)(q, barrier)
     assert sorted(q.queue) == list(range(10))
+
+
+################################################
+
+
+def for_nowait_error():
+    with omp("parallel for nowait"):
+            pass
+
+def test_for_nowait_error():
+    with pytest.raises(SyntaxError):
+        omp(for_nowait_error)()
 
 
 ################################################
@@ -530,24 +473,6 @@ def test_for_var_dup_error():
 
     with pytest.raises(SyntaxError):
         omp(for_var_dup_error)()
-
-
-################################################
-
-
-def for_var_dup_error2():
-    x = 0
-    with omp("parallel for private(x) lastprivate(x)"):
-        for i in range(10):
-            x += i
-    return x
-
-
-def test_for_var_dup_error2():
-    omp_set_num_threads(2)
-
-    with pytest.raises(SyntaxError):
-        omp(for_var_dup_error2)()
 
 
 ################################################

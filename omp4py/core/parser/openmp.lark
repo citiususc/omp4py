@@ -20,13 +20,14 @@ list{x}     : x ("," x)* -> as_list
 start: basic_construct                              clauses  -> basic_directive
      | comp_constructs                              clauses  -> compound_directive
      | lit{"atomic"i}                        atomic_clauses  -> atomic_dir
+     | lit{"critical"i}       ["(" py_name ")"]     clauses  -> critical_dir
      | lit{"threadprivate"i}  "(" list{py_name} ")" clauses  -> thprivate_dir
      | lit{"cancel"i}         can_construct         clauses  -> cancel_dir
      | lit_can_point          can_construct         clauses  -> can_point_dir
      | lit_dec_reduction      "(" _HM reduction_op ":" list{py_expr_lite} [dec_rec_mod_old] ")" clauses -> dec_reduction_dir
 
 
-?basic_construct: lit{"taskyield"i}  | lit{"critical"i} | lit{"barrier"i} | lit{"taskwait"i} | lit{"flush"i}
+?basic_construct: lit{"taskyield"i}  | lit{"barrier"i} | lit{"taskwait"i} | lit{"flush"i}
                 | lit{"taskgroup"i}  | lit{"ordered"i}  | lit{"declare_simd"i}  | lit{"declare_target"i}
                 | lit{"master"i}     | lit{"section"i}
                 | lit{"target"i}  lit{"data"i}                -> literal

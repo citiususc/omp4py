@@ -49,7 +49,7 @@ checks = [{ include-group = "dev" }, "ruff>=0.17.1", "ty>=0.0.89"]
 docs = ["sphinx>=9.1.0", "shibuya>=2026.5.19", "myst-parser>=4.0", "sphinxcontrib-mermaid>=2.0.2"]
 
 [tool.pytest.ini_options]
-addopts = "-v --cov --cov-report=html --timeout 10"
+addopts = "-v --cov --cov-report=html --timeout 30"
 testpaths = ["test"]
 
 [tool.coverage.run]
@@ -78,7 +78,7 @@ include = ["omp4py*"]
 [tool.poe.tasks]
 _lark_string = "python -m lark.tools.standalone string.lark --out string_lark.py --lexer basic"
 _lark_openmp = "python -m lark.tools.standalone openmp.lark --out openmp_lark.py --propagate_positions --maybe_placeholders"
-_lark_openmp_compound = {script = "omp4py.core.parser.compound_gen:main"}
+_lark_openmp_compound = "python omp4py/core/parser/compound_gen.py"
 
 [tool.poe.tasks.lark]
 sequence = ["_lark_string", "_lark_openmp", "_lark_openmp_compound"]

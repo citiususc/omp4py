@@ -8,7 +8,7 @@ It provides transformations for:
 - `barrier`: Global synchronization point for all threads
 - `critical`: Mutual exclusion region protected by a lock
 - `master`: Code executed only by the master thread
-- `ordered`: Enforced execution order within parallel loops
+- `masked`: Code executed only by the selected thread
 
 Each construct is translated into calls to runtime primitives that handle
 synchronization semantics, ensuring correct behavior under concurrent
@@ -22,8 +22,8 @@ from __future__ import annotations
 
 import ast
 
-from omp4py.core.parser.tree import Barrier, Critical, Master, Ordered  # noqa: TC001 required
-from omp4py.core.preprocessor.transformers.symtable import runtime_ast
+from omp4py.core.parser.tree import Barrier, Critical, Masked, Master  # noqa: TC001 required
+from omp4py.core.preprocessor.transformers.symtable import omp_name, runtime_ast
 from omp4py.core.preprocessor.transformers.transformer import Context, StructuredBlock, construct, with_block
 
 __all__ = []
@@ -67,13 +67,35 @@ def _(ctr: Critical, block: StructuredBlock | None, ctx: Context) -> list[ast.st
         list[ast.stmt]: Transformed AST statements.
     """
     block = with_block(ctr, block, ctx)
-    lock: ast.stmt = ctr.span.to_ast(ast.Expr(ast.Call(runtime_ast("critical_lock"))))
-    unlock: ast.stmt = ctr.span.to_ast(ast.Expr(ast.Call(runtime_ast("critical_unlock"))))
+    if ctr.critical_name is None:
+        lock: ast.stmt = ctr.span.to_ast(ast.Expr(ast.Call(runtime_ast("critical_lock"))))
+        unlock: ast.stmt = ctr.span.to_ast(ast.Expr(ast.Call(runtime_ast("critical_unlock"))))
+
+    else:
+        if (critical_name := ctx.module_storage.named_mutex.get(ctr.critical_name.string)) is None:
+            critical_name: str = omp_name(ctx, "mutex")
+            critical_get: ast.AnnAssign = ctr.span.to_ast(
+                ast.AnnAssign(
+                    ast.Name(critical_name, ast.Store()),
+                    runtime_ast("Mutex"),
+                    ast.Call(runtime_ast("critical_named"), [ast.Constant(critical_name)]),
+                    simple=1,
+                ),
+            )
+
+            ctx.finalizers.append(lambda: ctx.module.body.insert(0, critical_get))
+
+        lock: ast.stmt = ctr.span.to_ast(
+            ast.Expr(ast.Call(runtime_ast("critical_named_lock"), [ast.Name(critical_name)])),
+        )
+        unlock: ast.stmt = ctr.span.to_ast(
+            ast.Expr(ast.Call(runtime_ast("critical_named_unlock"), [ast.Name(critical_name)])),
+        )
 
     ast.fix_missing_locations(lock)
     ast.fix_missing_locations(unlock)
 
-    return [lock, *block.body, unlock]
+    return [lock, block, unlock]
 
 
 @construct.register
@@ -92,7 +114,7 @@ def _(ctr: Master, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt
         list[ast.stmt]: Transformed AST statements.
     """
     block = with_block(ctr, block, ctx)
-    master: ast.If = ctr.span.to_ast(ast.If(ast.Call(runtime_ast("master"))))
+    master: ast.If = ctr.span.to_ast(ast.If(ast.Call(runtime_ast("masked"), [ast.Constant(0)])))
 
     ast.fix_missing_locations(master)
     master.body = [block]
@@ -101,25 +123,27 @@ def _(ctr: Master, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt
 
 
 @construct.register
-def _(ctr: Ordered, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt]:
-    """Transform an OpenMP `ordered` construct.
+def _(ctr: Masked, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt]:
+    """Transform an OpenMP `masted` construct.
 
-    Enforces a sequential execution order within a parallel loop by
-    inserting a runtime call that delimit ordered region.
+    Ensures that the enclosed block is executed only by the selected
+    thread of the team, without implicit synchronization.
 
     Args:
-        ctr (Ordered): Parsed `ordered` construct.
-        block (StructuredBlock | None): Structured block of the ordered region if was defined using with.
+        ctr (Master): Parsed `masked` construct.
+        block (StructuredBlock | None): Structured block of the master region.
         ctx (Context): Transformation context.
 
     Returns:
         list[ast.stmt]: Transformed AST statements.
     """
     block = with_block(ctr, block, ctx)
-    init: ast.stmt = ctr.span.to_ast(ast.Expr(ast.Call(runtime_ast("ordered_start"))))
-    end: ast.stmt = ctr.span.to_ast(ast.Expr(ast.Call(runtime_ast("ordered_next"))))
 
-    ast.fix_missing_locations(init)
-    ast.fix_missing_locations(end)
+    select: ast.expr = ctr.filter.thread.value if ctr.filter else ast.Constant(0)
 
-    return [init, block, end]
+    masked: ast.If = ctr.span.to_ast(ast.If(ast.Call(runtime_ast("masked"), [select])))
+
+    ast.fix_missing_locations(masked)
+    masked.body = [block]
+
+    return [masked]

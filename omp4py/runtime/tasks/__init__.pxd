@@ -1,4 +1,12 @@
-from omp4py.runtime.tasks.barrier cimport barrier
+from omp4py.runtime.tasks.mastersync cimport (
+    barrier,
+    critical_lock,
+    critical_named,
+    critical_named_lock,
+    critical_named_unlock,
+    critical_unlock,
+    masked,
+)
 from omp4py.runtime.tasks.parallelism cimport parallel
 from omp4py.runtime.tasks.privatization cimport copy_var, new_var
 from omp4py.runtime.tasks.task cimport TPrivRef
@@ -9,6 +17,7 @@ from omp4py.runtime.tasks.worksharing cimport (
     for_bounds,
     for_end,
     for_init,
+    for_last,
     for_next_dynamic,
     for_next_guided,
     for_next_runtime,

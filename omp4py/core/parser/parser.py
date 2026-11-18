@@ -443,6 +443,24 @@ class OpenmpTransformer(openmp_lark.Transformer):
         msg = "too many atomic clauses"
         raise self.syntax_error(msg, [c for c in clauses if c != atomic.seq_cst][1].span)
 
+    def critical_dir(self, meta: Meta, name: Name, lock_name: PyName | None, clauses: list[Clause]) -> tree.Directive:
+        """Build a critical directive.
+
+        Creates a `Critical` construct with an optional lock/section name.
+
+        Args:
+            meta (Meta): Parse metadata for the directive.
+            name (Name): Directive name.
+            lock_name (PyName | None): Optional name of the critical section.
+            clauses (list[Clause]): Clauses associated with the directive.
+
+        Returns:
+            tree.Directive: Directive containing the critical construct.
+        """
+        critical = self.set_all_clauses(tree.Critical(self.meta2span(meta), name), clauses)
+        critical.critical_name = lock_name
+        return tree.Directive(critical.span, self.code, [critical])
+
     def thprivate_dir(self, meta: Meta, name: Name, targets: list[PyName], clauses: list[Clause]) -> tree.Directive:
         """Build a threadprivate directive.
 

@@ -76,6 +76,8 @@ cdef bint for_next_dynamic(ForBounds bounds)
 
 cdef bint for_next_guided(ForBounds bounds)
 
+cpdef bint for_last(ForBounds bounds)
+
 cpdef void for_end(bint nowait)
 
 cdef bint fix_bounds(ForBounds bounds)

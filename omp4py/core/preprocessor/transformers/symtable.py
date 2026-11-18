@@ -22,7 +22,7 @@ import builtins
 import re
 import typing
 from collections.abc import KeysView
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from symtable import symtable as native_symtable
 
 if typing.TYPE_CHECKING:
@@ -93,6 +93,7 @@ class SymbolEntry:
             as `nonlocal` in the current scope.
         threadprivate (bool): Whether the variable is thread-private.
         annotation (ast.expr | None): Type annotation, if provided.
+        private (bool): Mark symbols as private in the current scoope.
     """
 
     real_name: str
@@ -105,6 +106,7 @@ class SymbolEntry:
     dec_nonlocal: bool = False
     threadprivate: bool = False
     annotation: ast.expr | None = None
+    private: bool = False
 
     @property
     def assigned(self) -> bool:
@@ -131,6 +133,14 @@ class SymbolEntry:
             False otherwise.
         """
         return self.scope_name != self.old_name
+
+    def copy(self) -> SymbolEntry:
+        """Create a copy of the symbol entry.
+
+        Returns:
+            SymbolEntry: A symbol entry copy.
+        """
+        return replace(self)
 
 
 class SymbolTableVisitor(ast.NodeVisitor):
@@ -235,11 +245,15 @@ class SymbolTableVisitor(ast.NodeVisitor):
                 symbol.annotation = parent.annotation
                 symbol.threadprivate = parent.threadprivate
                 symbol.global_ = parent.global_
+                symbol.private = parent.private
 
         if real_name in self.to_rename and symbol.old_name == symbol.scope_name:
             new_name: str = PREFIX + str(1 if n is None else (int(n) + 1)) + real_name
             symbol.old_name = symbol.scope_name
             symbol.scope_name = new_name
+            symbol.global_ = False
+            symbol.assigned = False
+            symbol.used = False
 
         if self.global_:
             symbol.dec_global = True
@@ -275,7 +289,7 @@ class SymbolTableVisitor(ast.NodeVisitor):
             self.check_namespace = namespace
             super().generic_visit(node)
 
-    def rename(self, names: set[str], node: ast.AST) -> None:
+    def rename(self, names: set[str], node: ast.AST | None = None) -> None:
         """Rename selected identifiers within an AST subtree.
 
         This method marks a set of identifiers for renaming and applies
@@ -283,10 +297,14 @@ class SymbolTableVisitor(ast.NodeVisitor):
 
         Args:
             names (set[str]): Identifiers to rename.
-            node (ast.AST): AST node to transform.
+            node (ast.AST | None): AST node to transform or None to only rename
+               symbol.
         """
         self.to_rename.update(names)
-        self.visit(node)
+        if node is None:
+            [self.update_symbol(name) for name in names]
+        else:
+            self.visit(node)
         self.to_rename.clear()
 
     def visit(self, node: ast.AST) -> None:
@@ -469,6 +487,22 @@ class SymbolTableVisitor(ast.NodeVisitor):
                 case ast.Attribute(value=ast.Name(id="_omp")):
                     return
             s.annotation = node.annotation
+            if node.value is not None:
+                s.assigned = True
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        """Process an assignment.
+
+        Registers the target variable, applies renaming if required.
+
+        Args:
+            node (ast.Assign): Assignment node.
+        """
+        for target in node.targets:
+            if isinstance(target, ast.Name):
+                if self.must_rename(target.id, s := self.update_symbol(target.id)):
+                    target.id = s.scope_name
+                s.assigned = True
 
 
 class SymbolTable:
@@ -553,18 +587,20 @@ class SymbolTable:
         child._visitor.parent = self._visitor
         return child
 
-    def rename(self, names: set[str], node: ast.AST) -> SymbolTable:
+    def rename(self, names: set[str], node: ast.AST | None = None) -> SymbolTable:
         """Create a child scope with renamed identifiers.
 
         Args:
             names (set[str]): Identifiers to rename.
-            node (ast.AST): AST node to transform.
+            node (ast.AST | None): AST node to transform or None to only rename
+               symbol.
 
         Returns:
             SymbolTable: Child symbol table with applied renaming.
         """
         if len(names) == 0:
             names = {PREFIX}
+
         child: SymbolTable = self.new_child()
         child._visitor.rename(names, node)
         return child
@@ -605,6 +641,18 @@ class SymbolTable:
             KeyError: If the identifier does not exist in this scope.
         """
         return self._visitor.symbols[name]
+
+    def insert(self, s: SymbolEntry) -> None:
+        """Create a symbol entry.
+
+        This method provides direct access to insert a symbol
+        in the current scope.
+
+        Args:
+            s (SymbolEntry): symbol entry
+
+        """
+        self._visitor.symbols[s.real_name] = s
 
     def get(self, name: str, parents: bool = False, module: bool = False) -> SymbolEntry | None:
         """Retrieve a symbol entry by name.

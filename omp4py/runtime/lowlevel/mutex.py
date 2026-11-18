@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import threading
 
+__all__ = ["Event", "Mutex", "RMutex"]
 
 class Mutex:
     """Non-reentrant mutual exclusion lock."""

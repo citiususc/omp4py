@@ -26,8 +26,8 @@ import cython
 from omp4py.runtime.lowlevel.atomic import AtomicInt, AtomicObject
 from omp4py.runtime.lowlevel.mutex import Event
 from omp4py.runtime.lowlevel.numeric import new_pyint_array, pyint, pyint_array
-from omp4py.runtime.tasks.barrier import barrier
 from omp4py.runtime.tasks.context import TaskContext, omp_ctx
+from omp4py.runtime.tasks.mastersync import barrier
 from omp4py.runtime.tasks.task import Task, instanceof
 
 # END_CYTHON_IMPORTS
@@ -39,6 +39,7 @@ __all__ = [
     "for_bounds",
     "for_end",
     "for_init",
+    "for_last",
     "for_next_dynamic",
     "for_next_guided",
     "for_next_runtime",
@@ -225,6 +226,7 @@ def set_bounds(bounds: ForBounds) -> None:
         mod = bounds.rs[_rs_len * i + _r_div]
 
     bounds.its = mod
+    bounds.it = bounds.init = bounds.end = 0
 
 
 def for_init(bounds: ForBounds, modifier: pyint, schedule: pyint, chunk: pyint, ordered: pyint) -> None:
@@ -359,6 +361,21 @@ def for_next_guided(bounds: ForBounds) -> bool:
             break
 
     return fix_bounds(bounds)
+
+
+def for_last(bounds: ForBounds) -> bool:
+    """Check for last execution of loop.
+
+    Args:
+        bounds (ForBounds): Loop bounds structure.
+
+    Returns:
+        bool: True if current thread executed last available iteration .
+    """
+    if bounds.collapse > 1:
+        return bounds.init > 0
+
+    return bounds.end == bounds.rs[_r_stop] and bounds.end - bounds.init > 0
 
 
 def for_end(nowait: bool) -> None:

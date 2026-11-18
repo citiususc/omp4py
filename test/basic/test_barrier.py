@@ -39,26 +39,7 @@ def test_barrier_no_with():
 
 ################################################
 
-
-def barrier_no_with_error(q: Queue):
-    x = 1
-    with omp("parallel"):
-        x = 2
-        omp("barrier some")
-        q.put(x)
-
-
-def test_barrier_no_with_error():
-    q = Queue()
-    omp_set_num_threads(2)
-    with pytest.raises(SyntaxError):
-        omp(barrier_no_with_error)(q)
-
-
-################################################
-
-
-def barrier_body_error(q: Queue):
+def barrier_body(q: Queue):
     x = 1
     with omp("parallel"):
         x = 2
@@ -66,10 +47,10 @@ def barrier_body_error(q: Queue):
             q.put(x)
 
 
-def test_barrier_body_error():
+def test_barrier_body():
     q = Queue()
     omp_set_num_threads(2)
-    with pytest.raises(SyntaxError):
-        omp(barrier_body_error)(q)
+    omp(barrier_body)(q)
+    assert sorted(q.queue) == [2, 2]
 
 ################################################

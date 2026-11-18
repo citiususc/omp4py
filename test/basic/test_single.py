@@ -1,4 +1,5 @@
 import pytest
+import time
 
 from omp4py import *
 from queue import Queue
@@ -145,5 +146,18 @@ def test_single_nowait():
     omp_set_num_threads(2)
     omp(single_nowait)(q)
     assert list(q.queue) == [1, 0, 1]
+
+
+################################################
+
+
+def sections_nowait_error():
+    with omp("parallel single nowait"):
+            pass
+
+def test_single_nowait_error():
+    with pytest.raises(SyntaxError):
+        omp(sections_nowait_error)()
+
 
 ################################################

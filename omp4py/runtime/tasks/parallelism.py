@@ -21,7 +21,7 @@ import cython
 # BEGIN_CYTHON_IMPORTS
 from omp4py.runtime.lowlevel.numeric import new_pyint_array, pyint
 from omp4py.runtime.lowlevel.threadlocal import threadlocal_set
-from omp4py.runtime.tasks.barrier import barrier
+from omp4py.runtime.tasks.mastersync import barrier
 from omp4py.runtime.tasks.context import TaskContext, omp_ctx
 from omp4py.runtime.tasks.task import Barrier, SharedContext, Task
 from omp4py.runtime.tasks.threadprivate import TPrivRef, copy_private, map_privates, update_privates

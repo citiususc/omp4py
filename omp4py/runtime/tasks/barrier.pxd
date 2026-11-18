@@ -1,2 +1,0 @@
-
-cpdef void barrier()
