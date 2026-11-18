@@ -65,7 +65,7 @@ OMP4Py can be executed in four different modes:
 
 - **Pure mode**:  
   Executes using the pure Python runtime. To enable it, users must explicitly sets and enviroment variable before 
-- importing OMP4Py:  
+ importing OMP4Py:  
   ```python
   import os
   os.environ['OMP4PY_PURE'] = 'True'
@@ -78,15 +78,15 @@ This is the standard mode when importing OMP4Py with:
   from omp4py import *
   ```
 - **Compiled mode**: In this mode, both the runtime and the user’s function are compiled to native code using Cython. 
-- This removes Python interpreter overhead and provides improved performance for numerical workloads.
+ This removes Python interpreter overhead and provides improved performance for numerical workloads.
 
   ```python
   @omp(compile=True)
   ```
   
 - **Compiled-with-types mode**: A more optimized version of the previous mode, where the programmer also provides 
-- static type annotations, allowing Cython to generate more efficient native code. This can result in substantial 
-- speed-ups, up to three orders of magnitude compared with Pure mode.
+  static type annotations, allowing Cython to generate more efficient native code. This can result in substantial 
+ speed-ups, up to three orders of magnitude compared with Pure mode.
 	```python
 	@omp(compile=True)
 	def pi(n: int): ...
@@ -102,7 +102,7 @@ You can download OMP4Py and then run with [uv](https://docs.astral.sh/uv/getting
 uv run -p <python_version>+freethreaded python3 <file.py>
 ```
 
-* `<python_version>`: Replace this with the specific Python version you want to test (e.g., 3.13, 1.14, etc.). If the 
+* `<python_version>`: Replace this with the specific Python version you want to test (e.g., 3.13, 3.14, etc.). If the 
 * specified version is not found on your system, `uv` will automatically download and set it up in the environment.
 * `<file.py>`: This is the Python file you want to execute
 
@@ -126,7 +126,7 @@ uv run [-p <python_version>+freethreaded] pytest [--pure]
 
 ## Development Guide (uv)
 
-Install dependencies and [re-]compile the runtime: `uv sync --reinstall-package omp4py`
+Install dependencies and [re-]compile the runtime: `uv sync --reinstall-package omp4py --group dev`
 
 Build the project and generate the wheel: `uv build`
 
