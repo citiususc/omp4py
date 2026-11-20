@@ -38,7 +38,7 @@ Directives that need a block are written `with omp("..."):`; the others are plai
   `break`/`continue` out of it.
 - Variables named in clauses must **exist before** the region.
 
-## `parallel`
+## parallel
 
 Creates a team of threads; every thread executes the block.
 
@@ -60,7 +60,7 @@ hello from thread 0 of 4
 - Clauses: `if`, `num_threads`, `default`, `private`, `firstprivate`, `shared`, `reduction`,
   `copyin`, `proc_bind` ({doc}`clauses`).
 
-## `for`
+## for
 
 Distributes the iterations of the loop that follows among the threads of the current team. It
 must be inside a `parallel` region (or combined with it, see {doc}`combined_directives`).
@@ -85,7 +85,7 @@ Rules for the loop:
 Clauses: `private`, `firstprivate`, `lastprivate`, `reduction`, `schedule`, `collapse`,
 `ordered`, `nowait`.
 
-## `sections` and `section`
+## sections and section
 
 Each `section` block is run once, by one of the threads.
 
@@ -100,7 +100,7 @@ Each `section` block is run once, by one of the threads.
 Inside `sections` only `section` blocks are allowed. Clauses of `sections`: `private`,
 `firstprivate`, `lastprivate`, `reduction`, `nowait`.
 
-## `single`
+## single
 
 The block is run by exactly one thread (any of them). The others wait at the implicit barrier
 unless `nowait` is used. `copyprivate(x)` copies the value computed by that thread to the
@@ -116,7 +116,7 @@ private copies of all the others.
 
 Clauses: `private`, `firstprivate`, `copyprivate`, `nowait`.
 
-## `master` and `masked`
+## master and masked
 
 `master` runs the block only on thread 0, without any implied barrier. `masked` is the newer
 form and accepts `filter(thread_id)` to select another thread.
@@ -132,7 +132,7 @@ masked runs on thread 2
 
 (The order of the two lines may vary.)
 
-## `critical`
+## critical
 
 Mutual exclusion: only one thread at a time runs the block. Unnamed `critical` blocks all share
 one lock; `critical(name)` blocks with the same name share a lock, and blocks with different
@@ -146,7 +146,7 @@ names do not block each other.
 (4000, 8000)
 ```
 
-## `barrier`
+## barrier
 
 A stand-alone directive: every thread of the team waits until all have reached it.
 
@@ -160,7 +160,7 @@ A stand-alone directive: every thread of the team waits until all have reached i
 
 All "phase 1" entries precede every "phase 2" entry: nobody passes the barrier early.
 
-## `ordered`
+## ordered
 
 Inside a loop that has the `ordered` clause, the block runs in the sequential order of the
 iterations, while the rest of the iteration still runs in parallel.
@@ -173,7 +173,7 @@ iterations, while the rest of the iteration still runs in parallel.
 [0, 1, 4, 9, 16, 25, 36, 49]
 ```
 
-## `threadprivate`
+## threadprivate
 
 Gives a **global** variable one persistent copy per thread. With the decorator, the directive is
 written inside a decorated function; in {doc}`package mode <decorator/packages>` it can be at
@@ -194,7 +194,7 @@ master copy afterwards: 100
 - `copyin(x)` on `parallel` initialises each thread's copy from the master's value.
 - A threadprivate variable cannot be listed in `private`, `shared`, ... clauses.
 
-## `declare reduction`
+## declare reduction
 
 Defines a **reduction operator of your own**, to use in `reduction(op: x)` clauses
 ({doc}`clauses`) for anything the built-in operators (`+ - * & | ^ and or`) do not cover: merging

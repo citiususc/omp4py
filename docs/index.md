@@ -159,6 +159,8 @@ tutorials/index
 tutorials/pi
 tutorials/matmul
 tutorials/histogram
+tutorials/mandelbrot
+tutorials/collatz
 tutorials/numpy
 ```
 

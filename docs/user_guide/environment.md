@@ -37,7 +37,7 @@ OMP_NUM_THREADS=8 OMP_SCHEDULE="dynamic,4" python program.py
 implemented yet.
 ```
 
-### `OMP_DISPLAY_ENV`
+### OMP_DISPLAY_ENV
 
 Set it to `true` (or `verbose`) to print the values the runtime resolved from the environment,
 using the format of the OpenMP specification. It is the quickest way to check that your settings

@@ -1,8 +1,7 @@
 # Tutorials and Examples
 
 Every program in this section lives in `docs/examples/` and was executed with the pure
-runtime on a free-threaded Python 3.14 while this documentation was written. Outputs
-shown are real; only the order of lines printed by several threads varies.
+runtime on a free-threaded Python 3.14, and 3.15.
 
 ```{list-table}
 :header-rows: 1
@@ -16,6 +15,10 @@ shown are real; only the order of lines printed by several threads varies.
   - `collapse`, nested loops, writing disjoint output
 * - {doc}`histogram`
   - `critical`, private partial results, `nowait`
+* - {doc}`mandelbrot`
+  - `schedule(dynamic)` for uneven work, writing disjoint rows, calling ordinary functions
+* - {doc}`collatz`
+  - `declare reduction` with your own operator, annotations, `schedule(dynamic, chunk)`
 * - {doc}`numpy`
   - Combining OMP4Py with libraries that release the GIL
 ```

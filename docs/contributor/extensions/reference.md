@@ -4,7 +4,7 @@ The registration functions and the base classes you subclass are documented here
 that appear in their signatures (parse tree nodes, `Context`, transformer helpers) are
 documented in {doc}`/contributor/internals`.
 
-## `omp4py.core.ext`
+## omp4py.core.ext
 
 ```{eval-rst}
 .. automodule:: omp4py.core.ext

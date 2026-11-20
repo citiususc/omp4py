@@ -3,7 +3,7 @@
 The first job of `omp` is to be the **container of directives**: it carries the OpenMP
 directive as a string, so that your code stays valid Python.
 
-## `with omp(...)` and `omp(...)`
+## with omp(...) and omp(...)
 
 ```python
 with omp("parallel for reduction(+:total)"):   # directive applied to a block
