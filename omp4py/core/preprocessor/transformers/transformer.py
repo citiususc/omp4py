@@ -24,7 +24,8 @@ from functools import singledispatch
 
 from omp4py.core.parser import Construct, Directive, Span, extract_directive, parse_directive, syntax_error
 from omp4py.core.preprocessor.transformers.context import Context
-from omp4py.core.preprocessor.transformers.utils import ControlFlow, check_omp_if
+from omp4py.core.preprocessor.transformers.symtable import runtime_ast
+from omp4py.core.preprocessor.transformers.utils import ControlFlow, check_omp_if, unpack_if
 
 if typing.TYPE_CHECKING:
     from collections.abc import Callable
@@ -40,6 +41,7 @@ __all__ = [
     "check_control_flow",
     "construct",
     "syntax_error_ctx",
+    "team_lock",
     "with_block",
 ]
 
@@ -67,7 +69,7 @@ def syntax_error_ctx(message: str, span: Span, ctx: Context) -> SyntaxError:
     return syntax_error(message, span, ctx.full_source, ctx.opt.filename)
 
 
-def check_control_flow (smt: ast.stmt, ctx: Context) -> None:
+def check_control_flow(smt: ast.stmt, ctx: Context) -> None:
     """Validate control flow within an OpenMP structured block statement.
 
     Traverses the statement to detect illegal control-flow jumps
@@ -454,7 +456,7 @@ class OmpTransformer(ast.NodeTransformer):
         Returns:
             ast.If | list[ast.stmt]: The transformed node or its body statements.
         """
-        if (args:= check_omp_if(node)) is not None:
+        if (args := check_omp_if(node)) is not None:
             if args[0] == "unpack":
                 self.generic_visit(node)
             elif args[0] == "scope":
@@ -513,7 +515,7 @@ class OmpTransformer(ast.NodeTransformer):
             tmp = ast.Try()
             used = self.ctx.used_constructs[node]
             while constructs:
-                tmp.body.extend(transform(c:= constructs.pop(0), None, self.ctx))
+                tmp.body.extend(transform(c := constructs.pop(0), None, self.ctx))
                 used.append(c)
             self.ctx.active_constructs.pop(node)
             node_finalizers, self.ctx.node_finalizers = self.ctx.node_finalizers, []
@@ -543,3 +545,18 @@ def with_block(ctr: Construct, block: StructuredBlock | None, ctx: Context, chec
     if check_flow:
         check_control_flow(block, ctx)
     return block
+
+
+def team_lock(span: Span, body: list[ast.stmt]) -> ast.stmt:
+    """Generate AST statements for acquiring and releasing a thread team lock.
+
+    Args:
+        span (Span): The source span associated with the lock construct.
+        body (list[ast.stmt]): The list of statements to execute within the lock.
+
+    Returns:
+        ast.stmt: The statement wrapping the lock, body, and unlock.
+    """
+    lock: ast.stmt = span.to_ast(ast.Expr(ast.Call(runtime_ast("team_lock"))))
+    unlock: ast.stmt = span.to_ast(ast.Expr(ast.Call(runtime_ast("team_unlock"))))
+    return unpack_if([lock, *body, unlock])

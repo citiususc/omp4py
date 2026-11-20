@@ -85,7 +85,6 @@ def process_object[T: Callable[..., typing.Any] | type](arg: T, opt: Options) ->
     """
     opt.filename, data, module = obj2ast.from_object(arg)
     module_globals: ModuleType = sys.modules[arg.__module__]
-    result: dict[str, typing.Any] = {}
 
     path_hash: str = hashlib.sha256(data.encode()).hexdigest()[:12]
     name: str = getattr(arg, "__name__", "<None>")
@@ -100,7 +99,7 @@ def process_object[T: Callable[..., typing.Any] | type](arg: T, opt: Options) ->
         spec = PathFinder.find_spec(fullname, [opt.cache])
 
         if spec is None or spec.cached or opt.ignore_cache:
-            result_module: ast.Module = process(module, data, opt)
+            result_module: ast.Module = process(module, data, opt, name)
             module.body.insert(
                 0,
                 ast.ImportFrom("cython.cimports.omp4py", names=[ast.alias("runtime", "_omp")], level=0),
@@ -122,7 +121,7 @@ def process_object[T: Callable[..., typing.Any] | type](arg: T, opt: Options) ->
 
     result_code = ""
     if not pyfile.exists() or opt.ignore_cache:
-        result_module: ast.Module = process(module, data, opt)
+        result_module: ast.Module = process(module, data, opt, name)
         try:
             pyfile.write_text(result_code := ast.unparse(result_module))
             py_compile.compile(str(pyfile))
@@ -192,11 +191,11 @@ def process_file(filename: str, opt: Options) -> str:
         str: Path to the generated transformed file.
     """
     omp_path = Path(filename).parent / OMP_FOLDER / Path(filename).name  # same as loader
-    process_source(omp_path.read_text(), str(omp_path), opt)
+    process_source(Path(filename).read_text(), str(omp_path), opt)
     return str(omp_path)
 
 
-def process(module: ast.Module, full_source: str, opt: Options) -> ast.Module:
+def process(module: ast.Module, full_source: str, opt: Options, name: str | None = None) -> ast.Module:
     """Apply the OpenMP transformation pipeline to an AST module.
 
     This is the internal entry point used by all preprocessing modes. It
@@ -207,6 +206,8 @@ def process(module: ast.Module, full_source: str, opt: Options) -> ast.Module:
         module (ast.Module): Input module AST.
         full_source (str): Original source code.
         opt (Options): Preprocessing options.
+        name (str | None): Name of the function or class being processed, if any. It is used
+            to name the default dump file so that each object gets its own file.
 
     Returns:
         ast.Module: Transformed module AST.
@@ -220,6 +221,12 @@ def process(module: ast.Module, full_source: str, opt: Options) -> ast.Module:
     modifier_engine.stage(new_module, "omp_transformer")
 
     if opt.dump:
-        with open(opt.dump, "w") as f:
+        dump: str | bool = opt.dump
+        if isinstance(dump, bool):
+            filename = Path(opt.filename)
+            part = f"_{name}" if name else ""
+            dump = str(filename.with_name(f"{filename.stem}{part}_omp_dump{filename.suffix}"))
+
+        with open(dump, "w") as f:
             f.write(ast.unparse(new_module))
     return new_module

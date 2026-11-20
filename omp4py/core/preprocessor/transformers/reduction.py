@@ -25,18 +25,17 @@ applied during the transformation phase of the preprocessor.
 from __future__ import annotations
 
 import ast
-import typing
 
-from omp4py.core.parser.tree import DeclareReduction  # noqa: TC001 required
+from omp4py.core.parser import DeclareReduction  # noqa: TC001 required
 from omp4py.core.preprocessor.transformers.operators import new_reduction
-from omp4py.core.preprocessor.transformers.transformer import Context, construct, syntax_error_ctx
+from omp4py.core.preprocessor.transformers.transformer import Context, StructuredBlock, construct, syntax_error_ctx
 from omp4py.core.preprocessor.transformers.utils import unpack_if
 
 __all__ = []
 
 
 @construct.register
-def _(ctr: DeclareReduction, body: list[ast.stmt], ctx: Context) -> list[ast.stmt]:
+def _(ctr: DeclareReduction, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt]:
     """Transform an OpenMP `declare reduction` construct.
 
     Registers a user-defined reduction operation in the current module
@@ -48,7 +47,7 @@ def _(ctr: DeclareReduction, body: list[ast.stmt], ctx: Context) -> list[ast.stm
 
     Args:
         ctr (DeclareReduction): Parsed `declare reduction` construct.
-        body (list[ast.stmt]): Body of the construct (typically unused).
+        block (StructuredBlock | None): Structured block of the region (typically unused).
         ctx (Context): Transformation context.
 
     Returns:
@@ -65,4 +64,4 @@ def _(ctr: DeclareReduction, body: list[ast.stmt], ctx: Context) -> list[ast.stm
             msg = f"redeclaration of '{ctr.op.string}' 'omp declare reduction' for type '{ast.unparse(ann.value)}'"
             raise syntax_error_ctx(msg, ann.span, ctx)
 
-    return body
+    return [block] if block is not None else []

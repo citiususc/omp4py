@@ -25,6 +25,7 @@ import typing
 from omp4py.core.preprocessor.transformers.symtable import runtime_ast
 
 if typing.TYPE_CHECKING:
+    from omp4py.core.parser import Span
     from omp4py.core.preprocessor.transformers.transformer import Context
 
 __all__ = ["get_reduction", "new_reduction", "resolve_names"]
@@ -151,7 +152,7 @@ class _ReductionVars(typing.TypedDict, total=False):
     omp_in: str
 
 
-def resolve_names(stmt: ast.stmt, **r_vars: typing.Unpack[_ReductionVars]) -> ast.stmt:
+def resolve_names(span:Span,stmt: ast.stmt, **r_vars: typing.Unpack[_ReductionVars]) -> ast.stmt:
     """Resolve placeholder variable names in a reduction template.
 
     This function replaces occurrences of placeholder identifiers
@@ -161,13 +162,14 @@ def resolve_names(stmt: ast.stmt, **r_vars: typing.Unpack[_ReductionVars]) -> as
     template.
 
     Args:
+        span (Span): The source span associated with the template.
         stmt (ast.stmt): Template AST statement.
         **r_vars: Mapping from placeholder names to actual identifiers.
 
     Returns:
         ast.stmt: Transformed AST statement with resolved names.
     """
-    new_stmt = copy.deepcopy(stmt)
+    new_stmt = span.to_ast(copy.deepcopy(stmt))
     for node in ast.walk(new_stmt):
         value: object
         for field, value in ast.iter_fields(node):

@@ -20,7 +20,7 @@ from __future__ import annotations
 import ast
 import copy
 
-from omp4py.core.parser.tree import Span, ThreadPrivate
+from omp4py.core.parser import Span, ThreadPrivate
 from omp4py.core.preprocessor.transformers.symtable import runtime_ast
 from omp4py.core.preprocessor.transformers.transformer import Context, StructuredBlock, construct, syntax_error_ctx
 

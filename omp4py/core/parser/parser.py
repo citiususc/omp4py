@@ -581,7 +581,7 @@ class OpenmpTransformer(openmp_lark.Transformer):
             if clause.directive_name is None:
                 visible_constructs = list(constructs.keys())
             else:
-                if str(clause.directive_name).lower() in full_comp_name.lower():
+                if str(clause.directive_name).lower() not in full_comp_name.lower():
                     msg = f"'{clause.directive_name}' is not valid for '{full_comp_name}'"
                     raise self.syntax_error(msg, clause.directive_name.span)
 

@@ -6,6 +6,8 @@ from omp4py.runtime.tasks.mastersync cimport (
     critical_named_unlock,
     critical_unlock,
     masked,
+    team_lock,
+    team_unlock,
 )
 from omp4py.runtime.tasks.parallelism cimport parallel
 from omp4py.runtime.tasks.privatization cimport copy_var, new_var

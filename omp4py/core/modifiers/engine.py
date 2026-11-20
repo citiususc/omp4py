@@ -121,7 +121,7 @@ class ModifierEngine:
                 del self.graph[name]
 
             for deps in self.graph.values():
-                deps.symmetric_difference_update(ready)
+                deps.difference_update(ready)
 
 
 class Modifier(ast.NodeTransformer):
@@ -183,7 +183,7 @@ class Modifier(ast.NodeTransformer):
         """
         super().__init_subclass__(**kwargs)
         cls.name = name
-        cls.requires = requires or ["omp_transformer"]
+        cls.requires = requires if requires is not None else ["omp_transformer"]
         cls.default = default
 
     def __init__(self, options: Options, metadata: dict[str, typing.Any]) -> None:

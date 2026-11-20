@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import ast
 
-from omp4py.core.parser.tree import (
+from omp4py.core.parser import (
     CopyPrivate,
     For,
     Name,
@@ -632,7 +632,7 @@ def copyprivate(dataclauses: list[CopyPrivate], ctx: Context) -> ast.If:
                 assign = dec_cast(ctx, ast.Attribute(ast.Name(copyprivate_var), f"v{count % 8}"), s, new_name)
 
                 update_stmts.append(assign)
-                update_stmts.append(resolve_names(stmt[1], omp_out=s.scope_name, omp_in=new_name))
+                update_stmts.append(resolve_names(var.span, stmt[1], omp_out=s.scope_name, omp_in=new_name))
 
             count += 1
 

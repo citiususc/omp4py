@@ -18,3 +18,7 @@ cpdef void critical_named_unlock(Mutex m)
 cpdef void critical_lock()
 
 cpdef void critical_unlock()
+
+cpdef void team_lock()
+
+cpdef void team_unlock()

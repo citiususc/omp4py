@@ -23,16 +23,17 @@ import typing
 
 from omp4py.core.preprocessor.transformers.operators import get_reduction, resolve_names
 from omp4py.core.preprocessor.transformers.symtable import runtime_ast
-from omp4py.core.preprocessor.transformers.transformer import Context, syntax_error_ctx
+from omp4py.core.preprocessor.transformers.transformer import Context, syntax_error_ctx, team_lock
 from omp4py.core.preprocessor.transformers.utils import scope_if
 
 if typing.TYPE_CHECKING:
-    from omp4py.core.parser.tree import (
+    from omp4py.core.parser import (
         Construct,
         DataScope,
         Default,
         FirstPrivate,
         Private,
+        PyName,
         Reduction,
         ReductionOp,
         Shared,
@@ -42,7 +43,7 @@ if typing.TYPE_CHECKING:
 __all__ = ["check_scopes", "create_scope", "dec_annotation", "dec_cast", "scope_names"]
 
 
-def check_scopes(ctx: Context, *scopes: DataScope, allow_threadprivate: bool = False) -> set[str]:
+def check_scopes(ctx: Context, *scopes: DataScope, allow_threadprivate: bool = False) -> dict[str, PyName]:
     """Validate variables used in data scope clauses.
 
     This function ensures that all variables referenced in scope clauses:
@@ -56,12 +57,12 @@ def check_scopes(ctx: Context, *scopes: DataScope, allow_threadprivate: bool = F
         allow_threadprivate (bool): Whether threadprivate variables are allowed.
 
     Returns:
-        set[str]: Set of validated variable names.
+        dict[str, PyName]: Dict of validated variable names.
 
     Raises:
         SyntaxError: If any validation rule is violated.
     """
-    used: set[str] = set()
+    used: dict[str, PyName] = {}
 
     for scope in scopes:
         for var in scope.targets:
@@ -76,7 +77,7 @@ def check_scopes(ctx: Context, *scopes: DataScope, allow_threadprivate: bool = F
             if var.string in used:
                 msg = f"'{var}' appears more than once in data clauses"
                 raise syntax_error_ctx(msg, var.span, ctx)
-            used.add(var.string)
+            used[var.string] = var
     return used
 
 
@@ -89,7 +90,7 @@ def create_scope(  # ruff: ignore[complex-structure, too-many-arguments, too-man
     private_ds: list[Private] | None = None,
     first_private_ds: list[FirstPrivate] | None = None,
     reduction_ds: list[Reduction] | None = None,
-    new_python_scope: bool = False,
+    new_python_scope: ast.FunctionDef | None = None,
 ) -> SymbolTable:
     """Create a new variable scope for a construct.
 
@@ -116,7 +117,8 @@ def create_scope(  # ruff: ignore[complex-structure, too-many-arguments, too-man
         private_ds (list[Private] | None): Private clauses.
         first_private_ds (list[FirstPrivate] | None): Firstprivate clauses.
         reduction_ds (list[Reduction] | None): Reduction clauses.
-        new_python_scope (bool): Data scope must create a new python scope.
+        new_python_scope (ast.FunctionDef | None): Function scope must create
+          a new python scope.
 
     Returns:
         SymbolTable: Symbol table associated with the transformed scope.
@@ -129,7 +131,7 @@ def create_scope(  # ruff: ignore[complex-structure, too-many-arguments, too-man
     first_private_ds = first_private_ds or []
     reduction_ds = reduction_ds or []
 
-    check_scopes(ctx, *(shared_ds or []), *private_ds, *first_private_ds, *reduction_ds )
+    used_vars = check_scopes(ctx, *(shared_ds or []), *private_ds, *first_private_ds, *reduction_ds)
     required = False
     shared = scope_names(*shared_ds)
     private = scope_names(*private_ds)
@@ -164,48 +166,61 @@ def create_scope(  # ruff: ignore[complex-structure, too-many-arguments, too-man
 
     f_inits: list[ast.stmt] = []
     if new_python_scope:
-        freevars: list[SymbolEntry] = [
-            symbol
-            for symbol in ctx.symtable.check_namespace(scope_ast).symbols()
-            if symbol.real_name not in ctx.module_storage.threadprivate
-            and (
-                symbol.real_name in reduction_op
-                or (symbol.real_name not in set_private and symbol.assigned and ctx.symtable.get(symbol.old_name, True))
-            )
-        ]
-        if freevars:
-            non_local_vars: list[str] = [symbol.old_name for symbol in freevars if not symbol.global_]
-            global_vars: list[str] = [symbol.old_name for symbol in freevars if symbol.global_]
+        scope_table = ctx.symtable
 
-            if non_local_vars:
-                f_inits.append(ctr.span.to_ast(ast.Nonlocal(non_local_vars)))
-            if global_vars:
-                f_inits.append(ctr.span.to_ast(ast.Global(global_vars)))
+        def create_new_python_scope() -> None:
+            freevars: list[SymbolEntry] = [
+                symbol
+                for symbol in scope_table.check_namespace(scope_ast).symbols()
+                if symbol.real_name not in ctx.module_storage.threadprivate
+                and (
+                    symbol.real_name in reduction_op
+                    or (
+                        symbol.real_name not in set_private
+                        and symbol.assigned
+                        and scope_table.get(symbol.old_name, True)
+                    )
+                )
+            ]
+            if freevars:
+                var_inits: list[ast.stmt] = []
+                non_local_vars: list[str] = [symbol.old_name for symbol in freevars if not symbol.global_]
+                global_vars: list[str] = [symbol.old_name for symbol in freevars if symbol.global_]
+
+                if non_local_vars:
+                    var_inits.append(ctr.span.to_ast(ast.Nonlocal(non_local_vars)))
+                if global_vars:
+                    var_inits.append(ctr.span.to_ast(ast.Global(global_vars)))
+                new_python_scope.body = var_inits + new_python_scope.body
+
+        ctx.node_finalizers.append(create_new_python_scope)
 
     for name in sorted(set_private):
         if s := f_symbols.get(name):
-            ann: ast.expr | None = None
+            ann: ast.expr | None = s.annotation
             f_inits.append(dec_annotation(ctx, s))
 
             if name in first_private:
                 stmt = get_reduction(ctx, "__new__", ann)
                 if stmt is None:  # never for __new__
                     continue
-                f_inits.append(resolve_names(stmt[1], omp_out=s.scope_name, omp_in=s.old_name))
+                span = used_vars[s.real_name].span
+                f_inits.append(resolve_names(span, stmt[1], omp_out=s.scope_name, omp_in=s.old_name))
             elif name in reduction_op:
                 if s.private:
                     msg = f"variable '{s.real_name}' is private in outer context"
-                    for data in [*private_ds, *reduction_ds]:
-                        for var in data.targets:
-                            if var.string == s.real_name:
-                                raise syntax_error_ctx(msg, var.span, ctx)
+                    raise syntax_error_ctx(msg, used_vars[s.real_name].span, ctx)
 
                 stmt = get_reduction(ctx, reduction_op[name].op.string, ann)
+                span = reduction_op[name].span
                 if stmt is None:  # never for __new__
                     msg = f"user defined reduction not found for '{name}'"
-                    raise syntax_error_ctx(msg, reduction_op[name].span, ctx)
-                f_inits.append(resolve_names(stmt[0], omp_priv=s.scope_name, omp_orig=s.old_name))
-                scope_ast.body.append(resolve_names(stmt[1], omp_out=s.old_name, omp_in=s.scope_name))
+                    raise syntax_error_ctx(msg, span, ctx)
+
+                f_inits.append(resolve_names(span, stmt[0], omp_priv=s.scope_name, omp_orig=s.old_name))
+                scope_ast.body.append(
+                    team_lock(span, [resolve_names(span, stmt[1], omp_out=s.old_name, omp_in=s.scope_name)]),
+                )
 
     scope_ast.body = f_inits + scope_ast.body
     body[:] = [scope_ast]
@@ -264,4 +279,4 @@ def dec_cast(ctx: Context, origin: ast.expr, s: SymbolEntry, new_name: str | Non
     ann = ast.Call(runtime_ast("tp_typeof"), [ast.Name(s.old_name)]) if ann is None else copy.deepcopy(ann)
     value = ast.Call(runtime_ast("tp_cast"), [ann, origin])
     ann = copy.deepcopy(ann)
-    return ast.AnnAssign(ast.Name(new_name or s.scope_name, ast.Store()),ann, value, simple=1)
+    return ast.AnnAssign(ast.Name(new_name or s.scope_name, ast.Store()), ann, value, simple=1)

@@ -32,6 +32,8 @@ __all__ = [
     "critical_named_unlock",
     "critical_unlock",
     "masked",
+    "team_lock",
+    "team_unlock",
 ]
 # END_CYTHON_IGNORE
 
@@ -116,4 +118,14 @@ def critical_lock() -> None:
 
 def critical_unlock() -> None:
     """Release the unnamed critical section lock."""
+    _critical_unnamed.unlock()
+
+
+def team_lock() -> None:
+    """Acquire the thread team critical lock."""
+    _critical_unnamed.lock() # TODO: create a lock in task
+
+
+def team_unlock() -> None:
+    """Release the thread team critical lock."""
     _critical_unnamed.unlock()

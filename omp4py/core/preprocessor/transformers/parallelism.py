@@ -68,7 +68,7 @@ def _(ctr: Parallel, block: StructuredBlock | None, ctx: Context) -> list[ast.st
     f_name: str = omp_name(ctx, "parallel")
     f_ast: ast.FunctionDef = ctr.span.to_ast(ast.FunctionDef(f_name, ast.arguments(), body=[block]))
 
-    create_scope(ctr, ctx, f_ast.body, ctr.default, ctr.shared, ctr.private, ctr.first_private, ctr.reduction, True)
+    create_scope(ctr, ctx, f_ast.body, ctr.default, ctr.shared, ctr.private, ctr.first_private, ctr.reduction, f_ast)
 
     if_ast: ast.expr = ast.Constant(True)
     num_threads_ast = ast.Tuple()

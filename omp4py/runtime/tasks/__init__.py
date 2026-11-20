@@ -18,6 +18,8 @@ from omp4py.runtime.tasks.mastersync import (
     critical_named_unlock,
     critical_unlock,
     masked,
+    team_lock,
+    team_unlock,
 )  # noqa: F401
 from omp4py.runtime.tasks.parallelism import parallel  # noqa: F401
 from omp4py.runtime.tasks.privatization import copy_var, new_var  # noqa: F401

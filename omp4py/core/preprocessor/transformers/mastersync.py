@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import ast
 
-from omp4py.core.parser.tree import Barrier, Critical, Masked, Master  # noqa: TC001 required
+from omp4py.core.parser import Barrier, Critical, Masked, Master  # noqa: TC001 required
 from omp4py.core.preprocessor.transformers.symtable import omp_name, runtime_ast
 from omp4py.core.preprocessor.transformers.transformer import Context, StructuredBlock, construct, with_block
 
