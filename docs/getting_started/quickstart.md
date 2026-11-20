@@ -1,58 +1,90 @@
 # Quick Start
 
-The main entry point is {func}`omp4py.omp`. Decorate the Python function that
-contains directives, then use directive strings in structured blocks.
+Six short steps that cover what you will use most. Each one ends with a link to the full
+explanation in the {doc}`User Guide </user_guide/index>`.
 
-## Computing Pi
+All the code here is complete and runnable. Save it in a `.py` file: the preprocessor needs
+to read the source, so it does not work from the interactive prompt.
 
-```python
-from omp4py import *
+## 1 · Mark your code and open a parallel region
 
-@omp
-def pi(n: int) -> float:
-    width = 1.0 / n
-    pi_value = 0.0
-
-    with omp("parallel for reduction(+:pi_value)"):
-        for i in range(n):
-            x = (i + 0.5) * width
-            pi_value += 4.0 / (1.0 + x * x)
-
-    return pi_value * width
-
-print(pi(10_000_000))
+```{literalinclude} ../examples/directives/parallel.py
+:language: python
 ```
 
-## Set The Number Of Threads
-
-Use the runtime API before entering a parallel region:
-
-```python
-from omp4py import *
-
-omp_set_num_threads(4)
-
-@omp
-def show_threads():
-    with omp("parallel"):
-        print(omp_get_thread_num(), "of", omp_get_num_threads())
-
-show_threads()
+```text
+hello from thread 3 of 4
+hello from thread 2 of 4
+hello from thread 1 of 4
+hello from thread 0 of 4
 ```
 
-## Use Package-Level Preprocessing
+`@omp` tells OMP4Py to process the function. `with omp("parallel ...")` runs the block once in
+each thread. The line order changes from run to run.
 
-Inside a package `__init__.py` file, call `omp(pkg=__package__)` to enable
-lazy preprocessing for modules imported from that package:
+→ {doc}`/user_guide/decorator/index`, {doc}`/user_guide/directives`
 
-```python
-from omp4py import omp
+## 2 · Split a loop and combine results
 
-omp(pkg=__package__)
+```{literalinclude} ../examples/pi.py
+:language: python
 ```
 
-## Run With uv
+`parallel for` divides the iterations among the threads, and `reduction(+:total)` gives every
+thread a private partial sum that is added to `total` at the end.
+
+→ {doc}`/user_guide/directives`, {doc}`/user_guide/clauses`
+
+## 3 · Say who owns each variable
+
+```{literalinclude} ../examples/clauses/data.py
+:language: python
+```
+
+```text
+(4, 10, 5, 9)
+```
+
+`shared`, `private`, `firstprivate`, `lastprivate` and `reduction` decide whether threads see one
+variable or each have their own.
+
+→ {doc}`/user_guide/clauses`
+
+## 4 · Protect shared updates and synchronise
+
+```{literalinclude} ../examples/directives/barrier.py
+:language: python
+```
+
+`critical` lets one thread at a time into a block; `omp("barrier")` waits for the whole team.
+
+→ {doc}`/user_guide/directives`
+
+## 5 · Control the team from code
+
+```{literalinclude} ../examples/runtime/routines.py
+:language: python
+```
+
+The `omp_*` functions of the OpenMP API are imported together with `omp`.
+
+→ {doc}`/user_guide/runtime_api`
+
+## 6 · Choose how it runs
+
+| Mode | Enable with | Use it for |
+| --- | --- | --- |
+| Pure | `OMP4PY_PURE=1` | debugging, no compiler needed |
+| Hybrid (default) | `from omp4py import *` | general use, native runtime |
+| Compiled | `@omp(compile=True)` | numeric loops |
+| Compiled with types | `compile=True` + annotations | best performance |
+
+→ {doc}`/user_guide/execution_modes`, {doc}`/user_guide/compiled_mode`
+
+## Run it
 
 ```bash
-uv run -p 3.13t python path/to/program.py
+python my_program.py                    # any Python
+uv run -p 3.14t python my_program.py    # a free-threaded interpreter with uv
+OMP_NUM_THREADS=8 python my_program.py  # choose the default team size
 ```

@@ -2,61 +2,69 @@
 
 ## Requirements
 
-OMP4Py currently targets Python 3.13 or newer. For real multithreaded speedups,
-use a free-threaded Python build such as `3.13t` or newer.
+- **Python 3.13 or newer** (3.13, 3.14 and 3.15 are listed as supported).
+- A **free-threaded** build (`3.13t`, `3.14t`, ...) to run threads in parallel. A normal
+  (GIL) build works too, but CPU-bound code will not speed up; see
+  {doc}`/user_guide/performance`.
+- For the compiled modes only: a C compiler, Cython and setuptools.
 
-## Install From Git
+## Install with pip
 
-Install the project directly from the repository:
+```{note}
+**Coming soon.** OMP4Py is not published on PyPI yet. Until then, install it from the Git
+repository as shown below.
+```
+
+When it is published, the command will be:
+
+```bash
+pip install omp4py
+```
+
+## Install from Git
+
+This is the way to install OMP4Py today:
 
 ```bash
 pip install git+https://github.com/citiususc/omp4py.git
 ```
 
-## Install For Local Development
-
-From a local checkout, install the runtime and compile optional native modules:
+To also get the compilation support (Cython and setuptools):
 
 ```bash
-uv sync --reinstall-package omp4py
+pip install "omp4py[compile] @ git+https://github.com/citiususc/omp4py.git"
 ```
 
-Build a wheel with:
+If you install from source, the native runtime is built during installation when your
+interpreter and compiler allow it; otherwise OMP4Py falls back to its pure Python runtime
+({doc}`concepts`).
+
+## Using uv
+
+[uv](https://docs.astral.sh/uv/) can create the environment and select a free-threaded
+interpreter for you:
 
 ```bash
-uv build
+uv venv -p 3.14t
+uv pip install git+https://github.com/citiususc/omp4py.git
+uv run python my_program.py
 ```
 
-## Pure Python Runtime
+## Verify the installation
 
-To force the pure Python runtime, set `OMP4PY_PURE` before importing OMP4Py:
-
-```python
-import os
-
-os.environ["OMP4PY_PURE"] = "True"
-
-from omp4py import *
+```bash
+python -c "from omp4py import *; omp_set_num_threads(2); print(omp_get_max_threads())"
 ```
 
-## Useful Environment Variables
+Check whether your interpreter runs threads in parallel:
 
-`OMP4PY_PURE`
+```bash
+python -c "import sys; print('GIL enabled:', sys._is_gil_enabled())"
+```
 
-: Use the pure Python runtime even when compiled modules are available.
+`GIL enabled: False` means a free-threaded build.
 
-`OMP4PY_CACHE_DIR`
+## Contributing to OMP4Py?
 
-: Override the directory used for preprocessed and compiled artifacts.
-
-`OMP4PY_IGNORE_CACHE`
-
-: Regenerate cached preprocessing and compilation outputs.
-
-`OMP4PY_DUMP`
-
-: Dump transformed source code for inspection.
-
-`OMP4PY_DEBUG`
-
-: Enable additional debugging behavior in the preprocessing pipeline.
+Development setup (cloning, `uv` dependency groups, building the native runtime) is described in
+the {doc}`Contributor Guide </contributor/index>`.

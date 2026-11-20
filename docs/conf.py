@@ -1,9 +1,13 @@
+import os
 import pathlib
 import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+
+# Document the pure Python runtime so autodoc never needs the compiled extensions.
+os.environ.setdefault("OMP4PY_PURE", "1")
 
 for line in (ROOT / "omp4py" / "__init__.py").read_text().split("\n"):
     if line.startswith("__version__"):
@@ -23,6 +27,7 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
     "sphinxcontrib.mermaid",
+    "sphinx_design",
 ]
 
 templates_path = ["_templates"]
@@ -45,3 +50,12 @@ autodoc_default_options = {
 }
 autosummary_generate = True
 napoleon_google_docstring = True
+napoleon_numpy_docstring = False
+napoleon_use_ivar = True
+
+myst_enable_extensions = ["colon_fence", "deflist", "dollarmath"]
+myst_heading_anchors = 3
+# "ref.python": ambiguous short names in autodoc type hints (e.g. Context, Task) exist in several modules.
+suppress_warnings = ["myst.header", "ref.python"]
+exclude_patterns += ["examples/**"]
+
