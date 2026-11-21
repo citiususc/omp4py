@@ -34,7 +34,6 @@ result_5 = \
         """ parallel   
             for """
 
-@pytest.mark.no_isolate
 def test_string(subtests: pytest.Subtests):
     source = pathlib.Path(__file__).read_text()
     module = ast.parse(source)
