@@ -24,7 +24,6 @@ from omp4py.runtime.tasks.worksharing cimport (
     for_next_guided,
     for_next_runtime,
     for_next_static,
-    ordered_next,
     ordered_start,
     sections_end,
     sections_init,

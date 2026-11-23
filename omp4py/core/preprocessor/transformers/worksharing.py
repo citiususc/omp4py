@@ -178,9 +178,6 @@ def _(ctr: For, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt]: 
                     scope.span.to_ast(ast.Assign([ast.Name(s.old_name, ast.Store())], ast.Name(s.scope_name))),
                 )
 
-    if ordered_num > 0:
-        for_list[-1].body.append(ctr.span.to_ast(ast.Expr(ast.Call(runtime_ast("ordered_next")))))
-
     # ForBounds-> init, end, rs = [start (0), stop (+1), step(+2), mod(+3), N/A, N/A]
     for i in range(collapse_num):
         for_iter: ast.expr = for_list[i].iter
@@ -354,7 +351,8 @@ def _(ctr: Ordered, block: StructuredBlock | None, ctx: Context) -> list[ast.stm
     """Transform an OpenMP `ordered` construct.
 
     Enforces a sequential execution order within a parallel loop by
-    inserting a runtime call that delimit ordered region.
+    inserting a runtime call that starts the ordered region. The runtime takes care of passing the turn on
+    when a thread gets its next chunk.
 
     Args:
         ctr (Ordered): Parsed `ordered` construct.
@@ -366,12 +364,10 @@ def _(ctr: Ordered, block: StructuredBlock | None, ctx: Context) -> list[ast.stm
     """
     block = with_block(ctr, block, ctx)
     init: ast.stmt = ctr.span.to_ast(ast.Expr(ast.Call(runtime_ast("ordered_start"))))
-    end: ast.stmt = ctr.span.to_ast(ast.Expr(ast.Call(runtime_ast("ordered_next"))))
 
     ast.fix_missing_locations(init)
-    ast.fix_missing_locations(end)
 
-    return [init, block, end]
+    return [init, block]
 
 
 @construct.register

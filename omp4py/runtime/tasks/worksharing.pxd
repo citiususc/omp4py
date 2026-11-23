@@ -1,5 +1,3 @@
-from libc cimport math # replace python module
-
 from omp4py.runtime.lowlevel.atomic cimport AtomicInt, AtomicObject
 from omp4py.runtime.lowlevel.mutex cimport Event
 from omp4py.runtime.lowlevel.numeric cimport pyint, pyint_array
@@ -30,13 +28,12 @@ cdef class ForShared:
     cdef ForShared new(pyint count)
 
 cdef class OrderedShared:
-    cdef pyint count
-    cdef pyint it
-    cdef pyint own
+    cdef pyint_array starts
+    cdef AtomicInt waiters
     cdef AtomicObject event
 
     @staticmethod
-    cdef OrderedShared new(pyint count)
+    cdef OrderedShared new(pyint count, pyint threads)
 
 
 cdef class ForBounds:
@@ -49,6 +46,7 @@ cdef class ForBounds:
     cdef pyint its
     cdef pyint collapse
     cdef readonly pyint_array rs
+    cdef bint ordered
 
 
 ctypedef bint (*kind_t)(ForBounds)
@@ -58,6 +56,7 @@ cdef class ForTask(Task):
     cdef kind_t kind
     cdef AtomicInt shared_count
     cdef OrderedShared ordered
+    cdef bint entered
 
     @staticmethod
     cdef ForTask new(TaskContext ctx, ForBounds bounds)
@@ -83,8 +82,6 @@ cpdef void for_end(bint nowait)
 cdef bint fix_bounds(ForBounds bounds)
 
 cpdef void ordered_start()
-
-cpdef void ordered_next()
 
 
 cdef class SectionsShared:

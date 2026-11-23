@@ -15,7 +15,6 @@ regions, section dispatching, and `copyprivate` data exchange.
 
 from __future__ import annotations
 
-import math
 import os
 import sys
 from collections.abc import Callable
@@ -44,7 +43,6 @@ __all__ = [
     "for_next_guided",
     "for_next_runtime",
     "for_next_static",
-    "ordered_next",
     "ordered_start",
     "sections_end",
     "sections_init",
@@ -98,31 +96,38 @@ class ForShared:
 class OrderedShared:
     """Shared state for ordered loop execution.
 
+    The ordered regions run in the order of the loop chunks: a chunk can execute its ordered regions when no other
+    thread can still run an earlier chunk. For that, every thread publishes in `starts` the start of its current
+    chunk when it gets it. A thread that is between two chunks keeps the start of the previous one, which is never
+    greater than the start of the next, so nobody gets ahead of it. The counter values are multiplied by the
+    direction of the loop (-1 for a negative step), so they always grow.
+
     Attributes:
-        count (pyint): Last completed ordered iteration.
-        it (pyint): Remaining iterations in the current ordered chunk.
-        own (pyint): Thread that currently owns the ordered region.
+        starts (pyint_array): Per thread, start of its current chunk.
+        waiters (AtomicInt): Number of threads waiting for their turn.
         event (AtomicObject[Event]): Event used to wake waiting threads.
     """
-    count: pyint
-    it: pyint
-    own: pyint
+    starts: pyint_array
+    waiters: AtomicInt
     event: AtomicObject[Event]
 
     @staticmethod
-    def new(count: pyint) -> OrderedShared:
+    def new(count: pyint, threads: pyint) -> OrderedShared:
         """Create ordered synchronization state.
 
         Args:
-            count (pyint): Initial ordered counter.
+            count (pyint): Counter value where the first chunk starts.
+            threads (pyint): Number of threads of the team.
 
         Returns:
             OrderedShared: Initialized ordered state.
         """
         obj: OrderedShared = OrderedShared.__new__(OrderedShared)
-        obj.count = count
-        obj.own = -1
-        obj.it = -1
+        obj.starts = new_pyint_array(threads)
+        i: pyint
+        for i in range(threads):
+            obj.starts[i] = count
+        obj.waiters = AtomicInt.new(0)
         obj.event = AtomicObject.new()
         obj.event.set(Event.new())
         return obj
@@ -141,6 +146,7 @@ class ForBounds:
         its (pyint): Total flattened iteration count.
         collapse (pyint): Number of collapsed loops.
         rs (pyint_array): Internal range metadata buffer.
+        ordered (bool): Whether the loop has the `ordered` clause.
     """
     init: pyint
     end: pyint
@@ -151,6 +157,7 @@ class ForBounds:
     its: pyint
     collapse: pyint
     rs: pyint_array
+    ordered: bool
 
 
 class ForTask(Task):
@@ -161,11 +168,13 @@ class ForTask(Task):
         kind (Callable[[ForBounds], bool]): Scheduling function in use.
         shared_count (AtomicInt | None): Shared counter for dynamic schedules.
         ordered (OrderedShared | None): Ordered execution state.
+        entered (bool): Whether the task has already got the turn of the ordered regions in its current chunk.
     """
     bounds: ForBounds
     kind: Callable[[ForBounds], bool]
     shared_count: AtomicInt | None
     ordered: OrderedShared | None
+    entered: bool
 
     @staticmethod
     def new(ctx: TaskContext, bounds: ForBounds) -> ForTask:
@@ -184,6 +193,7 @@ class ForTask(Task):
         obj.kind = for_next_static
         obj.ordered = None
         obj.shared_count = None
+        obj.entered = False
         return obj
 
 
@@ -246,6 +256,7 @@ def for_init(bounds: ForBounds, modifier: pyint, schedule: pyint, chunk: pyint, 
     task = ForTask.new(ctx, bounds)
     set_bounds(bounds)
     bounds.count = 0
+    bounds.ordered = ordered > 0
 
     if schedule == _runtime:
         run_sched = ctx.icvs.run_sched
@@ -259,7 +270,7 @@ def for_init(bounds: ForBounds, modifier: pyint, schedule: pyint, chunk: pyint, 
             task.kind = for_next_static
 
     if chunk < 0:
-        chunk = cython.cast(pyint, math.ceil(bounds.its / ctx.icvs.team_size)) if schedule == _static else 1  # ty: ignore[no-matching-overload]
+        chunk = (bounds.its + ctx.icvs.team_size - 1) // ctx.icvs.team_size if schedule == _static else 1
     if bounds.collapse == 1:
         bounds.count = bounds.rs[_r_start]
         if bounds.rs[_r_step] < 0:  # negative step
@@ -278,10 +289,10 @@ def for_init(bounds: ForBounds, modifier: pyint, schedule: pyint, chunk: pyint, 
         ).count
 
     if ordered:
-        ordered_count: pyint = bounds.rs[_r_start] if bounds.collapse == 1 else 0
+        ordered_count: pyint = (bounds.rs[_r_start] if bounds.collapse == 1 else 0) * (-1 if chunk < 0 else 1)
         task.ordered = cython.cast(
             OrderedShared,
-            ctx.task.shared.get(OrderedShared) or ctx.task.shared.sync(OrderedShared.new(ordered_count)),
+            ctx.task.shared.get(OrderedShared) or ctx.task.shared.sync(OrderedShared.new(ordered_count, ctx.icvs.team_size)),
         )
 
     ctx.push(task)
@@ -352,10 +363,9 @@ def for_next_guided(bounds: ForBounds) -> bool:
 
         if q < chunk_size:  # noqa: PLR1730
             q = chunk_size
-        if q <= n:
-            stop = start + q * step
+        new_stop: pyint = start + q * step if q <= n else stop
 
-        if shared_count.compare_exchange_weak(start, stop):
+        if shared_count.compare_exchange_weak(start, new_stop):
             bounds.count = start
             bounds.chunk = q if bounds.chunk > 0 else -q
             break
@@ -407,6 +417,15 @@ def fix_bounds(bounds: ForBounds) -> bool:
     stop: pyint = bounds.rs[_r_stop]
     count: pyint = bounds.count
     bounds.count += bounds.chunk
+
+    if bounds.ordered:  # publish where the chunk starts, and wake up the threads that wait for it
+        ctx = omp_ctx()
+        task = cython.cast(ForTask, ctx.task)
+        ordered = cython.cast(OrderedShared, task.ordered)
+        ordered.starts[ctx.icvs.thread_num] = count * (-1 if bounds.chunk < 0 else 1)
+        task.entered = False
+        if ordered.waiters.fetch_add(0) > 0:  # atomic, so a thread that is about to wait is not missed
+            cython.cast(Event, ordered.event.exchange(Event.new())).notify()
 
     if bounds.collapse > 1:
         if count >= bounds.its:
@@ -476,33 +495,27 @@ def ordered_start() -> None:
         )
         os._exit(1)
 
-    if ordered.own == ctx.icvs.thread_num:
+    if task.entered:
         return
 
-    expected: pyint = task.bounds.count - task.bounds.chunk
-    while ordered.own != -1 or ordered.count != expected:
-        cython.cast(Event, ordered.event.get()).wait()
-
-    ordered.it = task.bounds.chunk if task.bounds.chunk > 0 else -task.bounds.chunk
-    ordered.own = ctx.icvs.thread_num
-
-
-def ordered_next() -> None:
-    """Advance ordered loop execution.
-
-    Releases ownership of the ordered region when the current ordered
-    chunk has finished.
-    """
-    task = cython.cast(ForTask, omp_ctx().task)
-    ordered = cython.cast(OrderedShared, task.ordered)
-
-    if ordered.it > 0:
-        ordered.it -= 1
-
-    if ordered.it == 0:
-        ordered.count = task.bounds.count
-        ordered.own = -1
-        cython.cast(Event, ordered.event.exchange(Event.new())).notify()
+    sign: pyint = -1 if task.bounds.chunk < 0 else 1
+    expected: pyint = (task.bounds.count - task.bounds.chunk) * sign  # where the current chunk starts
+    me: pyint = ctx.icvs.thread_num
+    ordered.waiters.fetch_add(1)
+    while True:
+        # Get the event before checking the condition, so a notification can not be lost
+        event = cython.cast(Event, ordered.event.get())
+        turn: bool = True
+        t: pyint
+        for t in range(ctx.icvs.team_size):
+            if t != me and ordered.starts[t] <= expected:  # that thread may still run an earlier chunk
+                turn = False
+                break
+        if turn:
+            break
+        event.wait()
+    ordered.waiters.fetch_add(-1)
+    task.entered = True
 
 
 class SectionsShared:
