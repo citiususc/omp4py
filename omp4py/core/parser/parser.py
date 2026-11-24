@@ -16,13 +16,13 @@ The main entry points are:
 from __future__ import annotations
 
 import ast
+import re
 import textwrap
 import typing
 from collections import defaultdict
 from collections.abc import Iterator
-from io import StringIO
 
-from omp4py.core.parser import openmp_lark, string_lark, tree
+from omp4py.core.parser import openmp_lark, tree
 from omp4py.core.parser.clause_assignment import ClauseAssignment
 from omp4py.core.parser.compound import DIRECTIVES
 from omp4py.core.parser.error import parser_error, syntax_error
@@ -40,21 +40,18 @@ from omp4py.core.parser.tree import Clause, Directive, Modifier, Name, PyExpr, P
 __all__ = ["extract_directive", "parse_directive", "syntax_error"]
 
 
-string_parser: string_lark.Lark = string_lark.Lark_StandAlone()
 openmp_parser: openmp_lark.Lark = openmp_lark.Lark_StandAlone(propagate_positions=True)
 
 
 def extract_directive(node: ast.Constant, full_source: str, filename: str) -> str:
-    """Extract the raw directive source from an AST constant node.
+    """Extract the directive text from an AST constant node.
 
-    This function retrieves the textual representation of a directive
-    stored inside a string constant, preserving the original source
-    positions possible.
-
-    Simple string literals are returned directly from their evaluated
-    value. More complex string forms, such as multiline literals or
-    escaped strings, require recovering the original source segment in
-    order to preserve accurate token positioning during parsing.
+    The directive is a string literal of Python, written in any of its forms (quotes, prefix, several lines,
+    concatenation...), and the directive is the text that is written in it. What is Python syntax of the literal
+    (quotes, prefix, comments, line continuations) is replaced by blanks, so the result has the same length and
+    every token of the directive is in the same line and column that it has in the source, and the positions of the
+    parser errors are the ones of the source file. The escape sequences are not decoded: the OpenMP syntax has none,
+    and the Python code that the directive can have is evaluated later, with its own rules, as it is written.
 
     Args:
         node (ast.Constant): AST constant containing the directive string.
@@ -62,21 +59,17 @@ def extract_directive(node: ast.Constant, full_source: str, filename: str) -> st
         filename (str): Source filename used for error reporting.
 
     Returns:
-        str: Directive text with source layout preserved where required.
+        str: Directive text with the layout of the source.
 
     Raises:
         SyntaxError: If the directive's source segment cannot be recovered.
     """
-    node_value = str(node.value)
     raw_source: str | None = ast.get_source_segment(full_source, node)
     if raw_source is None:
         msg = "source directive not found"
         raise syntax_error(msg, Span.from_ast(node), full_source, filename)
 
-    if len(raw_source) - 2 == len(node_value):
-        return " " + node_value + " "
-
-    return StringTransformer().transform(string_parser.parse(raw_source))
+    return _LITERAL.sub(_clean, raw_source)
 
 
 def parse_directive(code: str, span: Span, full_source: str, filename: str) -> Directive:
@@ -114,70 +107,34 @@ def parse_directive(code: str, span: Span, full_source: str, filename: str) -> D
         raise ex.orig_exc from None
 
 
-@v_args(inline=True)
-class StringTransformer(string_lark.Transformer):
-    """Reconstruct string-literal contents while preserving source layout.
+# The parts of the source of a literal that is a directive: a string (with its prefix, `r` or `u`, and its quotes), a
+# comment between the parts of a concatenation, and a line continuation outside of a string.
+_LITERAL = re.compile(
+    r"""(?P<prefix>[ru]?)(?P<quote>\"\"\"|\'\'\'|"|')(?P<text>(?:\\.|.)*?)(?P=quote)|(?P<blank>\#[^\n]*|\\\n)""",
+    re.DOTALL | re.IGNORECASE,
+)
+_CONTINUATION = re.compile(r"\\(\n|.)")
 
-    Transforms tokens from the string-literal parser into text whose line
-    and column positions correspond to the original literal's contents.
-    This allows subsequent directive parsing to produce accurate locations.
+
+def _clean(part: re.Match[str]) -> str:
+    """Clean a part of the source of a literal, keeping only what is written in the directive.
+
+    The syntax of Python that holds the directive (prefix, quotes, comments and line continuations) is replaced by
+    blanks, and the line breaks are kept, so the result has the same length and every token that follows keeps its
+    line and column. The text between the quotes is not changed: the OpenMP syntax has no escape sequences, and the
+    Python code that the directive can have is evaluated later, with its own rules, as it is written.
+
+    Args:
+        part (re.Match[str]): Match of `_LITERAL`: a string (with its `prefix`, `quote` and `text`), or a `blank`
+            part, that is a comment or a line continuation outside of a string.
+
+    Returns:
+        str: Text of the same length as the part, with the syntax of Python as blanks.
     """
-
-    @staticmethod
-    def start(*strings: string_lark.Token) -> str:
-        """Reconstruct string contents from parsed literal tokens.
-
-        Preserves line breaks and column spacing while removing the literal
-        delimiters and accounting for prefixes such as string markers.
-
-        Args:
-            *strings (string_lark.Token): Tokens representing the string
-                literal's components.
-
-        Returns:
-            str: Reconstructed string content with source positions preserved.
-
-        Raises:
-            RuntimeError: If a token lacks the required source-position data.
-        """
-        result = StringIO()
-        last_line: int = 1
-        last_col: int = 1
-        for token in strings:
-            if token.line is None or token.column is None or token.end_line is None or token.end_column is None:
-                msg = "Lark token must have line and column"
-                raise RuntimeError(msg)  # never raise
-            value = str(token)
-            line: int = token.line
-            end_line: int = token.end_line
-            col: int = token.column
-            end_col: int = token.end_column
-
-            if last_line < line:
-                result.write("\n" * (line - last_line))
-                last_col = 1
-            if last_col < col:
-                result.write(" " * (col - last_col))
-
-            while value[0].isalpha():
-                result.write(" ")
-                value = value[1:]
-
-            if value.startswith(('"""', "'''")):
-                result.write("   " + value[3:-3] + "   ")
-            elif line == end_line:
-                result.write(" " + value[1:-1] + " ")
-            else:
-                start, *middle, end = value.splitlines()
-                result.write(" " + start[1:-1] + " \n")
-                result.writelines([s[:-1] + " \n" for s in middle])
-                result.write(end[:-1] + " ")
-
-            last_line = end_line
-            last_col = end_col
-
-        result.seek(0)
-        return result.read()
+    if part["blank"] is not None:  # comment or continuation outside of a string: only the line breaks are kept
+        return re.sub(r"[^\n]", " ", part["blank"])
+    text = _CONTINUATION.sub(lambda m: " \n" if m[1] == "\n" else m[0], part["text"])  # `\\` is not a continuation
+    return " " * (len(part["prefix"]) + len(part["quote"])) + text + " " * len(part["quote"])
 
 
 type Modifiers = list[Modifier] | None

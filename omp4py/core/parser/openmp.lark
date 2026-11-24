@@ -172,10 +172,12 @@ py_expr: py_code
 py_stmt: py_code
 py_code: python
 
-python: ( NAME | PYTHON_BODY | PYTHON_STRING | PYTHON_LONG_STRING | "(" python ")" )+ -> literal
-python_lite: ( NAME | PYTHON_LITE | PYTHON_STRING | PYTHON_LONG_STRING | "(" python ")" | "[" python "]" | "{" python "}")+ -> literal
+python: ( NAME | PYTHON_BODY | PYTHON_STRING | PYTHON_LONG_STRING | "(" python? ")" | "[" python? "]" | "{" python? "}" )+ -> literal
+python_lite: ( NAME | PYTHON_LITE | PYTHON_STRING | PYTHON_LONG_STRING | "(" python? ")" | "[" python? "]" | "{" python? "}" )+ -> literal
 
-PYTHON_BODY.-1: /[^()"' \t\f\r\n]+/ # Python code always ends before )
+# The brackets are not part of the body: they always are their own tokens, so a call without arguments, `f()`, and a
+# bracket that follows a string, `d['a']`, are the same as the ones that follow a name, and the code always ends before )
+PYTHON_BODY.-1: /[^()\[\]{}"' \t\f\r\n]+/
 PYTHON_STRING: /([ubft]?r?|r[ubft])("(?!"")(?:\\\n|[^"\\]|\\.)*?"|'(?!'')(?:\\\n|[^'\\]|\\.)*?')/i
 PYTHON_LONG_STRING: /([ubft]?r?|r[ubft])(""".*?(?<!\\)(\\\\)*?"""|'''.*?(?<!\\)(\\\\)*?''')/is
 PYTHON_LITE.-1 : /[^(){}\[\]:,"']+/

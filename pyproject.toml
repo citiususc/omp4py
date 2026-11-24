@@ -76,12 +76,11 @@ include = ["omp4py*"]
 
 # Tasks
 [tool.poe.tasks]
-_lark_string = "python -m lark.tools.standalone string.lark --out string_lark.py --lexer basic"
 _lark_openmp = "python -m lark.tools.standalone openmp.lark --out openmp_lark.py --propagate_positions --maybe_placeholders"
 _lark_openmp_compound = "python omp4py/core/parser/compound_gen.py"
 
 [tool.poe.tasks.lark]
-sequence = ["_lark_string", "_lark_openmp", "_lark_openmp_compound"]
+sequence = ["_lark_openmp", "_lark_openmp_compound"]
 cwd = "omp4py/core/parser"
 help = "Generates Lark parsers"
 

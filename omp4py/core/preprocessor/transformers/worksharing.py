@@ -177,6 +177,8 @@ def _(ctr: For, block: StructuredBlock | None, ctx: Context) -> list[ast.stmt]: 
                 for_last.body.append(
                     scope.span.to_ast(ast.Assign([ast.Name(s.old_name, ast.Store())], ast.Name(s.scope_name))),
                 )
+    if not for_last.body: 
+        for_last.body.append(ast.Pass())
 
     # ForBounds-> init, end, rs = [start (0), stop (+1), step(+2), mod(+3), N/A, N/A]
     for i in range(collapse_num):
