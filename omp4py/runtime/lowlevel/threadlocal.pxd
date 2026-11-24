@@ -22,8 +22,10 @@ cdef extern from *:
     static thread_local PyObject** omp4py_local = NULL;
 
     static CYTHON_INLINE PyObject **omp4py_threadlocal_cinit(void);
-    // Efficient context access: C function using Cython only on first access
-    inline PyObject * omp4py_threadlocal_get() {
+    // Efficient context access: C function using Cython only on first access. It has to be `static`: a plain `inline`
+    // function does not generate any code in C99, so when the compiler decides not to inline a call, the module
+    // refers to a symbol that no module defines and it fails to load.
+    static CYTHON_INLINE PyObject * omp4py_threadlocal_get() {
         if (omp4py_local == NULL){
             omp4py_local = omp4py_threadlocal_cinit();
         }
