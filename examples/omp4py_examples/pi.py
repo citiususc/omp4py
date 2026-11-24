@@ -17,7 +17,7 @@ def _pyomp_pi(n):
 def _omp4py_pi(n):
     w = 1.0 / n
     PI = 0.0
-    with omp("parallel for reduction(+:PI)"):
+    with omp("parallel for reduction(+:PI) firstprivate(w)"):
         for i in range(n):
             local = (i + 0.5) * w
             PI += 4.0 / (1.0 + local * local)
@@ -28,7 +28,7 @@ def _omp4py_pi(n):
 def _omp4py_pi_types(n: int):
     w: float = 1.0 / n
     PI: float = 0.0
-    with omp("parallel for reduction(+:PI)"):
+    with omp("parallel for reduction(+:PI) firstprivate(w)"):
         for i in range(n):
             local: float = (i + 0.5) * w
             PI += 4.0 / (1.0 + local * local)

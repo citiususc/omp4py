@@ -95,7 +95,7 @@ the options of that preprocessing run.
   - Names of extra directive parsers (subparsers) to enable ({doc}`/contributor/extensions/subparsers`).
 * - `modifiers`
   - `{}`
-  - Enable or disable AST modifiers by name, for example `{"my_pass": True}` ({doc}`/contributor/extensions/modifiers`).
+  - Enable or disable AST modifiers by name, for example `{"omp_local_aliases": True}` ({doc}`/user_guide/performance`) or your own `{"my_pass": True}` ({doc}`/contributor/extensions/modifiers`).
 * - `modifiers_args`
   - `{}`
   - Free-form configuration passed to the modifiers.

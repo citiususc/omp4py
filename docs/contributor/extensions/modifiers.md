@@ -107,6 +107,14 @@ themselves whether to run (`should_run`), so users do not normally touch them:
 Both are examples of the intended use of modifiers: **adding optimisations** that depend on how the
 code will be executed. To switch one off, use `omp(modifiers={"omp_pure_types": False})`.
 
+There is also a modifier that is **off by default** and that you enable with
+`omp(modifiers={"omp_local_aliases": True})` (`omp4py/core/modifiers/omp/localvars.py`). In every
+function nested in another one, such as the function generated for a `parallel` region, it binds a local name
+to each variable that the function reads and does not assign (`_omp_1w = w`), using the renaming of the symbol
+table of the transformer, and reads that name instead. It is off by default because binding the variable when
+the function starts changes what the program does if some code that the function calls assigns that variable
+while it runs. It does not run when the code is compiled.
+
 ## Typical uses
 
 - Optimisations specific to a back-end (types, casts, inlining).

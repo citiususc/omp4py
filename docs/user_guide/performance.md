@@ -166,6 +166,45 @@ with `OMP_SCHEDULE` to experiment without changing the code.
   default) instead of interleaving writes from several threads.
 - Keep thread-private data in private variables; they are cheaper than shared ones.
 
+#### Variables of your function inside a region
+
+The block of a `parallel` and of a `task` is turned into a **function** nested in yours, so the
+variables of your function that the block uses become **closure variables** (*cells*) shared by all the
+threads. In the current implementations of the free-threaded interpreter, reading one of them in every
+iteration of a loop, from many threads at once, can reduce the performance a lot: the loop can even run
+slower with eight threads than with one.
+
+```python
+w = 1.0 / n                                 # a variable of the function
+with omp("parallel for reduction(+:total)"):
+    for i in range(n):
+        x = (i + 0.5) * w                   # every thread reads `w` in every iteration
+```
+
+If the threads only **read** the variable, make it `firstprivate`: every thread gets its own local name
+for the value, which is cheap to read.
+
+```python
+with omp("parallel for reduction(+:total) firstprivate(w)"):
+    ...
+```
+
+To avoid writing `firstprivate` for every variable, enable the `omp_local_aliases` modifier. In every
+function nested in another one (the block of a `parallel` is one), it gives a local name to each variable
+that the function only reads, which has the same effect as `firstprivate`. The variables have to be
+initialised when the function starts, so it does not allow a variable that is only assigned in some
+branches of the code before the region:
+
+```python
+@omp(modifiers={"omp_local_aliases": True})
+def pi(n):
+    ...
+```
+
+If the variable has to be **shared** because the threads update it, avoid rebinding it inside the loop:
+keep the value inside a shared object (a list, a dictionary or an instance) and change its content, or
+give each thread its own copy and combine them at the end with a `reduction`.
+
 ### Keep the parallel work coarse
 
 Parallelise the **outermost loop with enough iterations** (use `collapse` to enlarge the space),

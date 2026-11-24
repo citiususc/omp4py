@@ -199,7 +199,11 @@ def test_lastprivate_takes_the_value_of_the_last_iteration(schedule, space):
     assert f() == space[-1]
 
 
-@pytest.mark.parametrize("schedule", ["schedule(static)", "schedule(dynamic, 3)"])
+@pytest.mark.parametrize(
+    "schedule",
+    ["schedule(static)", "schedule(static, 1)", "schedule(static, 7)", "schedule(dynamic)", "schedule(dynamic, 3)",
+     "schedule(guided)"],
+)
 def test_lastprivate_with_collapse(schedule):
     f = omp_function(
         f"""
@@ -213,6 +217,33 @@ def test_lastprivate_with_collapse(schedule):
         """,
     )
     assert f() == (9, 9)
+
+
+def test_lastprivate_with_collapse_is_copied_only_by_the_thread_that_runs_the_last_iteration():
+    """The other threads must not copy their value, even if they finish after the one that has the last iteration.
+
+    With `schedule(static, 7)` and 3 threads, thread 2 runs iteration 99 (chunk 14 of 7 iterations). The other
+    threads wait, in each iteration, until thread 2 has run it, so they end the loop after thread 2 has copied
+    its value. If they copied theirs too, the last one to write would give the value of the variable.
+    """
+    iteration_99_done = threading.Event()
+    f = omp_function(
+        """
+        def f(iteration_99_done):
+            x = None
+            with omp("parallel for lastprivate(x) collapse(2) schedule(static, 7) num_threads(3)"):
+                for i in range(10):
+                    for j in range(10):
+                        x = (i, j)
+                        if omp_get_thread_num() == 2:
+                            if (i, j) == (9, 9):
+                                iteration_99_done.set()
+                        else:
+                            iteration_99_done.wait(timeout=10)
+            return x
+        """,
+    )
+    assert f(iteration_99_done) == (9, 9)
 
 
 def test_lastprivate_of_a_variable_that_the_loop_does_not_assign():

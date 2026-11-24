@@ -31,11 +31,13 @@ Every iteration is independent except for the accumulation into `total`.
 3.1415926535898753
 ```
 
-Three changes were needed:
+Four changes were needed:
 
 1. `@omp` on the function.
 2. `with omp("parallel for ...")` around the loop.
 3. `reduction(+:total)`, so every thread accumulates privately.
+4. `firstprivate(width)`, so every thread reads its own local name for `width` in every iteration
+   ({doc}`/user_guide/performance` explains why this matters).
 
 Without the `reduction` clause, `total += ...` would be a data race and the result would
 be wrong (and different on every run).

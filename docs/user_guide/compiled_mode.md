@@ -29,7 +29,7 @@ from omp4py import omp
 def pi(n):
     w = 1.0 / n
     total = 0.0
-    with omp("parallel for reduction(+:total)"):
+    with omp("parallel for reduction(+:total) firstprivate(w)"):
         for i in range(n):
             x = (i + 0.5) * w
             total += 4.0 / (1.0 + x * x)
@@ -89,7 +89,7 @@ Annotate numeric variables with `int` and `float` and Cython can use native C ar
 def pi(n: int) -> float:
     w: float = 1.0 / n
     total: float = 0.0
-    with omp("parallel for reduction(+:total)"):
+    with omp("parallel for reduction(+:total) firstprivate(w)"):
         for i in range(n):
             x: float = (i + 0.5) * w
             total += 4.0 / (1.0 + x * x)

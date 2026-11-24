@@ -384,7 +384,7 @@ def for_last(bounds: ForBounds) -> bool:
         bool: True if current thread executed last available iteration .
     """
     if bounds.collapse > 1:
-        return bounds.init > 0
+        return bounds.end >= bounds.its 
 
     return bounds.end == bounds.rs[_r_stop] and bounds.end != bounds.init
 
@@ -434,6 +434,7 @@ def fix_bounds(bounds: ForBounds) -> bool:
 
         bounds.it = bounds.chunk
         bounds.init = bounds.chunk
+        bounds.end = count + bounds.chunk  # where the chunk ends: `for_last` needs it
         bounds.rs[_r_mod] = count // bounds.rs[_r_off] * bounds.rs[_r_step]
 
         i: pyint = _rs_len

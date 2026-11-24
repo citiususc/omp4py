@@ -16,7 +16,7 @@ default name:
 def pi(n):
     width = 1.0 / n
     total = 0.0
-    with omp("parallel for reduction(+:total)"):
+    with omp("parallel for reduction(+:total) firstprivate(width)"):
         for i in range(n):
             x = (i + 0.5) * width
             total += 4.0 / (1.0 + x * x)
@@ -31,18 +31,22 @@ def pi(n):
     total = 0.0
 
     def _omp_parallel():
-        nonlocal total
+        nonlocal total, width
         _omp_1total: object
         _omp_1total = 0
+        _omp_1width: object
+        _omp_1width = _omp.copy_var(width)
         _omp_bounds: _omp.ForBounds = _omp.for_bounds(1)
         _omp_bounds.rs[0], _omp_bounds.rs[1], _omp_bounds.rs[2] = (0, n, 1)
         _omp.for_init(_omp_bounds, -1, 115, -1, 0)
         while _omp.for_next_static(_omp_bounds):
             for i in range(_omp_bounds.init, _omp_bounds.end):
-                x = (i + 0.5) * width
+                x = (i + 0.5) * _omp_1width
                 _omp_1total += 4.0 / (1.0 + x * x)
         _omp.for_end(True)
+        _omp.team_lock()
         total += _omp_1total
+        _omp.team_unlock()
     _omp.parallel(_omp_parallel, True, (), 0, ())
     return total * width
 ```
@@ -53,6 +57,8 @@ How to read it:
   executed by every thread through `_omp.parallel(...)`.
 - `reduction(+:total)` created a private `_omp_1total` initialised to the identity;
   it is combined into `total` at the end.
+- `firstprivate(width)` created `_omp_1width`, a private copy of `width` for each thread, and the loop reads
+  that name.
 - The `for` loop became a `while` over chunks handed out by the runtime
   (`for_next_static`); each chunk is iterated with a plain `range`.
 - Names starting with `_omp` are generated. Do not use them in your own code.

@@ -135,9 +135,11 @@ located `SyntaxError` through `syntax_error_ctx`.
 ## Modifiers
 
 Modifiers (`core/modifiers`) are small `ast.NodeTransformer` passes selected by name in
-`omp(modifiers={...})`. The only built-in one, `omp_cython_types`, rewrites the generic
-typing helpers emitted by the transformer (`_omp.tp_cast`, `_omp.tp_typeof`) into
-`cython.cast`/`cython.typeof` when compiling. See {doc}`extensions/modifiers`.
+`omp(modifiers={...})`. `omp_cython_types` rewrites the generic typing helpers emitted by the
+transformer (`_omp.tp_cast`, `_omp.tp_typeof`) into `cython.cast`/`cython.typeof` when compiling, and
+`omp_local_aliases`, which you enable by hand, makes the functions nested in other functions (such as the
+one of a parallel region) read the variables that they do not assign through local names when the code is not
+compiled. See {doc}`extensions/modifiers`.
 
 ## Where generated code comes from
 
