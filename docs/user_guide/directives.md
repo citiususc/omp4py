@@ -11,6 +11,20 @@ directives are listed here; see {doc}`/compatibility/coverage` for the full Open
 status.
 ```
 
+## Writing the string
+
+The directive is a Python string literal, and it can be written in any of its forms: single, double or triple
+quotes, split over several lines, concatenated (with comments between the parts) or with a line continuation.
+OMP4Py keeps **the text that is written** in it: the quotes, the prefix, the comments and the line continuations are
+not part of the directive, and everything else is read as it is, so the errors point at the right place of the file,
+even with several lines.
+
+The OpenMP syntax has no escape sequences, so `\t`, `\n` or `\"` are not valid in a directive (use a space, a line
+break or the other kind of quotes), and an `r` before the literal changes nothing. The Python code that a directive
+can have (the condition of `if`, the number of threads...) is evaluated later, with its own rules, as it is
+written: `omp("parallel if(word == '\n')")` compares with a line break, and a raw string of the code is written
+inside the directive: `omp("parallel if(word == r'\d')")`.
+
 ## Summary
 
 | Directive | Purpose | Needs a block? | Section |
@@ -190,14 +204,18 @@ thread 2 counter 102
 master copy afterwards: 100
 ```
 
+- Python has no declaration of a global variable apart from its assignment, so the **initial value** of every
+  copy is the value that the variable has when the `threadprivate` directive runs for the first time. Each thread
+  starts with a **shallow copy** of that value: a mutable value, such as a list, is not shared between threads, but
+  the objects inside it are (the same as for `firstprivate`).
 - Values persist between parallel regions (for the same threads).
-- `copyin(x)` on `parallel` initialises each thread's copy from the master's value.
+- `copyin(x)` on `parallel` initialises each thread's copy from the master's value, instead of the initial value.
 - A threadprivate variable cannot be listed in `private`, `shared`, ... clauses.
 
 ## declare reduction
 
 Defines a **reduction operator of your own**, to use in `reduction(op: x)` clauses
-({doc}`clauses`) for anything the built-in operators (`+ - * & | ^ and or`) do not cover: merging
+({doc}`clauses`) for anything the built-in operators (`+ - * & | ^ and or max min`) do not cover: merging
 lists, keeping the longest string, combining objects, `max`/`min` of custom data...
 
 It is a stand-alone directive (no block). A declaration has three parts:

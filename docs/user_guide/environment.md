@@ -18,8 +18,8 @@ be changed afterwards with the routines of {doc}`runtime_api` (for example
 | `OMP_DYNAMIC` | `true` / `false` | Dynamic adjustment of the team size |
 | `OMP_PROC_BIND` | `true`, `false`, `master`, `close`, `spread` (list) | Thread affinity policy |
 | `OMP_PLACES` | `threads`, `cores`, `sockets`, `{0,1},{2,3}`, `{0}:4:2` | Places for affinity |
-| `OMP_NESTED` | `true` / `false` | Nested parallelism (deprecated by OpenMP) |
-| `OMP_MAX_ACTIVE_LEVELS` | positive integer | Maximum nested active parallel regions |
+| `OMP_NESTED` | `true` / `false` | Old name of a nesting limit greater than one (deprecated by OpenMP) |
+| `OMP_MAX_ACTIVE_LEVELS` | positive integer | Maximum nested active parallel regions (1 by default: the nested regions run with one thread) |
 | `OMP_THREAD_LIMIT` | positive integer | Maximum number of threads of the program |
 | `OMP_STACKSIZE` | `N[B\|K\|M\|G]` | Stack size of the created threads |
 | `OMP_WAIT_POLICY` | `active` / `passive` | How waiting threads behave |
@@ -56,7 +56,7 @@ _OPENMP = '201511'
   OMP_PROC_BIND = 'FALSE'
   OMP_NESTED = 'FALSE'
   OMP_WAIT_POLICY = 'PASSIVE'
-  OMP_MAX_ACTIVE_LEVELS = '2147483648'
+  OMP_MAX_ACTIVE_LEVELS = '1'
   OMP_THREAD_LIMIT = '2147483648'
   OMP_CANCELLATION = 'FALSE'
   OMP_DEFAULT_DEVICE = '0'

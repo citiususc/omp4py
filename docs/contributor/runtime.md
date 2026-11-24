@@ -59,12 +59,16 @@ while _omp.for_next_static(bounds):               # or _dynamic / _guided / _run
 _omp.for_end(wait)
 ```
 
-- `for_init` computes the chunk size (`ceil(iterations / team_size)` for `static` without a chunk
-  size, `1` otherwise) and registers the shared state of the team.
+- `for_init` computes the chunk size (`ceil(iterations / team_size)`, as an integer division, for `static`
+  without a chunk size, `1` otherwise) in the units of the loop counter, that is, multiplied by the step of the
+  loop, and registers the shared state of the team.
 - `for_next_static` hands each thread its blocks by arithmetic; `for_next_dynamic` and
   `for_next_guided` take chunks from a shared atomic counter.
 - `for_last` tells a thread whether it ran the last iteration (for `lastprivate`).
-- `ordered_start` / `ordered_next` serialise `ordered` blocks by iteration.
+- `ordered_start` makes a chunk wait until no other thread can still run an earlier chunk, so the `ordered`
+  blocks run in loop order. The `ordered` state keeps an array with the start of the current chunk of every
+  thread. `fix_bounds` updates the entry of the thread each time it gets a chunk and wakes up the threads that
+  wait, so a chunk that never executes an `ordered` block does not block the following ones.
 - `sections_*` and `single_*` follow the same init/next/end pattern; `single_copy_*` implement
   `copyprivate`.
 

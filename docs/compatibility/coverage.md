@@ -71,7 +71,7 @@ Legend: ✅ supported · ❌ not supported yet · ◐ partially supported (see t
 | `num_threads` | ✅ | |
 | `default` | ✅ | |
 | `shared`, `private`, `firstprivate`, `lastprivate` | ✅ | |
-| `reduction` | ✅ | Built-in operators `+ - * & \| ^ and or`, and your own operators with `declare reduction` |
+| `reduction` | ✅ | Built-in operators `+ - * & \| ^ and or max min`, and your own operators with `declare reduction` |
 | `copyin`, `copyprivate` | ✅ | |
 | `schedule` | ✅ | `static`, `dynamic`, `guided`, `auto`, `runtime`; modifiers `monotonic`, `nonmonotonic` |
 | `collapse` | ✅ | |

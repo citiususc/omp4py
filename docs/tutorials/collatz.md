@@ -11,7 +11,7 @@ The question: **which starting number below a limit has the longest chain?**
 
 Computing every chain is independent work, so `parallel for` fits. But the *result* is not a sum: we
 want **the largest length and the number that produced it**, a pair `(steps, start)`. The built-in
-reduction operators (`+ - * & | ^ and or`) cannot express that. With `declare reduction` we define the
+reduction operators (`+ - * & | ^ and or max min`) cannot express that: `max` and `min` keep the value, not where it was found. With `declare reduction` we define the
 operator ourselves ({doc}`/user_guide/directives`).
 
 ## Sequential version

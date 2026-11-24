@@ -121,8 +121,7 @@ Files in `omp4py/core/parser/`:
 
 | File | Role |
 | --- | --- |
-| `string.lark` / `string_lark.py` | Mini-grammar used to recover the exact text of a (possibly multi-line, escaped) string literal so error carets land on the right column. |
-| `openmp.lark` / `openmp_lark.py` | The directive and clause grammar. `openmp_lark.py` is **generated** (standalone Lark parser). |
+| `openmp.lark` / `openmp_lark.py` | The directive and clause grammar. `openmp_lark.py` is **generated** (standalone Lark parser): after changing `openmp.lark` run `poe lark`. `test/parser/test_grammar.py` builds the grammar with `lark.Lark(strict=True, debug=True)`, so it must have no conflict of any kind (shift/reduce, reduce/reduce or terminals that match the same text), and it checks that `openmp_lark.py` is the generated one. |
 | `compound.lark`, `compound_gen.py`, `compound.py` | Valid compound directive names (OpenMP 6.0, appendix D). `compound.py` is generated into the `DIRECTIVES` set. |
 | `parser.py` | `extract_directive`, `parse_directive` and the `OpenmpTransformer` that turns the Lark tree into dataclasses. |
 | `tree.py` | The node classes: `Directive`, `Construct` subclasses (`Parallel`, `For`, ...), `Clause` subclasses (`NumThreads`, `Schedule`, ...), modifiers. |
