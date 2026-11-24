@@ -733,7 +733,7 @@ class OpenmpTransformer(openmp_lark.Transformer):
         Returns:
             list[Clause]: Clause node or nodes produced by the selected handler.
         """
-        return getattr(self, f"{name}_cl")(meta, name, *args)
+        return getattr(self, f"{name}".lower() + "_cl")(meta, name, *args)  # the grammar does not distinguish the case
 
     def if_cl(self, meta: Meta, name: Name, mods: Modifiers, expr: tree.PyExpr) -> tree.If:
         return self.set_mods(tree.If(self.meta2span(meta), name, expr), mods)

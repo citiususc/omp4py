@@ -241,7 +241,7 @@ class Data:
         obj.nest = self.nest
         obj.nthreads = new_pyint_array(len(self.nthreads))
         obj.nthreads[:] = self.nthreads[:]
-        obj.run_sched = self.run_sched
+        obj.run_sched = self.run_sched.copy()
         obj.bind = self.bind
         obj.thread_limit = self.thread_limit
         obj.active_levels = self.active_levels

@@ -271,10 +271,11 @@ def for_init(bounds: ForBounds, modifier: pyint, schedule: pyint, chunk: pyint, 
 
     if chunk < 0:
         chunk = (bounds.its + ctx.icvs.team_size - 1) // ctx.icvs.team_size if schedule == _static else 1
+        if chunk < 1:  # empty loop: a chunk of 0 iterations would never advance
+            chunk = 1
     if bounds.collapse == 1:
         bounds.count = bounds.rs[_r_start]
-        if bounds.rs[_r_step] < 0:  # negative step
-            chunk = -chunk
+        chunk *= bounds.rs[_r_step]  # the counter holds values of the loop variable: the chunk is a multiple of the step
 
     bounds.step = chunk
     bounds.chunk = chunk
@@ -354,20 +355,20 @@ def for_next_guided(bounds: ForBounds) -> bool:
     step: pyint = 1 if bounds.collapse > 1 else bounds.rs[_r_step]
     stop: pyint = bounds.its if bounds.collapse > 1 else bounds.rs[_r_stop]
     num_threads: pyint = task.icvs.team_size
-    chunk_size: pyint = bounds.chunk
+    min_iterations: pyint = bounds.step // step  # `bounds.step` keeps the chunk size of the clause
 
     while True:
         start: pyint = shared_count.get()
-        n: pyint = (stop - start) // step
+        n: pyint = (stop - start + step - (1 if step > 0 else -1)) // step  # iterations that are left
         q: pyint = (n + num_threads - 1) // num_threads
 
-        if q < chunk_size:  # noqa: PLR1730
-            q = chunk_size
+        if q < min_iterations:  # noqa: PLR1730
+            q = min_iterations
         new_stop: pyint = start + q * step if q <= n else stop
 
         if shared_count.compare_exchange_weak(start, new_stop):
             bounds.count = start
-            bounds.chunk = q if bounds.chunk > 0 else -q
+            bounds.chunk = q * step  # in the units of the counter
             break
 
     return fix_bounds(bounds)
@@ -385,7 +386,7 @@ def for_last(bounds: ForBounds) -> bool:
     if bounds.collapse > 1:
         return bounds.init > 0
 
-    return bounds.end == bounds.rs[_r_stop] and bounds.end - bounds.init > 0
+    return bounds.end == bounds.rs[_r_stop] and bounds.end != bounds.init
 
 
 def for_end(nowait: bool) -> None:

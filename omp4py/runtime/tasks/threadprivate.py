@@ -37,6 +37,7 @@ _threadprivate_ids_last: pyint
 # END_CYTHON_IGNORE
 
 _threadprivate_ids: dict[str, pyint] = {}
+_threadprivate_initial: list[object] = []
 _threadprivate_ids_last = 0
 _threadprivate_ids_mutex = Mutex.new()
 
@@ -60,6 +61,7 @@ def threadprivate(name: str, value: object) -> pyint:
         global _threadprivate_ids_last  # noqa: PLW0603
         _threadprivate_ids_mutex.lock()
         _threadprivate_ids[name] = i = _threadprivate_ids_last
+        _threadprivate_initial.append(value)
         _threadprivate_ids_last += 1
         _threadprivate_ids_mutex.unlock()
     last: pyint = update_privates(omp_ctx().tpvars)
@@ -101,8 +103,12 @@ def update_privates(tpvars: list[TPrivRef]) -> pyint:
         pyint: Previous size.
     """
     psize: pyint = len(tpvars)
-    for _ in range(_threadprivate_ids_last - len(tpvars) + 1):
-        tpvars.append(TPrivRef.new())  # noqa: PERF401
+    i: pyint
+    for i in range(psize, _threadprivate_ids_last + 1):
+        ref = TPrivRef.new()
+        if i < len(_threadprivate_initial):
+            ref.v = copy_var(_threadprivate_initial[i])
+        tpvars.append(ref)
     return psize
 
 def map_privates(names: tuple[str, ...]) -> pyint_array:

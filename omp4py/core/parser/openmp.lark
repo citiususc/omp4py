@@ -95,7 +95,7 @@ clause : lit{"aligned"i}       "(" [_HM] list{py_name}    [":"  aligned_mods]   
        | lit{"ordered"i}      ["(" [_HM list{mod_default} ":"]  py_expr            ")"]
        | lit{"priority"i}      "(" [_HM list{mod_default} ":"]  py_expr            ")" 
        | lit{"private"i}       "(" [_HM list{mod_default} ":"]  list{py_name}      ")"
-       | lit{"proc_bind"i}     "(" [_HM list{mod_default} ":"]  (lit{"master"i} | lit{"close"i} | lit{"spread"i}) ")"
+       | lit{"proc_bind"i}     "(" [_HM list{mod_default} ":"]  (lit{"primary"i} | lit{"master"i} | lit{"close"i} | lit{"spread"i}) ")"
        | lit{"reduction"i}     "("  _HM reduction_mods    ":"   list{py_name_sec}  ")"
        | lit{"safelen"i}       "(" [_HM list{mod_default} ":"]  py_expr            ")"
        | lit{"schedule"i}      "(" [_HM schedule_mods     ":"]  (lit{"static"i} | lit{"dynamic"i} | lit{"guided"i} | lit{"auto"i} | lit{"runtime"i}) ["," py_expr ] ")"
@@ -126,7 +126,7 @@ directive_mod: NAME+
 
 reduction_mods   : (directive_mod ",")?  reduction_mod_op -> as_list
 reduction_mod_op : reduction_op
-?reduction_op    : py_name      | py_lit{"+"i}   | py_lit{"*"i}  | py_lit{"&"i}   | py_lit{"|"i}
+?reduction_op    : py_name      | py_lit{"+"i}   | py_lit{"-"i}  | py_lit{"*"i}  | py_lit{"&"i}   | py_lit{"|"i}
                  | py_lit{"^"i} | py_lit{"and"i} | py_lit{"or"i} | py_lit{"max"i} | py_lit{"min"i}
 
 linear_mods   : linear_mod ("," linear_mod)* -> as_list

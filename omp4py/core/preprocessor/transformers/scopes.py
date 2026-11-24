@@ -132,6 +132,7 @@ def create_scope(  # ruff: ignore[complex-structure, too-many-arguments, too-man
     reduction_ds = reduction_ds or []
 
     used_vars = check_scopes(ctx, *(shared_ds or []), *private_ds, *first_private_ds, *reduction_ds)
+    default_span = ctr.span
     required = False
     shared = scope_names(*shared_ds)
     private = scope_names(*private_ds)
@@ -144,11 +145,13 @@ def create_scope(  # ruff: ignore[complex-structure, too-many-arguments, too-man
             reduction_op[var] = scope.op
 
     if default is not None:
+        default_span = default.data.span
+        explicit = {*shared, *private, *first_private, *reduction}
         match default.data.choice:
             case default.data.Choice.PRIVATE:
-                private.extend(ctx.symtable.identifiers())
+                private.extend(x for x in ctx.symtable.identifiers() if x not in explicit)
             case default.data.Choice.FIRST_PRIVATE:
-                first_private.extend(ctx.symtable.identifiers())
+                first_private.extend(x for x in ctx.symtable.identifiers() if x not in explicit)
             case default.data.Choice.NONE:
                 required = True
 
@@ -204,7 +207,7 @@ def create_scope(  # ruff: ignore[complex-structure, too-many-arguments, too-man
                 stmt = get_reduction(ctx, "__new__", ann)
                 if stmt is None:  # never for __new__
                     continue
-                span = used_vars[s.real_name].span
+                span = used_vars[s.real_name].span if s.real_name in used_vars else default_span
                 f_inits.append(resolve_names(span, stmt[1], omp_out=s.scope_name, omp_in=s.old_name))
             elif name in reduction_op:
                 if s.private:

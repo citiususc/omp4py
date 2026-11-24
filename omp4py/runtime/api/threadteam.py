@@ -19,7 +19,8 @@ from omp4py.runtime.lowlevel.numeric import new_pyint_array, pyint, pyint_array
 from omp4py.runtime.tasks.context import omp_ctx
 
 if typing.TYPE_CHECKING:
-    from omp4py.runtime.icvs import RunSched
+    from omp4py.runtime.icvs import Data, RunSched
+    from omp4py.runtime.tasks.task import Task
 
 # END_CYTHON_IMPORTS
 
@@ -276,7 +277,8 @@ def omp_get_ancestor_thread_num(level: pyint) -> pyint:
     Returns:
         pyint: Thread number of ancestor.
     """
-    return 0  # TODO
+    icvs: Data | None = _icvs_of_level(level)
+    return -1 if icvs is None else icvs.thread_num
 
 
 def omp_get_team_size(level: pyint) -> pyint:
@@ -291,7 +293,32 @@ def omp_get_team_size(level: pyint) -> pyint:
     Returns:
         pyint: Team size.
     """
-    return 1  # TODO
+    icvs: Data | None = _icvs_of_level(level)
+    return -1 if icvs is None else icvs.team_size
+
+
+def _icvs_of_level(level: pyint) -> Data | None:
+    """Find the ICVs that the encountering task had at a nesting level.
+
+    The tasks of a thread are linked to the one of the thread that created its team, so going up the chain gives
+    the ancestors of the current thread. The task of the level has the thread number and the team size of the
+    ancestor in the team of that level.
+
+    Args:
+        level (pyint): Nesting level, from 0 (the initial task) to `omp_get_level()`.
+
+    Returns:
+        Data | None: The ICVs of the task at that level, or None if the level does not exist.
+    """
+    ctx = omp_ctx()
+    if level < 0 or level > ctx.icvs.levels:
+        return None
+    task: Task | None = ctx.task
+    while task is not None:
+        if task.icvs.levels == level:
+            return task.icvs
+        task = task._return_to  # noqa: SLF001
+    return None
 
 
 def omp_get_active_level() -> pyint:

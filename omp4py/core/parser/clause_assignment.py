@@ -196,6 +196,9 @@ class ClauseAssignment:
         - `teams` is excluded when `loop` is present in the
           directive context.
 
+        The variables of the clause are shared in the excluded construct, so
+        a `default` clause does not change them.
+
         Args:
             clause (tree.Reduction): Clause to assign.
             allowed (list[str]): Names of constructs supporting the
@@ -212,7 +215,18 @@ class ClauseAssignment:
         if "teams" in context and "loop" in context:
             asign.remove("teams")
 
-        return {name: [clause] for name in asign}
+        result: dict[str, list[tree.Clause]] = {name: [clause] for name in asign}
+        for name in ("parallel", "teams"):
+            if name in allowed and name not in asign:
+                used: list[str] = []
+                for data in self.assignable_clauses[name]:
+                    if data is not clause and isinstance(data, (tree.FirstPrivate, tree.Private, tree.Reduction, tree.Shared)):
+                        used.extend(data.str_targets)
+                targets = [var for var in clause.targets if var.string not in used]
+                if targets:
+                    result[name] = [tree.Shared(clause.span, clause.name, targets)]
+
+        return result
 
     def assign_last_private(self, clause: tree.LastPrivate, allowed: list[str]) -> dict[str, list[tree.Clause]]:
         """Assign a `lastprivate` clause and resolve conflicting variables.

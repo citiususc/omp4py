@@ -97,9 +97,7 @@ def set_nthreads(ctx: TaskContext, icvs: Data, active: bool, num_threads: tuple[
     num_threads_len: pyint = len(num_threads)
     if not active:  # noqa: SIM114
         icvs.team_size = 1
-    elif ctx.icvs.active_levels > 0 and not ctx.icvs.nest:  # noqa: SIM114
-        icvs.team_size = 1
-    elif ctx.icvs.nest and ctx.icvs.active_levels == ctx.icvs.device_vars.max_active_levels:
+    elif ctx.icvs.active_levels >= ctx.icvs.device_vars.max_active_levels:  # the region is inactive
         icvs.team_size = 1
     else:
         requested: pyint = num_threads[0] if num_threads_len > 0 and num_threads[0] > 0 else ctx.icvs.nthreads[0]
@@ -120,14 +118,13 @@ def set_nthreads(ctx: TaskContext, icvs: Data, active: bool, num_threads: tuple[
         icvs.team_size = requested
 
     if num_threads_len > 1:
-        ctx.icvs.nthreads = new_pyint_array(num_threads_len - 1)
+        icvs.nthreads = new_pyint_array(num_threads_len - 1)
         i: pyint
         for i in range(num_threads_len - 1):
-            ctx.icvs.nthreads[i] = num_threads[i + 1]
+            icvs.nthreads[i] = num_threads[i + 1]
     elif len(ctx.icvs.nthreads) > 1:
-        nthreads = ctx.icvs.nthreads
-        ctx.icvs.nthreads = new_pyint_array(len(ctx.icvs.nthreads) - 1)
-        ctx.icvs.nthreads[:] = nthreads[1:]
+        icvs.nthreads = new_pyint_array(len(ctx.icvs.nthreads) - 1)
+        icvs.nthreads[:] = ctx.icvs.nthreads[1:]
 
 
 def _parallel_thread_init(ctx: TaskContext) -> None:
@@ -232,7 +229,9 @@ def parallel(
     new_icvs: Data = ctx.icvs.copy()
     set_nthreads(ctx, new_icvs, active, num_threads)
 
-    new_icvs.active_levels +=1
+    new_icvs.levels += 1
+    if new_icvs.team_size > 1:  # only the regions with more than one thread are active
+        new_icvs.active_levels += 1
     all_tpvars: list[list[TPrivRef]] | None = None
     if new_icvs.active_levels == 1 and not ctx.icvs.dyn:
         if ctx.all_tpvars is None or len(ctx.all_tpvars) != new_icvs.team_size:

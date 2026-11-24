@@ -131,7 +131,10 @@ cdef class AtomicObject:
         raise ValueError("use new() class method")
 
     cdef object get(self):
-        return <object> <PyObject *> atomic_load_up(&self._value)
+        atomic_fetch_add_ll(&self._readers, 1)
+        cdef object value = <object> <PyObject *> atomic_load_up(&self._value)
+        atomic_fetch_sub_ll(&self._readers, 1)
+        return value
 
     cdef bint set(self, object value):
         cdef PyObject * none = <PyObject *> None
@@ -142,16 +145,21 @@ cdef class AtomicObject:
         return False
 
     cdef object exchange(self, object desired):
-        cdef object old = <object> <PyObject *> (
-            atomic_exchange_up(&self._value, <uintptr_t> <PyObject *> desired))
-        Py_DECREF(self._value)
+        Py_INCREF(desired)
+        cdef PyObject * previous = <PyObject *> atomic_exchange_up(&self._value, <uintptr_t> <PyObject *> desired)
+        cdef object old = <object> previous
+        while atomic_load_ll(&self._readers) != 0:  # a `get` may still be reading the old value
+            pass
+        Py_DECREF(old)
         return old
 
     cdef bint compare_exchange(self, object expected, object desired):
         cdef PyObject * c_expected = <PyObject *> expected
         if atomic_compare_exchange_strong_up(&self._value, <uintptr_t *> &c_expected, <uintptr_t> <PyObject *> desired):
-            Py_DECREF(expected)
             Py_INCREF(desired)
+            while atomic_load_ll(&self._readers) != 0:  # a `get` may still be reading the old value
+                pass
+            Py_DECREF(expected)
             return True
         return False
 

@@ -1,3 +1,4 @@
+from omp4py.runtime.icvs cimport Data
 from omp4py.runtime.lowlevel.numeric cimport pyint, pyint_array
 
 cpdef void omp_set_num_threads(pyint num_threads)
@@ -42,6 +43,8 @@ cpdef void omp_set_max_active_levels(pyint max_active_levels)
 cpdef pyint omp_get_max_active_levels()
 
 cpdef pyint omp_get_level()
+
+cdef Data _icvs_of_level(pyint level)
 
 cpdef pyint omp_get_ancestor_thread_num(pyint level)
 

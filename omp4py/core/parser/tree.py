@@ -495,7 +495,9 @@ class AffinityPolicy(OmpNode):
         Args:
             raw_choice (str): Affinity policy name.
         """
-        self.choice = self.Choice(raw_choice.lower())
+        raw_choice = raw_choice.lower()
+        # `master` is the deprecated name of `primary` (OpenMP 5.1)
+        self.choice = self.Choice("primary" if raw_choice == "master" else raw_choice)
 
 
 @dataclass

@@ -57,9 +57,9 @@ def set_run_sched(verbose: bool) -> None:
         "OMP_SCHEDULE",
         r"^(?:(monotonic|nonmonotonic):)?(static|dynamic|guided|auto)(?:\s*,\s*([1-9][0-9]*))?$",
     ):
-        icvs.defaults.run_sched.monotonic = result[0][0] == "m" if result[1][0] == "s" and result[0] else False
+        icvs.defaults.run_sched.monotonic = bool(result[0]) and result[0][0] == "m"
         icvs.defaults.run_sched.type = ord(result[1][0])
-        icvs.defaults.run_sched.chunksize = int(result[2]) if result[2] is not None else -1
+        icvs.defaults.run_sched.chunksize = int(result[2]) if result[2] else -1
     else:
         icvs.defaults.run_sched.monotonic = True
         icvs.defaults.run_sched.type = ord("s")
@@ -176,7 +176,7 @@ def set_max_active_levels(verbose: bool) -> None:
     if result := parse("OMP_MAX_ACTIVE_LEVELS", r"^([1-9][0-9]*)$"):
         icvs.defaults.device_vars.max_active_levels = int(result[0])
     else:
-        icvs.defaults.device_vars.max_active_levels = 2**31
+        icvs.defaults.device_vars.max_active_levels = 2**31 if icvs.defaults.nest else 1
 
     if verbose:
         display_var("OMP_MAX_ACTIVE_LEVELS", str(icvs.defaults.device_vars.max_active_levels))
@@ -199,7 +199,7 @@ def set_cancellation(verbose: bool) -> None:
         icvs.defaults.global_vars.cancel = False
 
     if verbose:
-        display_var("OMP_CANCELLATION", str(icvs.defaults.nest))
+        display_var("OMP_CANCELLATION", str(icvs.defaults.global_vars.cancel))
 
 
 def set_default_device(verbose: bool) -> None:

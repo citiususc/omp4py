@@ -181,7 +181,7 @@ def resolve_names(span:Span,stmt: ast.stmt, **r_vars: typing.Unpack[_ReductionVa
 # neutral element. These are used to define default reductions.
 _op: dict[str, tuple[ast.operator, int]] = {
     "+": (ast.Add(), 0),
-    "-": (ast.Sub(), 0),
+    "-": (ast.Add(), 0),  # each one already has the sign of its subtractions
     "*": (ast.Mult(), 1),
     "&": (ast.BitAnd(), ~0),
     "|": (ast.BitOr(), 0),
@@ -206,6 +206,17 @@ for name, (op, neutral) in _bop.items():
     _default_reductions[name] = (
         ast.Assign([ast.Name("omp_priv", ast.Store())], ast.Constant(neutral)),
         ast.Assign([ast.Name("omp_out", ast.Store())], ast.BoolOp(op, [ast.Name("omp_out"), ast.Name("omp_in")])),
+    )
+
+# `max` and `min`: there is no neutral element for every type, so the private copies start with the original value,
+# which is part of the result anyway.
+for name in ("max", "min"):
+    _default_reductions[name] = (
+        ast.Assign([ast.Name("omp_priv", ast.Store())], ast.Name("omp_orig")),
+        ast.Assign(
+            [ast.Name("omp_out", ast.Store())],
+            ast.Call(ast.Name(name), [ast.Name("omp_out"), ast.Name("omp_in")]),
+        ),
     )
 
 # Special reduction used for object creation and copying.

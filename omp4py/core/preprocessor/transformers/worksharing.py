@@ -329,7 +329,7 @@ def for_checks(ctr: For, body: list[ast.stmt], ctx: Context) -> list[ast.For]:
             raise syntax_error_ctx(msg, ctr.collapse.num.span, ctx)
 
         inner: ast.For = stmt
-        index: list[str] = []
+        index: list[str] = [stmt.target.id]
         for _ in range(ctr.collapse.num.value - 1):
             if not isinstance(stmt := inner.body[0], ast.For):
                 msg = "not enough perfectly nested loops before statement"

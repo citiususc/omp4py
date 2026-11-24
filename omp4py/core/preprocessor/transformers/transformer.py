@@ -387,7 +387,7 @@ class OmpTransformer(ast.NodeTransformer):
         if len(self.ctx.node_stack) > 0:
             self.ctx.node_stack.pop()
             OmpParser(self.ctx).visit(self.ctx.module)
-            self.ctx.active_constructs.update({node: d.constructs for node, d in self.ctx.directives.items()})
+            self.ctx.active_constructs.update({node: list(d.constructs) for node, d in self.ctx.directives.items()})
             self.ctx.used_constructs.update({node: [] for node in self.ctx.directives})
             self.visit(self.ctx.module)
             [f() for f in self.ctx.finalizers]
@@ -521,7 +521,7 @@ class OmpTransformer(ast.NodeTransformer):
             node_finalizers, self.ctx.node_finalizers = self.ctx.node_finalizers, []
             self.generic_visit(tmp)
             [f() for f in node_finalizers]
-            return tmp.body
+            return tmp.body or [ast.Pass()]  # a directive that generates no code can be the only statement of a block
         self.generic_visit(node)
         return node
 

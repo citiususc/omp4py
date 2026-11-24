@@ -24,6 +24,7 @@ cdef class AtomicFlag:
 
 cdef class AtomicObject:
     cdef atomic_uintptr_t _value
+    cdef atomic_llong _readers
 
     @staticmethod
     cdef AtomicObject new()
