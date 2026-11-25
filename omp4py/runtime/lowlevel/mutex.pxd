@@ -27,11 +27,11 @@ cdef class Mutex:
     @staticmethod
     cdef Mutex new()
 
-    cdef void lock(self)
+    cdef void lock(self) noexcept
 
-    cdef void unlock(self)
+    cdef void unlock(self) noexcept
 
-    cdef bint test(self)
+    cdef bint test(self) noexcept
 
 
 cdef class RMutex:
@@ -42,11 +42,11 @@ cdef class RMutex:
     @staticmethod
     cdef RMutex new()
 
-    cdef void lock(self)
+    cdef void lock(self) noexcept
 
-    cdef void unlock(self)
+    cdef void unlock(self) noexcept
 
-    cdef bint test(self)
+    cdef bint test(self) noexcept
 
 
 cdef class Event:
@@ -55,6 +55,6 @@ cdef class Event:
     @staticmethod
     cdef Event new()
 
-    cdef void wait(self)
+    cdef void wait(self) noexcept
 
-    cdef void notify(self)
+    cdef void notify(self) noexcept

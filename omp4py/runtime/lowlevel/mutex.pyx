@@ -80,13 +80,13 @@ cdef class Mutex:
     def __init__(self):
         raise ValueError("use new() class method")
 
-    cdef void lock(self):
+    cdef void lock(self) noexcept:
         PyMutex_Lock(&self._mutex)
 
-    cdef void unlock(self):
+    cdef void unlock(self) noexcept:
         PyMutex_Unlock(&self._mutex)
 
-    cdef bint test(self):
+    cdef bint test(self) noexcept:
         return PyMutex_LockFast_(&self._mutex)
 
     def __enter__(self):
@@ -109,7 +109,7 @@ cdef class RMutex:
     def __init__(self):
         raise ValueError("use new() class method")
 
-    cdef void lock(self):
+    cdef void lock(self) noexcept:
         if self._own == -1:
             self._own = thread_id()
             self._level += 1
@@ -117,13 +117,13 @@ cdef class RMutex:
         elif self._own != thread_id():
             self._level += 1
 
-    cdef void unlock(self):
+    cdef void unlock(self) noexcept:
         if self._own == thread_id():
             self._level -= 1
             if self._level == 0:
                 PyMutex_Unlock(&self._mutex)
 
-    cdef bint test(self):
+    cdef bint test(self) noexcept:
         if self._own == -1:
             result: int = PyMutex_LockFast_(&self._mutex)
             if result:
@@ -151,8 +151,8 @@ cdef class Event:
     def __init__(self):
         raise ValueError("use new() class method")
 
-    cdef void wait(self):
+    cdef void wait(self) noexcept:
         PyEvent_Wait(&self._event)
 
-    cdef void notify(self):
+    cdef void notify(self) noexcept:
         _PyEvent_Notify(&self._event)

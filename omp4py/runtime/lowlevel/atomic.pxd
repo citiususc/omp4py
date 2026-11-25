@@ -17,9 +17,9 @@ cdef class AtomicFlag:
     @staticmethod
     cdef AtomicFlag new()
 
-    cdef bint test_and_set(self)
+    cdef bint test_and_set(self) noexcept
 
-    cdef void clear(self)
+    cdef void clear(self) noexcept
 
 
 cdef class AtomicObject:
@@ -31,11 +31,11 @@ cdef class AtomicObject:
 
     cdef object get(self)
 
-    cdef bint set(self, object value)
+    cdef bint set(self, object value) noexcept
 
     cdef object exchange(self, object desired)
 
-    cdef bint compare_exchange(self, object expected, object desired)
+    cdef bint compare_exchange(self, object expected, object desired) noexcept
 
 cdef class AtomicInt:
     cdef atomic_llong _value
@@ -43,32 +43,32 @@ cdef class AtomicInt:
     @staticmethod
     cdef AtomicInt new(pyint value= *)
 
-    cdef void set(self, pyint value)
+    cdef void set(self, pyint value) noexcept
 
-    cdef pyint get(self)
+    cdef pyint get(self) noexcept
 
-    cdef pyint exchange(self, pyint desired)
+    cdef pyint exchange(self, pyint desired) noexcept
 
-    cdef bint compare_exchange_strong(self, pyint expected, pyint desired)
+    cdef bint compare_exchange_strong(self, pyint expected, pyint desired) noexcept
 
-    cdef bint compare_exchange_weak(self, pyint expected, pyint desired)
+    cdef bint compare_exchange_weak(self, pyint expected, pyint desired) noexcept
 
-    cdef pyint add(self, pyint arg)
+    cdef pyint add(self, pyint arg) noexcept
 
-    cdef pyint fetch_add(self, pyint arg)
+    cdef pyint fetch_add(self, pyint arg) noexcept
 
-    cdef pyint sub(self, pyint arg)
+    cdef pyint sub(self, pyint arg) noexcept
 
-    cdef pyint fetch_sub(self, pyint arg)
+    cdef pyint fetch_sub(self, pyint arg) noexcept
 
-    cdef pyint or_(self, pyint arg)
+    cdef pyint or_(self, pyint arg) noexcept
 
-    cdef pyint fetch_or(self, pyint arg)
+    cdef pyint fetch_or(self, pyint arg) noexcept
 
-    cdef pyint xor(self, pyint arg)
+    cdef pyint xor(self, pyint arg) noexcept
 
-    cdef pyint fetch_xor(self, pyint arg)
+    cdef pyint fetch_xor(self, pyint arg) noexcept
 
-    cdef pyint and_(self, pyint arg)
+    cdef pyint and_(self, pyint arg) noexcept
 
-    cdef pyint fetch_and(self, pyint arg)
+    cdef pyint fetch_and(self, pyint arg) noexcept

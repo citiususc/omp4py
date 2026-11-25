@@ -56,10 +56,10 @@ cdef class AtomicFlag:
     def __init__(self):
         raise ValueError("use new() class method")
 
-    cdef bint test_and_set(self):
+    cdef bint test_and_set(self) noexcept:
         return atomic_flag_test_and_set(&self._value)
 
-    cdef void clear(self):
+    cdef void clear(self) noexcept:
         atomic_flag_clear(&self._value)
 
 cdef class AtomicInt:
@@ -72,49 +72,49 @@ cdef class AtomicInt:
     def __init__(self):
         raise ValueError("use new() class method")
 
-    cdef void set(self, pyint value):
+    cdef void set(self, pyint value) noexcept:
         atomic_store_ll(&self._value, value)
 
-    cdef pyint get(self):
+    cdef pyint get(self) noexcept:
         return atomic_load_ll(&self._value)
 
-    cdef pyint exchange(self, pyint desired):
+    cdef pyint exchange(self, pyint desired) noexcept:
         return atomic_exchange_ll(&self._value, desired)
 
-    cdef bint compare_exchange_strong(self, pyint expected, pyint desired):
+    cdef bint compare_exchange_strong(self, pyint expected, pyint desired) noexcept:
         return atomic_compare_exchange_strong_ll(&self._value, &expected, desired)
 
-    cdef bint compare_exchange_weak(self, pyint expected, pyint desired):
+    cdef bint compare_exchange_weak(self, pyint expected, pyint desired) noexcept:
         return atomic_compare_exchange_weak_ll(&self._value, &expected, desired)
 
-    cdef pyint add(self, pyint arg):
+    cdef pyint add(self, pyint arg) noexcept:
         return atomic_fetch_add_ll(&self._value, arg) + arg
 
-    cdef pyint fetch_add(self, pyint arg):
+    cdef pyint fetch_add(self, pyint arg) noexcept:
         return atomic_fetch_add_ll(&self._value, arg)
 
-    cdef pyint sub(self, pyint arg):
+    cdef pyint sub(self, pyint arg) noexcept:
         return atomic_fetch_sub_ll(&self._value, arg) - arg
 
-    cdef pyint fetch_sub(self, pyint arg):
+    cdef pyint fetch_sub(self, pyint arg) noexcept:
         return atomic_fetch_sub_ll(&self._value, arg)
 
-    cdef pyint or_(self, pyint arg):
+    cdef pyint or_(self, pyint arg) noexcept:
         return atomic_fetch_or_ll(&self._value, arg) | arg
 
-    cdef pyint fetch_or(self, pyint arg):
+    cdef pyint fetch_or(self, pyint arg) noexcept:
         return atomic_fetch_or_ll(&self._value, arg)
 
-    cdef pyint xor(self, pyint arg):
+    cdef pyint xor(self, pyint arg) noexcept:
         return atomic_fetch_xor_ll(&self._value, arg) ^ arg
 
-    cdef pyint fetch_xor(self, pyint arg):
+    cdef pyint fetch_xor(self, pyint arg) noexcept:
         return atomic_fetch_xor_ll(&self._value, arg)
 
-    cdef pyint and_(self, pyint arg):
+    cdef pyint and_(self, pyint arg) noexcept:
         return atomic_fetch_and_ll(&self._value, arg) & arg
 
-    cdef pyint fetch_and(self, pyint arg):
+    cdef pyint fetch_and(self, pyint arg) noexcept:
         return atomic_fetch_and_ll(&self._value, arg)
 
 
@@ -136,7 +136,7 @@ cdef class AtomicObject:
         atomic_fetch_sub_ll(&self._readers, 1)
         return value
 
-    cdef bint set(self, object value):
+    cdef bint set(self, object value) noexcept:
         cdef PyObject * none = <PyObject *> None
         if atomic_compare_exchange_strong_up(&self._value, <uintptr_t *> &none, <uintptr_t> <PyObject *> value):
             Py_XDECREF(none)
@@ -153,7 +153,7 @@ cdef class AtomicObject:
         Py_DECREF(old)
         return old
 
-    cdef bint compare_exchange(self, object expected, object desired):
+    cdef bint compare_exchange(self, object expected, object desired) noexcept:
         cdef PyObject * c_expected = <PyObject *> expected
         if atomic_compare_exchange_strong_up(&self._value, <uintptr_t *> &c_expected, <uintptr_t> <PyObject *> desired):
             Py_INCREF(desired)

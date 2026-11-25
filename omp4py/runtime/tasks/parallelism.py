@@ -127,12 +127,25 @@ def set_nthreads(ctx: TaskContext, icvs: Data, active: bool, num_threads: tuple[
         icvs.nthreads[:] = ctx.icvs.nthreads[1:]
 
 
-def _parallel_thread_init(ctx: TaskContext) -> None:
+def _parallel_thread_init(
+    parent: Task,
+    tpvars: list[TPrivRef],
+    init: Callable[[], None] | None,
+    f: Callable[[], None],
+    shared: SharedContext,
+    icvs: Data,
+    barrier: Barrier,
+    thread_num: pyint,
+) -> None:
     """Initialize a new thread for a parallel region.
 
-    This function sets the thread-local context for the new thread and
-    transfers execution to the main parallel entry point.
+    The context is created by the thread itself, so the thread owns it and the objects it holds. Reading the
+    context (`omp_ctx()`) is then much cheaper than if another thread had created it. Then it sets the
+    thread-local context and transfers execution to the main parallel entry point.
     """
+    ctx = TaskContext.new(parent, tpvars)
+    ctx.push(ParallelTask.new(init, f, shared.mirror(), icvs.copy(), barrier))
+    ctx.icvs.thread_num = thread_num
     threadlocal_set(ctx)
     _parallel_main()
 
@@ -246,13 +259,13 @@ def parallel(
 
     i: pyint
     threads: list[threading.Thread] = []
-    for i in range(new_icvs.team_size - 1, -1, -1):  # TODO: affinity and timeout pool
-        thread_ctx = TaskContext.new(ctx.task, [] if all_tpvars is None else all_tpvars[i]) if i > 0 else ctx
-        thread_ctx.push(ParallelTask.new(init, f, shared.mirror(), new_icvs.copy(), barrier))
-        thread_ctx.icvs.thread_num = i
-        if i > 0:
-            threads.append(threading.Thread(target=_parallel_thread_init, args=(thread_ctx,)))
-            threads[len(threads) - 1].start()
+    for i in range(new_icvs.team_size - 1, 0, -1):  # TODO: affinity and timeout pool
+        # each thread creates its own context (see _parallel_thread_init)
+        args = (ctx.task, [] if all_tpvars is None else all_tpvars[i], init, f, shared, new_icvs, barrier, i)
+        threads.append(threading.Thread(target=_parallel_thread_init, args=args))
+        threads[len(threads) - 1].start()
+    ctx.push(ParallelTask.new(init, f, shared.mirror(), new_icvs.copy(), barrier))
+    ctx.icvs.thread_num = 0
 
     _parallel_main()
     for i in range(len(threads)):
