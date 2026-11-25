@@ -1,3 +1,4 @@
+cimport cython
 from omp4py.runtime.lowlevel.atomic cimport AtomicInt, AtomicObject
 from omp4py.runtime.lowlevel.mutex cimport Event
 from omp4py.runtime.lowlevel.numeric cimport pyint, pyint_array
@@ -21,12 +22,14 @@ cdef const pyint _r_off
 cdef const pyint _rs_len
 
 
+@cython.final
 cdef class ForShared:
     cdef AtomicInt count 
 
     @staticmethod
     cdef ForShared new(pyint count)
 
+@cython.final
 cdef class OrderedShared:
     cdef pyint_array starts
     cdef AtomicInt waiters
@@ -36,6 +39,7 @@ cdef class OrderedShared:
     cdef OrderedShared new(pyint count, pyint threads)
 
 
+@cython.final
 cdef class ForBounds:
     cdef readonly pyint init
     cdef readonly pyint end
@@ -51,6 +55,7 @@ cdef class ForBounds:
 
 ctypedef bint (*kind_t)(ForBounds)
 
+@cython.final
 cdef class ForTask(Task):
     cdef ForBounds bounds
     cdef kind_t kind
@@ -84,6 +89,7 @@ cdef bint fix_bounds(ForBounds bounds)
 cpdef void ordered_start()
 
 
+@cython.final
 cdef class SectionsShared:
     cdef AtomicInt count
 
@@ -91,6 +97,7 @@ cdef class SectionsShared:
     cdef SectionsShared new(pyint n)
 
 
+@cython.final
 cdef class SectionsTask(Task):
     cdef SectionsShared sections_shared
 
@@ -105,6 +112,7 @@ cpdef pyint sections_next()
 cpdef void sections_end(bint nowait)
 
 
+@cython.final
 cdef class SingleShared:
     cdef AtomicInt count
     cdef Event event
@@ -114,6 +122,7 @@ cdef class SingleShared:
     cdef SingleShared new(bint copyprivate)
 
 
+@cython.final
 cdef class SingleTask(Task):
     cdef SingleShared single_shared
 
@@ -126,6 +135,7 @@ cpdef bint single_init(bint copyprivate)
 cpdef void single_end(bint nowait)
 
 
+@cython.final
 cdef class SingleCopyPrivate:
     cdef public object v0
     cdef public object v1

@@ -1,8 +1,10 @@
+cimport cython
 from omp4py.runtime.icvs cimport Data
 from omp4py.runtime.lowlevel.numeric cimport pyint
 from omp4py.runtime.tasks.context cimport TaskContext
 from omp4py.runtime.tasks.task cimport Barrier, SharedContext, Task, TPrivRef
 
+@cython.final
 cdef class ParallelTask(Task):
     cdef object init
     cdef object f

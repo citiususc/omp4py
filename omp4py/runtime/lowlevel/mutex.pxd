@@ -21,6 +21,7 @@ cdef extern from "Python.h":
         pass
 
 
+@cython.final
 cdef class Mutex:
     cdef PyMutex _mutex
 
@@ -34,6 +35,7 @@ cdef class Mutex:
     cdef bint test(self) noexcept
 
 
+@cython.final
 cdef class RMutex:
     cdef PyMutex _mutex
     cdef cython.ulong _own
@@ -49,6 +51,7 @@ cdef class RMutex:
     cdef bint test(self) noexcept
 
 
+@cython.final
 cdef class Event:
     cdef PyEvent _event
 

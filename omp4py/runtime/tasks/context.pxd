@@ -1,7 +1,9 @@
+cimport cython
 from omp4py.runtime.icvs cimport Data
 from omp4py.runtime.lowlevel cimport threadlocal # omp4py_threadlocal_get
 from omp4py.runtime.tasks.task cimport Task, TPrivRef
 
+@cython.final
 cdef class TaskContext:
     cdef Data icvs
     cdef Task task
@@ -16,6 +18,7 @@ cdef class TaskContext:
     cdef void pop(self)
 
 
+@cython.final
 cdef class ImplicitTask(Task):
 
     @staticmethod

@@ -1,3 +1,4 @@
+cimport cython
 from cpython.object cimport Py_TYPE, PyTypeObject
 
 from omp4py.runtime.icvs cimport Data
@@ -19,6 +20,7 @@ cdef class Task:
 
     cdef Task _new_task(self, SharedContext shared, Data icvs, Barrier barrier)
 
+@cython.final
 cdef class SharedItem:
     cdef object value
     cdef AtomicObject next
@@ -27,6 +29,7 @@ cdef class SharedItem:
     cdef SharedItem new(object value)
 
 
+@cython.final
 cdef class SharedContext:
     cdef AtomicObject _current
 
@@ -40,6 +43,7 @@ cdef class SharedContext:
     cdef object sync(self, object obj)
 
 
+@cython.final
 cdef class Barrier:
     cdef pyint _parties
     cdef AtomicInt _waiting
@@ -54,6 +58,7 @@ cdef class Barrier:
     cdef void interrupt(self)
 
 
+@cython.final
 cdef class TPrivRef:
     cdef public object v
 

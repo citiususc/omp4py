@@ -1,6 +1,8 @@
+cimport cython
 from omp4py.runtime.lowlevel.atomic cimport AtomicInt
 from omp4py.runtime.lowlevel.numeric cimport pyint, pyint_array
 
+@cython.final
 cdef class Device:
     cdef pyint stacksize
     cdef bint wait_policy_active
@@ -9,22 +11,26 @@ cdef class Device:
 
     cdef Device copy(self)
 
+@cython.final
 cdef class Global:
     cdef bint cancel
     cdef pyint max_task_priority
 
     cdef Global copy(self)
 
+@cython.final
 cdef class PlacePartition:
     cdef pyint_array values
     cdef pyint_array partitions
     cdef object name
 
+@cython.final
 cdef class ImplicitTask:
     cdef PlacePartition place_partition
 
     cdef ImplicitTask copy(self)
 
+@cython.final
 cdef class RunSched:
     cdef bint monotonic
     cdef pyint type
@@ -32,6 +38,7 @@ cdef class RunSched:
 
     cdef RunSched copy(self)
 
+@cython.final
 cdef class Data:
     cdef bint dyn
     cdef bint nest
