@@ -127,7 +127,7 @@ def set_nthreads(ctx: TaskContext, icvs: Data, active: bool, num_threads: tuple[
         icvs.nthreads[:] = ctx.icvs.nthreads[1:]
 
 
-def _parallel_thread_init(
+def _parallel_thread_init(  # noqa: PLR0913, PLR0917
     parent: Task,
     tpvars: list[TPrivRef],
     init: Callable[[], None] | None,
@@ -142,6 +142,16 @@ def _parallel_thread_init(
     The context is created by the thread itself, so the thread owns it and the objects it holds. Reading the
     context (`omp_ctx()`) is then much cheaper than if another thread had created it. Then it sets the
     thread-local context and transfers execution to the main parallel entry point.
+
+    Args:
+        parent (Task): Task that was executing in the thread that created the region.
+        tpvars (list[TPrivRef]): The `threadprivate` variables that this thread keeps from the previous region.
+        init (Callable[[], None] | None): Optional initialization function executed before the parallel function.
+        f (Callable[[], None]): Parallel function executed by the thread.
+        shared (SharedContext): Shared execution context of the team. The thread makes its own mirror of it.
+        icvs (Data): Internal control variables of the region. The thread makes its own copy of them.
+        barrier (Barrier): Barrier of the team.
+        thread_num (pyint): Number of the thread in the team.
     """
     ctx = TaskContext.new(parent, tpvars)
     ctx.push(ParallelTask.new(init, f, shared.mirror(), icvs.copy(), barrier))
