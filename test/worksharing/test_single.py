@@ -74,7 +74,9 @@ def test_nowait_lets_the_other_threads_go_on():
                 with omp("single nowait"):
                     out.append(omp_get_thread_num())
                     passed.wait()
-                if len(out) == 1 and omp_get_thread_num() != out[0]:
+                while not out:
+                    pass
+                if omp_get_thread_num() != out[0]:
                     passed.wait()
         """,
     )
